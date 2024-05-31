@@ -3,8 +3,8 @@
 React + TypeScript + Vite + SWC (with Rust compiler)
 
 ## How to Run Locally
-1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running
-```npm install -g @bun/cli```
+1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
+1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running ```npm install -g @bun/cli```. Docs: https://bun.sh/
 2. Run ```bun install``` to download the necessary dependencies.
 3. You will need a local .env file with secret variables. Reach out to Ethan for these.
 4. Run ```bun run dev``` to start the development server.
