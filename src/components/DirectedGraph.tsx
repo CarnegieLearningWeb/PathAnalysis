@@ -350,6 +350,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                 <ForceGraph2D
                     // @ts-expect-error this type won't match up in typescript but it's ok
                     graphData={currentGraphData}
+                    nodeRelSize={30}
                     width={windowWidth}
                     height={window.innerHeight - 200}
                     ref={forceGraphRef}
