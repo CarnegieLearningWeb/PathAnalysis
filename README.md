@@ -1,9 +1,14 @@
 # Path Analysis Tool
 
-React + TypeScript + Vite + SWC (rust compiler)
+React + TypeScript + Vite + SWC (with Rust compiler)
 
-This used `Bun` to run, build, and deploy. Use 
-```bun install``` and then ```bun run dev``` to start the development server.
+## How to Run Locally
+1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running
+```npm install -g @bun/cli```
+2. Run ```bun install``` to download the necessary dependencies.
+3. You will need a local .env file with secret variables. Reach out to Ethan for these.
+4. Run ```bun run dev``` to start the development server.
+
 
 ---
 
