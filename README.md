@@ -3,21 +3,12 @@
 React + TypeScript + Vite + SWC (with Rust compiler)
 
 ## How to Run Locally
-1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running
-```npm install -g @bun/cli```
+1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
+1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running ```npm install -g @bun/cli```. Docs: https://bun.sh/
 2. Run ```bun install``` to download the necessary dependencies.
 3. You will need a local .env file with secret variables. Reach out to Ethan for these.
 4. Run ```bun run dev``` to start the development server.
 
-
----
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
 ## Expanding the ESLint configuration
 
