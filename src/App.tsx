@@ -8,15 +8,16 @@ import { useEffect, useState } from 'react';
 import { convertDataTypesIncomingData, processPathAnalysisData, processDataShopData } from '@/lib/dataProcessingUtils';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
+import DropZone from './components/DropZone';
 
 function App() {
   const sectionId = "area_perimeter_mix_rectangle_derived";
   const problemId = "area_perimeter_mix_rectangle_derived-020";
 
-  const { pathAnalysisData, isPathAnalysisDataLoading } = usePathAnalysisData(sectionId, problemId);
+  // const { pathAnalysisData, isPathAnalysisDataLoading } = usePathAnalysisData(sectionId, problemId);
   // const { dataShopData, isDataShopDataLoading } = useDataShopData();
   const filePath = "analyzing_different_forms_of_expressions.json"
-  const { localSampleData, isLocalSampleDataLoading } = useLocalSampleData(filePath)
+  // const { localSampleData, isLocalSampleDataLoading } = useLocalSampleData(filePath)
   const [processedPathAnalysisData, setProcessedPathAnalysisData] = useState<GraphData | null>(null);
   const [processedShopData, setProcessedShopData] = useState<GraphData | null>(null);
 
@@ -29,40 +30,40 @@ function App() {
   //   }
   // }, [isDataShopDataLoading, dataShopData])
 
-  useEffect(() => {
-    if (isLocalSampleDataLoading) {
-      return;
-    }
-    if (localSampleData) {
-      const _processData = async () => {
-        const processedData = await processDataShopData(localSampleData as GlobalDataType[])
-        setProcessedShopData(processedData);
-      }
-      _processData();
-    }
-  }, [isLocalSampleDataLoading, localSampleData])
+  // useEffect(() => {
+  //   if (isLocalSampleDataLoading) {
+  //     return;
+  //   }
+  //   if (localSampleData) {
+  //     const _processData = async () => {
+  //       const processedData = await processDataShopData(localSampleData as GlobalDataType[])
+  //       setProcessedShopData(processedData);
+  //     }
+  //     _processData();
+  //   }
+  // }, [isLocalSampleDataLoading, localSampleData])
 
 
-  useEffect(() => {
-    const _processData = async () => {
-      if (pathAnalysisData) {
-        setProcessedPathAnalysisData(await processPathAnalysisData(convertDataTypesIncomingData(pathAnalysisData)));
-      }
-    }
-    _processData();
+  // useEffect(() => {
+  //   const _processData = async () => {
+  //     if (pathAnalysisData) {
+  //       setProcessedPathAnalysisData(await processPathAnalysisData(convertDataTypesIncomingData(pathAnalysisData)));
+  //     }
+  //   }
+  //   _processData();
 
-  }, [isPathAnalysisDataLoading, pathAnalysisData])
+  // }, [isPathAnalysisDataLoading, pathAnalysisData])
 
-  if (isPathAnalysisDataLoading || !processedPathAnalysisData || !processedShopData) {
-    return <div>Loading...</div>
-  }
+  // if (isPathAnalysisDataLoading || !processedPathAnalysisData || !processedShopData) {
+  //   return <div>Loading...</div>
+  // }
 
   return (
     <>
       <div className="p-5">
         {/* path analysis window */}
-
-        <DirectedGraph graphData={processedShopData} />
+        <DropZone/>
+        {/* <DirectedGraph graphData={processedShopData} /> */}
       </div>
 
     </>
