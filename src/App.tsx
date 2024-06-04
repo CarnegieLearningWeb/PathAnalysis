@@ -6,7 +6,7 @@ import {
 } from '@/lib/dataFetchingHooks';
 import { useEffect, useState } from 'react';
 import { convertDataTypesIncomingData, processPathAnalysisData, processDataShopData } from '@/lib/dataProcessingUtils';
-import { GraphData } from './lib/types';
+import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 
 function App() {
@@ -35,7 +35,7 @@ function App() {
     }
     if (localSampleData) {
       const _processData = async () => {
-        const processedData = await processDataShopData(localSampleData)
+        const processedData = await processDataShopData(localSampleData as GlobalDataType[])
         setProcessedShopData(processedData);
       }
       _processData();

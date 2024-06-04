@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 public/sample_data
 .env
+src/lib/local_sample_data
