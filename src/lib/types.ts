@@ -1,3 +1,48 @@
+export type DataSet1 = {
+    Row: number;
+    "Sample Name": "All Data" | string;
+    "Transaction Id": string;
+    "Anon Student Id": string;
+    "Session Id": "no_session_tracking";
+    Time: string;
+    "Time Zone": boolean | null;
+    "Duration (sec)": number | null;
+    "Student Response Type": boolean | null;
+    "Student Response Subtype": boolean | null;
+    "Tutor Response Type": boolean | null;
+    "Tutor Response Subtype": boolean | null;
+    "Level (Workspace Id)": string;
+    "Problem Name": string;
+    "Problem View": number;
+    "Problem Start Time": string;
+    "Step Name": string | null;
+    "Attempt At Step": number;
+    "Is Last Attempt": boolean | null;
+    Outcome: "OK" | "BUG" | "INITIAL_HINT" | "HINT_LEVEL_CHANGE" | "ERROR";
+    Selection: "Done Button" | null;
+    Action: "Attempt" | "Done" | "Hint Request" | "Hint Level Change";
+    Input: string | null;
+    "Feedback Text": boolean | null;
+    "Feedback Classification": boolean | null;
+    "Help Level": number;
+    "Total Num Hints": boolean | null;
+    "KC (MATHia)": string | null;
+    "KC Category (MATHia)": boolean | null;  
+    "KC (Single-KC)": string | null;
+    "KC Category (Single-KC)": boolean | null;
+    "KC (Unique-step)": string | null;
+    "KC Category (Unique-step)": boolean | null;
+    School: boolean | null;
+    Class: boolean | null;
+    "CF (Etalon)": string | null;
+    "CF (Ruleid)": string | null;
+    "CF (Semantic Event Id)": string;
+    "CF (Skill New p-Known)": number | null;
+    "CF (Skill Previous p-Known)": number | null;
+    "CF (Workspace Progress Status)": "GRADUATED" | "PROMOTED" | "NOT_COMPLETED";
+    "Event Type": boolean | null;
+}
+
 export type IncomingMathiaCourse2Data = {
     // incoming data will all be strings so we would need to convert them to the appropriate types
     "Anon Student Id": string;
