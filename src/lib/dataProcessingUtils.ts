@@ -1,11 +1,11 @@
-import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, IncomingMathiaCourse2Data } from "@/lib/types";
+import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, IncomingMathiaCourse2Data, DataSet1, GlobalDataType } from "@/lib/types";
 import _ from 'lodash';
 
 // ----------------- DATA PROCESSING UTILS DataShop Data -----------------
 
 const END_NODE = 'END';
 
-export async function processDataShopData(data: IncomingMathiaCourse2Data[]): Promise<GraphData> {
+export async function processDataShopData(data: GlobalDataType[]): Promise<GraphData> {
     /*
         ---- ABOUT ----
         This function processes the data from the Mathia Course 2 dataset.

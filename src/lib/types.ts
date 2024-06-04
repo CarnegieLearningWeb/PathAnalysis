@@ -1,3 +1,5 @@
+export type GlobalDataType = DataSet1 & IncomingMathiaCourse2Data;
+
 export type DataSet1 = {
     Row: number;
     "Sample Name": "All Data" | string;
