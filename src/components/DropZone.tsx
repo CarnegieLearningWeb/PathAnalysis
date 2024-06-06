@@ -13,7 +13,7 @@ export default function DropZone() {
             reader.onload = () => {
                 // Do whatever you want with the file contents after .readAsText()
                 const textStr = reader.result
-                const array: GlobalDataType[] = parseData(textStr)
+                const array: GlobalDataType[] | null = parseData(textStr)
                 console.log(array)
             }
             reader.readAsText(file)
