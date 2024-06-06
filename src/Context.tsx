@@ -18,4 +18,5 @@ export const Provider = ({ children }: ProviderProps) => {
         >
             {children}
         </Context.Provider>
+    )
 }
