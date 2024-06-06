@@ -11,9 +11,9 @@ export function cn(...inputs: ClassValue[]) {
 const schema = Joi.array().items(
   Joi.object({
     'Problem Name': Joi.string().required(),
-    'Step Name': Joi.string().required(),
-    'Outcome': Joi.string().valid('ERROR', 'OK').required(),
-  })
+    'Step Name': Joi.string().allow('', null),
+    'Outcome': Joi.string().valid('OK', 'BUG', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'ERROR').required(),
+  }).unknown()
 );
 
 export function parseData(readerResult: string | ArrayBuffer | null, delimiter: "\t" | "," | "|" = "\t"): GlobalDataType[] | null {
