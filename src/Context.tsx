@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createContext, useState } from 'react';
 interface ContextInterface {
 
 }
@@ -14,7 +14,7 @@ interface ProviderProps {
 export const Provider = ({ children }: ProviderProps) => {
     return (
         <Context.Provider
-            value={ }
+            value={{}}
         >
             {children}
         </Context.Provider>
