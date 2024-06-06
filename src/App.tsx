@@ -1,8 +1,8 @@
 import './App.css'
-import { 
+import {
   // useDataShopData, 
   useLocalSampleData,
-  usePathAnalysisData 
+  usePathAnalysisData
 } from '@/lib/dataFetchingHooks';
 import { useEffect, useState } from 'react';
 import { convertDataTypesIncomingData, processPathAnalysisData, processDataShopData } from '@/lib/dataProcessingUtils';
@@ -61,8 +61,10 @@ function App() {
   return (
     <>
       <div className="p-5">
-        {/* path analysis window */}
-        <DropZone/>
+        <div className="w-1/2">
+          <DropZone />
+        </div>
+
         {/* <DirectedGraph graphData={processedShopData} /> */}
       </div>
 

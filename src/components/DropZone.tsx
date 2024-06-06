@@ -1,32 +1,47 @@
 import { useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { Accept, useDropzone } from 'react-dropzone';
 
 export default function DropZone() {
     const onDrop = useCallback((acceptedFiles: File[]) => {
         acceptedFiles.forEach((file: File) => {
             const reader = new FileReader()
 
-            reader.onabort = () => console.log('file reading was aborted')
-            reader.onerror = () => console.log('file reading has failed')
+            reader.onabort = () => console.warn('file reading was aborted')
+            reader.onerror = () => console.error('file reading has failed')
             reader.onload = () => {
-                // Do whatever you want with the file contents
-                const binaryStr = reader.result
-                console.log(binaryStr)
+                // Do whatever you want with the file contents after .readAsText()
+                const textStr = reader.result
+                console.log(textStr)
             }
-            reader.readAsArrayBuffer(file)
+            reader.readAsText(file)
         })
 
     }, [])
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
+    const acceptedFileTypes: Accept = {
+        'text/plain': ['.txt', '.csv', '.tsv', '.json'],
+    }
+
+    const { getRootProps, getInputProps, isDragActive, isFocused, isDragReject } = useDropzone({
+        onDrop,
+        accept: acceptedFileTypes,
+    });
 
     return (
-        <div className="bg-slate-200 cursor-pointer h-20 p-2 rounded-md border-2 border-black text-center" {...getRootProps()}>
+        <div
+            className={`bg-slate-200 cursor-pointer h-40 p-2 rounded-md border-2 border-black text-center ${(isDragActive || isFocused) ? 'bg-orange-100' : ''}`}
+            {...getRootProps()}
+        >
             <input {...getInputProps()} />
             {
-                isDragActive ?
+                (isDragActive && !isDragReject) ?
                     <p>Drop em here</p> :
                     <p>Drag 'n' drop some files here, or click to select files</p>
+            }
+            {
+                isDragReject &&
+                <p className="text-red-500">File type not accepted, please try again</p>
+
             }
         </div>
     );
