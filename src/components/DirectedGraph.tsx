@@ -17,7 +17,6 @@ interface DirectedGraphProps {
 }
 
 export default function DirectedGraph({ graphData }: DirectedGraphProps) {
-    console.log("graphData: ", graphData);
 
     const initialTooltip: ToolTip = { display: false, text: '', x: 0, y: 0, fx: undefined, fy: undefined };
     const [tooltip, setTooltip] = useState<ToolTip>(initialTooltip);

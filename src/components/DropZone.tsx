@@ -5,12 +5,18 @@ import { parseData } from '@/lib/utils';
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
-export default function DropZone() {
+interface DropZoneProps {
+    afterDrop: (data: GlobalDataType[]) => void,
+    onLoadingChange: (loading: boolean) => void
+}
+
+export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
     const delimiters = ["tsv", "csv", "pipe"]
 
     const [fileType, setFileType] = useState<string>(delimiters[0])
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
+        onLoadingChange(true);
         acceptedFiles.forEach((file: File) => {
             const reader = new FileReader()
 
@@ -38,11 +44,12 @@ export default function DropZone() {
                         delimeter = '\t'
                         break;
                 }
-
-
-
                 const array: GlobalDataType[] | null = parseData(textStr, delimeter)
-                console.log(array)
+                if (array) {
+                    afterDrop(array);
+                }
+                onLoadingChange(false);
+                // console.log(array)
             }
             reader.readAsText(file)
         })
