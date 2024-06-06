@@ -60,8 +60,8 @@ function App() {
 
   return (
     <>
-      <div className="p-5">
-        <div className="w-1/2">
+      <div className=" flex items-center justify-center pt-20">
+        <div className="">
           <DropZone />
         </div>
 

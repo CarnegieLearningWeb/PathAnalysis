@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-const schema = Joi.array().items(
+const validation = Joi.array().items(
   Joi.object({
     'Problem Name': Joi.string().required(),
     'Step Name': Joi.string().allow('', null),
@@ -16,15 +16,21 @@ const schema = Joi.array().items(
   }).unknown()
 );
 
-export function parseData(readerResult: string | ArrayBuffer | null, delimiter: "\t" | "," | "|" = "\t"): GlobalDataType[] | null {
+export function parseData(readerResult: string | ArrayBuffer | null, delimiter: string = "\t"): GlobalDataType[] | null {
   const textStr = readerResult
   const results = Papa.parse(textStr as string, {
     header: true,
     delimiter: delimiter
   })
+  if (results.errors.length > 0) {
+    console.error("error during parsing: ", results.errors)
+    return null;
+
+  }
+
   const array: GlobalDataType[] = results.data as GlobalDataType[]
-  const { error } = schema.validate(array);
-  if (error){
+  const { error } = validation.validate(array);
+  if (error) {
     console.error(error)
     return null;
   }

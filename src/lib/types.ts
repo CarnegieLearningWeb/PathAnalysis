@@ -6,7 +6,7 @@ export type DataSet1 = {
     "Transaction Id": string;
     "Anon Student Id": string;
     "Session Id": "no_session_tracking";
-    Time: string;
+    Time: string; // Assume data is sorted by time
     "Time Zone": boolean | null;
     "Duration (sec)": number | null;
     "Student Response Type": boolean | null;
