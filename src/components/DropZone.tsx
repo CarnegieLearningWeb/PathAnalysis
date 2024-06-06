@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import { Accept, useDropzone } from 'react-dropzone';
+import { GlobalDataType } from '@/lib/types';
+import { parseData } from '@/lib/utils';
 
 export default function DropZone() {
     const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -11,7 +13,8 @@ export default function DropZone() {
             reader.onload = () => {
                 // Do whatever you want with the file contents after .readAsText()
                 const textStr = reader.result
-                console.log(textStr)
+                const array: GlobalDataType[] = parseData(textStr)
+                console.log(array)
             }
             reader.readAsText(file)
         })
