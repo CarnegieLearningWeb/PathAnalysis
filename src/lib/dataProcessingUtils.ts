@@ -5,7 +5,7 @@ import _ from 'lodash';
 
 const END_NODE = 'END';
 
-export async function processDataShopData(data: GlobalDataType[]): Promise<GraphData> {
+export function processDataShopData(data: GlobalDataType[]): GraphData{
     /*
         ---- ABOUT ----
         This function processes the data from the Mathia Course 2 dataset.
