@@ -1,4 +1,4 @@
-import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, IncomingMathiaCourse2Data, DataSet1, GlobalDataType } from "@/lib/types";
+import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, GlobalDataType } from "@/lib/types";
 import _ from 'lodash';
 
 // ----------------- DATA PROCESSING UTILS DataShop Data -----------------
