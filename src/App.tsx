@@ -6,6 +6,7 @@ import DropZone from './components/DropZone';
 // import { NavBar } from './components/NavBar';
 import { Button } from './components/ui/button';
 import { Context } from './Context';
+import { processDataShopData } from './lib/dataProcessingUtils';
 
 function App() {
   const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
@@ -20,7 +21,12 @@ function App() {
 
   useEffect(() => {
     if (data) {
-      console.log(data);
+      // console.log(data);
+      // process graphData
+      const graphData: GraphData = processDataShopData(data)
+      setGraphData(graphData)
+      console.log("graphData", graphData);
+      
     }
   }, [data])
 
