@@ -10,7 +10,6 @@ function App() {
   const [processedData, setProcessedData] = useState<GlobalDataType[] | null>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [showDirectedGraph, setShowDirectedGraph] = useState<boolean>(false)
 
   const handleData = (data: GlobalDataType[]) => {
     setProcessedData(data)
