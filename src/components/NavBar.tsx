@@ -19,10 +19,10 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useContext } from "react"
-import { Context } from "@/Context"
-import DropZone from "./DropZone"
-import { GlobalDataType } from "@/lib/types"
+// import { useContext } from "react"
+// import { Context } from "@/Context"
+// import DropZone from "./DropZone"
+// import { GlobalDataType } from "@/lib/types"
 
 export function NavBar() {
 

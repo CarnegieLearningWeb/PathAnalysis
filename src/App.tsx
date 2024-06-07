@@ -1,5 +1,5 @@
 import './App.css';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect } from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
@@ -26,7 +26,7 @@ function App() {
       const graphData: GraphData = processDataShopData(data)
       setGraphData(graphData)
       console.log("graphData", graphData);
-      
+
     }
   }, [data])
 
@@ -63,7 +63,10 @@ function App() {
 
           {
             graphData && (
-              <DirectedGraph graphData={graphData} />
+              <>
+                {/* Add suspense, lazy? */}
+                <DirectedGraph graphData={graphData} />
+              </>
             )
           }
 
