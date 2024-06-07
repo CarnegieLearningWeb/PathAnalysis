@@ -7,6 +7,7 @@ interface ContextInterface {
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
     setGraphData: (graphData: GraphData | null) => void;
+    resetData: () => void;
 
 }
 export const Context = createContext({} as ContextInterface);
@@ -24,6 +25,12 @@ export const Provider = ({ children }: ProviderProps) => {
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
 
+    const resetData = () => {
+        setData(null)
+        setGraphData(null)
+        console.log("Data reset");
+        
+    }
 
     return (
         <Context.Provider
@@ -33,7 +40,8 @@ export const Provider = ({ children }: ProviderProps) => {
                 loading,
                 setLoading,
                 setData,
-                setGraphData
+                setGraphData,
+                resetData
             }}
         >
             {children}

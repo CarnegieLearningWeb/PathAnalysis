@@ -1,43 +1,48 @@
 import './App.css';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
-import { NavBar } from './components/NavBar';
+// import { NavBar } from './components/NavBar';
+import { Button } from './components/ui/button';
+import { Context } from './Context';
 
 function App() {
-  // TODO move to global context
-  const [processedData, setProcessedData] = useState<GlobalDataType[] | null>(null)
-  const [graphData, setGraphData] = useState<GraphData | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
 
   const handleData = (data: GlobalDataType[]) => {
-    setProcessedData(data)
+    setData(data)
   }
 
   const handleLoading = (loading: boolean) => {
-    setIsLoading(loading)
+    setLoading(loading)
   }
 
   useEffect(() => {
-    if (processedData) {
-      console.log(processedData);
+    if (data) {
+      console.log(data);
     }
-
-
-  }, [processedData])
+  }, [data])
 
   return (
     <>
       <div className="">
-        <div className="">
-          <NavBar />
-        </div>
+        {/* <NavBar /> */}
+        <Button
+          className="m-2"
+          variant={"ghost"}
+          onClick={() => {
+            resetData()
+
+          }}
+        >
+          Reset
+        </Button>
 
         <div className=" flex items-center justify-center pt-20">
 
           {
-            isLoading ?
+            loading ?
               <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center">
                 <div className="bg-white p-4 rounded-lg">
                   <p>Loading...</p>
