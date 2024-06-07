@@ -1,73 +1,68 @@
-import './App.css'
-import {
-  // useDataShopData, 
-  useLocalSampleData,
-  usePathAnalysisData
-} from '@/lib/dataFetchingHooks';
-import { useEffect, useState } from 'react';
-import { convertDataTypesIncomingData, processPathAnalysisData, processDataShopData } from '@/lib/dataProcessingUtils';
+import './App.css';
+import { useContext, useEffect, useState } from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
+// import { NavBar } from './components/NavBar';
+import { Button } from './components/ui/button';
+import { Context } from './Context';
 
 function App() {
-  const sectionId = "area_perimeter_mix_rectangle_derived";
-  const problemId = "area_perimeter_mix_rectangle_derived-020";
+  const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
 
-  // const { pathAnalysisData, isPathAnalysisDataLoading } = usePathAnalysisData(sectionId, problemId);
-  // const { dataShopData, isDataShopDataLoading } = useDataShopData();
-  const filePath = "analyzing_different_forms_of_expressions.json"
-  // const { localSampleData, isLocalSampleDataLoading } = useLocalSampleData(filePath)
-  const [processedPathAnalysisData, setProcessedPathAnalysisData] = useState<GraphData | null>(null);
-  const [processedShopData, setProcessedShopData] = useState<GraphData | null>(null);
+  const handleData = (data: GlobalDataType[]) => {
+    setData(data)
+  }
 
-  // useEffect( () => {
-  //   if (isDataShopDataLoading) {
-  //     return;
-  //   }
-  //   else{
-  //     console.log("dataShopData: ", dataShopData);
-  //   }
-  // }, [isDataShopDataLoading, dataShopData])
+  const handleLoading = (loading: boolean) => {
+    setLoading(loading)
+  }
 
-  // useEffect(() => {
-  //   if (isLocalSampleDataLoading) {
-  //     return;
-  //   }
-  //   if (localSampleData) {
-  //     const _processData = async () => {
-  //       const processedData = await processDataShopData(localSampleData as GlobalDataType[])
-  //       setProcessedShopData(processedData);
-  //     }
-  //     _processData();
-  //   }
-  // }, [isLocalSampleDataLoading, localSampleData])
-
-
-  // useEffect(() => {
-  //   const _processData = async () => {
-  //     if (pathAnalysisData) {
-  //       setProcessedPathAnalysisData(await processPathAnalysisData(convertDataTypesIncomingData(pathAnalysisData)));
-  //     }
-  //   }
-  //   _processData();
-
-  // }, [isPathAnalysisDataLoading, pathAnalysisData])
-
-  // if (isPathAnalysisDataLoading || !processedPathAnalysisData || !processedShopData) {
-  //   return <div>Loading...</div>
-  // }
+  useEffect(() => {
+    if (data) {
+      console.log(data);
+    }
+  }, [data])
 
   return (
     <>
-      <div className="p-5">
-        <div className="w-1/2">
-          <DropZone />
+      <div className="">
+        {/* <NavBar /> */}
+        <Button
+          className="m-2"
+          variant={"ghost"}
+          onClick={() => {
+            resetData()
+
+          }}
+        >
+          Reset
+        </Button>
+
+        <div className=" flex items-center justify-center pt-20">
+
+          {
+            loading ?
+              <div className="absolute top-0 left-0 w-full h-full bg-gray-900 bg-opacity-50 flex items-center justify-center">
+                <div className="bg-white p-4 rounded-lg">
+                  <p>Loading...</p>
+                </div>
+              </div>
+              :
+              <div className="">
+                <DropZone afterDrop={handleData} onLoadingChange={handleLoading} />
+              </div>
+          }
+
+
+          {
+            graphData && (
+              <DirectedGraph graphData={graphData} />
+            )
+          }
+
         </div>
-
-        {/* <DirectedGraph graphData={processedShopData} /> */}
       </div>
-
     </>
   )
 }
