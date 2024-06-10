@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "bun vite",
     "build": "bun tsc && bun vite build",
-    "heroku-postbuild": "bun run build",
     "lint": "bun eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "bun vite preview",
     "start": "node dist/server.ts"
