@@ -9,6 +9,8 @@ import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
 
 function App() {
+  console.log("Vercel deployment works");
+  
   const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
 
   const handleData = (data: GlobalDataType[]) => {
