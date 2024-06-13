@@ -1,5 +1,5 @@
 import './App.css';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
@@ -9,12 +9,13 @@ import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
 
 function App() {
-  console.log("Vercel deployment works");
-  
+
   const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
+  const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
   const handleData = (data: GlobalDataType[]) => {
     setData(data)
+    setShowDropZone(false)
   }
 
   const handleLoading = (loading: boolean) => {
@@ -23,11 +24,8 @@ function App() {
 
   useEffect(() => {
     if (data) {
-      // console.log(data);
-      // process graphData
       const graphData: GraphData = processDataShopData(data)
       setGraphData(graphData)
-      console.log("graphData", graphData);
 
     }
   }, [data])
@@ -41,7 +39,7 @@ function App() {
           variant={"ghost"}
           onClick={() => {
             resetData()
-
+            setShowDropZone(true)
           }}
         >
           Reset
@@ -57,9 +55,15 @@ function App() {
                 </div>
               </div>
               :
-              <div className="">
-                <DropZone afterDrop={handleData} onLoadingChange={handleLoading} />
-              </div>
+              (
+                showDropZone && (
+                  <div className="">
+                    <DropZone afterDrop={handleData} onLoadingChange={handleLoading} />
+                  </div>
+                )
+
+              )
+
           }
 
 
