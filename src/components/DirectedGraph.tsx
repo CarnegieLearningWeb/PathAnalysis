@@ -173,59 +173,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
     return (
         <>
-            <div className="flex gap-5 p-2">
 
-
-            </div>
-            <div className=" flex gap-5 p-2 ">
-                <ToggleTool
-                    toolName="Photo"
-                    description="Capture a screenshot of the graph."
-                    initialState={false}
-                    onStateChange={captureScreenshot}
-                    icon="camera"
-                    buttonMode={true}
-
-                />
-                <div className="flex p-3 gap-3 items-baseline">
-                    Edges Threshold (%):
-                    <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className="p-1 border border-black rounded-lg w-[75px] text-center"
-                        value={Math.round((edgesThreshold / (graphData.maxEdgeCount ?? 100)) * 100)}
-                        onChange={(e) => {
-                            const currentValue = edgesThreshold;
-                            const newValue = (parseInt(e.target.value) / 100) * (graphData.maxEdgeCount ?? 100);
-                            setEdgesThreshold(newValue)
-                            setPreviousEdgesThreshold(currentValue);
-                        }}
-                    />
-                    <span>
-                        <Slider
-                            value={[(edgesThreshold / (graphData.maxEdgeCount ?? 100)) * 100]} // Convert absolute threshold to percentage for the slider
-                            className="w-[300px]"
-                            min={0}
-                            max={100}
-                            onValueChange={(value: number[]) => {
-                                // Convert the percentage back to an absolute number for edgesThreshold
-                                const newValue = (value[0] / 100) * (graphData.maxEdgeCount ?? 100);
-                                setEdgesThreshold(newValue);
-                            }}
-                            onValueCommit={(value: number[]) => {
-                                // This can be used for actions upon releasing the slider, similar to onValueChange
-                                const newValue = (value[0] / 100) * (graphData.maxEdgeCount ?? 100);
-                                setEdgesThreshold(newValue);
-                                setPreviousEdgesThreshold(edgesThreshold); // Update previous threshold if needed
-                            }}
-                        />
-
-
-                    </span>
-                </div>
-
-            </div>
 
 
             {
@@ -341,104 +289,156 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                 </div>
             )}
 
-            <div
-                id="graph"
-                className="bg-slate-200 border border-black rounded-lg "
-            >
+            <div className="flex flex-col">
+                <div className=" flex gap-5 p-2 ">
+                    <ToggleTool
+                        toolName="Photo"
+                        description="Capture a screenshot of the graph."
+                        initialState={false}
+                        onStateChange={captureScreenshot}
+                        icon="camera"
+                        buttonMode={true}
 
-                <ForceGraph2D
-                    // @ts-expect-error this type won't match up in typescript but it's ok
-                    graphData={currentGraphData}
-                    nodeRelSize={30}
-                    width={windowWidth}
-                    height={window.innerHeight - 200}
-                    ref={forceGraphRef}
-                    onNodeHover={handleNodeHover}
-                    onLinkHover={handleLinkHover}
-                    linkCurvature={(link) => link.curvature || 0}
-                    nodeAutoColorBy={"problemId"}
-                    // cooldownTime={freezeNodes ? 0 : Infinity} // this controls the "steadiness" -- 1 is the most steady, infinity is the least
-                    onNodeClick={(node, event) => {
-                        setContextMenu({ visible: true, x: event.clientX, y: event.clientY, node: node });
-                    }}
-                    onNodeDragEnd={(node) => {
-                        if (pinnable) {
-                            if (node.border !== true) {
-                                toast.success("Node pinned", {
-                                    icon: "📌",
-                                    position: "bottom-right",
-                                })
+                    />
+                    <div className="flex p-3 gap-3 items-baseline">
+                        Edges Threshold (%):
+                        <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            className="p-1 border border-black rounded-lg w-[75px] text-center"
+                            value={Math.round((edgesThreshold / (graphData.maxEdgeCount ?? 100)) * 100)}
+                            onChange={(e) => {
+                                const currentValue = edgesThreshold;
+                                const newValue = (parseInt(e.target.value) / 100) * (graphData.maxEdgeCount ?? 100);
+                                setEdgesThreshold(newValue)
+                                setPreviousEdgesThreshold(currentValue);
+                            }}
+                        />
+                        <span>
+                            <Slider
+                                value={[(edgesThreshold / (graphData.maxEdgeCount ?? 100)) * 100]} // Convert absolute threshold to percentage for the slider
+                                className="w-[300px]"
+                                min={0}
+                                max={100}
+                                onValueChange={(value: number[]) => {
+                                    // Convert the percentage back to an absolute number for edgesThreshold
+                                    const newValue = (value[0] / 100) * (graphData.maxEdgeCount ?? 100);
+                                    setEdgesThreshold(newValue);
+                                }}
+                                onValueCommit={(value: number[]) => {
+                                    // This can be used for actions upon releasing the slider, similar to onValueChange
+                                    const newValue = (value[0] / 100) * (graphData.maxEdgeCount ?? 100);
+                                    setEdgesThreshold(newValue);
+                                    setPreviousEdgesThreshold(edgesThreshold); // Update previous threshold if needed
+                                }}
+                            />
+
+
+                        </span>
+                    </div>
+
+                </div>
+
+                <div
+                    id="graph"
+                    className="bg-slate-200 border border-black rounded-lg "
+                >
+
+                    <ForceGraph2D
+                        // @ts-expect-error this type won't match up in typescript but it's ok
+                        graphData={currentGraphData}
+                        nodeRelSize={30}
+                        width={windowWidth}
+                        height={window.innerHeight - 200}
+                        ref={forceGraphRef}
+                        onNodeHover={handleNodeHover}
+                        onLinkHover={handleLinkHover}
+                        linkCurvature={(link) => link.curvature || 0}
+                        nodeAutoColorBy={"problemId"}
+                        // cooldownTime={freezeNodes ? 0 : Infinity} // this controls the "steadiness" -- 1 is the most steady, infinity is the least
+                        onNodeClick={(node, event) => {
+                            setContextMenu({ visible: true, x: event.clientX, y: event.clientY, node: node });
+                        }}
+                        onNodeDragEnd={(node) => {
+                            if (pinnable) {
+                                if (node.border !== true) {
+                                    toast.success("Node pinned", {
+                                        icon: "📌",
+                                        position: "bottom-right",
+                                    })
+                                }
+                                node.fx = node.x;
+                                node.fy = node.y;
+                                node.border = true;
                             }
-                            node.fx = node.x;
-                            node.fy = node.y;
-                            node.border = true;
-                        }
 
-                    }}
-                    onNodeRightClick={(node, event) => {
-                        console.log("Node right clicked: ", node);
-                        event.preventDefault();
+                        }}
+                        onNodeRightClick={(node, event) => {
+                            console.log("Node right clicked: ", node);
+                            event.preventDefault();
 
-                    }}
-                    onLinkClick={(link) => {
-                        console.log("Link clicked: ", link.source, link.target);
-                    }}
-                    onLinkRightClick={(link) => {
-                        console.log("Link right clicked: ", link.source, link.target);
-                    }}
-                    nodeCanvasObject={(node, ctx, globalScale) => {
-                        const label = node.label;
-                        const fontSize = 14 / globalScale;
-                        const radius = 14 / globalScale;
-                        node.radius = radius;
-                        ctx.beginPath();
-                        switch (node.shape) {
-                            case 'circle':
-                                ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
-                                break;
-                            case 'triangle':
-                                ctx.beginPath();
-                                ctx.moveTo(node.x!, node.y! - radius);
-                                ctx.lineTo(node.x! + radius, node.y! + radius);
-                                ctx.lineTo(node.x! - radius, node.y! + radius);
-                                ctx.closePath();
-                                break;
-                            case 'square':
-                                ctx.rect(node.x! - radius, node.y! - radius, radius * 2, radius * 2);
-                                break;
-                            default:
-                                ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
+                        }}
+                        onLinkClick={(link) => {
+                            console.log("Link clicked: ", link.source, link.target);
+                        }}
+                        onLinkRightClick={(link) => {
+                            console.log("Link right clicked: ", link.source, link.target);
+                        }}
+                        nodeCanvasObject={(node, ctx, globalScale) => {
+                            const label = node.label;
+                            const fontSize = 14 / globalScale;
+                            const radius = 14 / globalScale;
+                            node.radius = radius;
+                            ctx.beginPath();
+                            switch (node.shape) {
+                                case 'circle':
+                                    ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
+                                    break;
+                                case 'triangle':
+                                    ctx.beginPath();
+                                    ctx.moveTo(node.x!, node.y! - radius);
+                                    ctx.lineTo(node.x! + radius, node.y! + radius);
+                                    ctx.lineTo(node.x! - radius, node.y! + radius);
+                                    ctx.closePath();
+                                    break;
+                                case 'square':
+                                    ctx.rect(node.x! - radius, node.y! - radius, radius * 2, radius * 2);
+                                    break;
+                                default:
+                                    ctx.arc(node.x!, node.y!, radius, 0, 2 * Math.PI, false);
 
-                        }
+                            }
 
-                        ctx.fillStyle = node.color ?? 'blue';
-                        ctx.fill();
+                            ctx.fillStyle = node.color ?? 'blue';
+                            ctx.fill();
 
-                        // border
-                        if (node.border) {
-                            ctx.lineWidth = 5 / globalScale;
-                            ctx.strokeStyle = 'blue';
-                            ctx.stroke();
-                        }
+                            // border
+                            if (node.border) {
+                                ctx.lineWidth = 5 / globalScale;
+                                ctx.strokeStyle = 'blue';
+                                ctx.stroke();
+                            }
 
-                        const labelOffsetY = radius + fontSize;
-                        ctx.font = `${fontSize}px Sans-Serif`;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillStyle = 'black';
-                        ctx.fillText(label, node.x!, node.y! + labelOffsetY);
-                    }}
-                    linkDirectionalArrowLength={20}
-                    // linkDirectionalParticles={2}
-                    // linkDirectionalParticleWidth={7}
-                    linkDirectionalArrowColor={(link) => link.color || ''}
-                    linkDirectionalArrowRelPos={1}
-                    linkWidth={link => link.width || 1}
-                    d3VelocityDecay={0.8}
-                    // d3AlphaDecay={0.05}
-                    minZoom={0.4}
-                    maxZoom={2}
-                />
+                            const labelOffsetY = radius + fontSize;
+                            ctx.font = `${fontSize}px Sans-Serif`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = 'black';
+                            ctx.fillText(label, node.x!, node.y! + labelOffsetY);
+                        }}
+                        linkDirectionalArrowLength={20}
+                        // linkDirectionalParticles={2}
+                        // linkDirectionalParticleWidth={7}
+                        linkDirectionalArrowColor={(link) => link.color || ''}
+                        linkDirectionalArrowRelPos={1}
+                        linkWidth={link => link.width || 1}
+                        d3VelocityDecay={0.8}
+                        // d3AlphaDecay={0.05}
+                        minZoom={0.4}
+                        maxZoom={2}
+                    />
+                </div>
             </div>
         </>
     )
