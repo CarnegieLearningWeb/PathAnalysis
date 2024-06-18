@@ -4,66 +4,83 @@ import { GlobalDataType } from '@/lib/types';
 import { parseData } from '@/lib/utils';
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import toast from 'react-hot-toast';
 
 interface DropZoneProps {
     afterDrop: (data: GlobalDataType[]) => void,
     onLoadingChange: (loading: boolean) => void
 }
 
-export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
-    const delimiters = ["tsv", "csv", "pipe"]
+export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) {
+    const delimiters = ["tsv", "csv", "pipe"];
+    const [errorMessage, setErrorMessage] = useState<string>("");
 
     const [fileType, setFileType] = useState<string>(delimiters[0])
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
         onLoadingChange(true);
+        
         acceptedFiles.forEach((file: File) => {
-            const reader = new FileReader()
+            const reader = new FileReader();
 
-            reader.onabort = () => console.warn('file reading was aborted')
-            reader.onerror = () => console.error('file reading has failed')
+            reader.onabort = () => console.warn('file reading was aborted');
+            reader.onerror = () => console.error('file reading has failed');
             reader.onload = () => {
-                // Do whatever you want with the file contents after .readAsText()
-                const textStr = reader.result
-                // find file type and convert to delimeter
-                let delimeter: string;
+                const textStr = reader.result;
+                let delimiter: string;
                 switch (fileType) {
                     case 'tsv':
-                        delimeter = '\t'
+                        delimiter = '\t';
                         break;
                     case 'csv':
-                        delimeter = ','
+                        delimiter = ',';
                         break;
                     case 'pipe':
-                        delimeter = '|'
-                        break;
-                    case 'json':
-                        delimeter = ''
+                        delimiter = '|';
                         break;
                     default:
-                        delimeter = '\t'
+                        delimiter = '\t';
                         break;
                 }
-                const array: GlobalDataType[] | null = parseData(textStr, delimeter)
-                if (array) {
+                const array: GlobalDataType[] | null = parseData(textStr, delimiter);
+                console.log("Array: ", array);
+                // array is null when there is an error in the file structure or content
+                if (!array) {
+
+                    toast.error("Invalid file structure or content")
+                    console.log("Error state before: ", errorMessage);
+                    setErrorMessage("Invalid file structure or content");
+                    console.log("Error state after: ", errorMessage);
+                    
+                    // the below prints, but the above does not execute. Why?
+                    // console.error("!!!Invalid file structure or content");
+                }
+                else {
                     afterDrop(array);
                 }
-                onLoadingChange(false);
-                // console.log(array)
-            }
-            reader.readAsText(file)
-        })
 
-    }, [])
+
+                onLoadingChange(false);
+            };
+            reader.readAsText(file);
+            console.log("File: ", file);
+            
+        });
+    }, [fileType, afterDrop, onLoadingChange]);
 
     const acceptedFileTypes: Accept = {
-        'text/plain': ['.txt', '.csv', '.tsv', '.json'],
+        'text/plain': ['.txt', '.csv', '.tsv', '.json', '.tsv', '.pipe'],
     }
+
+
 
     const { getRootProps, getInputProps, isDragActive, isFocused, isDragReject } = useDropzone({
         onDrop,
         accept: acceptedFileTypes,
+        // validator: validateData
     });
+
+ 
 
     const fileTypeOptions = [
         {
@@ -108,19 +125,18 @@ export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
                 <input {...getInputProps()} />
                 {
                     !isDragActive ?
-                    <div className={`flex items-center h-full w-[fitcontent] justify-center p-2`}>
-                        <p className={""}>Drag 'n' drop some files here, or click to select files</p>
-                    </div>
-                    :
-                    <div className={`flex items-center h-full w-[fitcontent] justify-center bg-slate-100 rounded-lg p-2`}>
-                    <p className={""}>Drag 'n' drop some files here, or click to select files</p>
-                </div>
+                        <div className={`flex items-center h-full w-[fitcontent] justify-center p-2`}>
+                            <p className={""}>Drag 'n' drop some files here, or click to select files</p>
+                        </div>
+                        :
+                        <div className={`flex items-center h-full w-[fitcontent] justify-center bg-slate-100 rounded-lg p-2`}>
+                            <p className={""}>Drag 'n' drop some files here, or click to select files</p>
+                        </div>
                 }
-                {
-                    isDragReject &&
-                    <p className="text-red-500 pt-10">File type not accepted, please try again</p>
 
-                }
+                <div className="">
+                    {errorMessage && <p className="text-red-500 pt-10">{errorMessage}</p>}
+                </div>
             </div>
 
 
