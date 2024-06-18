@@ -2,6 +2,8 @@
 
 React + TypeScript + Vite + SWC (with Rust compiler)
 
+[Live URL](https://path-analysis.vercel.app/)
+
 ## How to Run Locally
 1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
 1. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running ```npm install -g @bun/cli```. Docs: https://bun.sh/
