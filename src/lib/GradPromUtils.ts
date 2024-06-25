@@ -1,7 +1,7 @@
-import { DataSet1 } from "./types";
+import {GlobalDataType} from "./types";
 
 
-export function filterPromGrad(data: DataSet1[], promOrGrad: "GRADUATED" | "PROMOTED" | "NOT_COMPLETED" | null): DataSet1[] {
+export function filterPromGrad(data: GlobalDataType[], promOrGrad: "GRADUATED" | "PROMOTED" | "NOT_COMPLETED" | null): GlobalDataType[] {
     if (promOrGrad !== null) {
         return data.filter(item => item["CF (Workspace Progress Status)"] === promOrGrad);
     } else {

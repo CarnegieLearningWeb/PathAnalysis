@@ -3,6 +3,8 @@ import { GlobalDataType, GraphData } from './lib/types';
 interface ContextInterface {
     data: GlobalDataType[] | null;
     graphData: GraphData | null;
+    filteredData: GlobalDataType[] | null
+    setFilteredData: (filteredData: GlobalDataType[] | null) => void;
     loading: boolean;
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
@@ -13,6 +15,7 @@ interface ContextInterface {
 export const Context = createContext({} as ContextInterface);
 const initialState = {
     data: null,
+    filteredData: null,
     graphData: null,
     loading: false
 }
@@ -22,6 +25,7 @@ interface ProviderProps {
 }
 export const Provider = ({ children }: ProviderProps) => {
     const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
+    const [filteredData, setFilteredData] = useState<GlobalDataType[] | null>(initialState.filteredData)
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
 
@@ -36,8 +40,10 @@ export const Provider = ({ children }: ProviderProps) => {
         <Context.Provider
             value={{
                 data,
+                filteredData,
                 graphData,
                 loading,
+                setFilteredData,
                 setLoading,
                 setData,
                 setGraphData,

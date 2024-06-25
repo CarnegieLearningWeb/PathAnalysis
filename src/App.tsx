@@ -7,10 +7,11 @@ import DropZone from './components/DropZone';
 import { Button } from './components/ui/button';
 import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
+import {filterPromGrad} from "@/lib/GradPromUtils";
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
+  const { resetData, setGraphData, setLoading, setFilteredData, filteredData, data, setData, graphData, loading } = useContext(Context)
   const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
   const handleData = (data: GlobalDataType[]) => {
@@ -21,6 +22,13 @@ function App() {
   const handleLoading = (loading: boolean) => {
     setLoading(loading)
   }
+
+  const filterData = (filteredData: GlobalDataType[]) => {
+    const data: GlobalDataType[] = filterPromGrad(filteredData, "GRADUATED")
+    setFilteredData(data)
+    console.log(data)
+  }
+
 
   useEffect(() => {
     if (data) {
