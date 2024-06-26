@@ -24,7 +24,7 @@ function App() {
   }
 
   const filterData = (filteredData: GlobalDataType[]) => {
-    const data: GlobalDataType[] = filterPromGrad(filteredData, "GRADUATED")
+    const data: GlobalDataType[] = filterPromGrad(filteredData, "PROMOTED")
     setFilteredData(data)
     console.log(data)
   }
@@ -36,6 +36,10 @@ function App() {
       setGraphData(graphData)
 
     }
+    // if (filteredData) {
+    //   const graphData: GraphData = processDataShopData(filteredData)
+    //   setGraphData(graphData)
+    // }
   }, [data])
 
   return (
@@ -83,7 +87,17 @@ function App() {
               </>
             )
           }
-
+        <div>
+           <Button
+            onClick={() => {
+            filterData(data!);
+            setFilteredData(data);
+            console.log('FILTER')
+          }}
+        >
+          Filter Promoted Data
+            </Button>
+        </div>
         </div>
       </div>
     </>
