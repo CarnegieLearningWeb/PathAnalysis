@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react"
+import { useContext, useEffect, useRef, useState } from "react"
 import { ForceGraph2D } from 'react-force-graph';
-import { GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject } from "@/lib/types";
+import { GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject, GlobalDataType } from "@/lib/types";
 import * as d3 from "d3";
 import html2canvas from 'html2canvas';
 
 import toast from "react-hot-toast";
 import { Cross2Icon } from "@radix-ui/react-icons";
 import { Slider } from "@/components/ui/slider"
-import { addUnusedNodes, changeLinkThreshold, removeUnusedNodes } from "@/lib/dataProcessingUtils";
+import { addUnusedNodes, changeLinkThreshold, filterPromGrad, processDataShopData, removeUnusedNodes } from "@/lib/dataProcessingUtils";
 import ToggleTool from "@/components/ToggleTool";
+import { Button } from "./ui/button";
+import { Context } from "@/Context";
 
 // TODO make sure the node info is changed
 
@@ -17,7 +19,7 @@ interface DirectedGraphProps {
 }
 
 export default function DirectedGraph({ graphData }: DirectedGraphProps) {
-
+    const { data } = useContext(Context);
     const initialTooltip: ToolTip = { display: false, text: '', x: 0, y: 0, fx: undefined, fy: undefined };
     const [tooltip, setTooltip] = useState<ToolTip>(initialTooltip);
     const [currentGraphData, setCurrentGraphData] = useState<GraphData>(graphData);
@@ -124,6 +126,14 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
     }
 
+    const handleFilter = () => {
+        if (data) {
+            const filteredData: GlobalDataType[] = filterPromGrad(data, "PROMOTED");
+            const filteredGraphData: GraphData = processDataShopData(filteredData);
+            setCurrentGraphData(filteredGraphData);
+        }
+    }
+
     const handleThresholdChangeRemove = () => {
         const newLinks: LinkObject[] = changeLinkThreshold(graphData.links as LinkObject[], edgesThreshold);
         const { newNodes, removedNodes } = removeUnusedNodes(currentGraphData.nodes, newLinks);
@@ -165,7 +175,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                 // Assuming handleThresholdChange is correctly implemented to handle the initial state
                 handleThresholdChange(initialThreshold, previousEdgesThreshold);
             }
-        }, 200); // Delay execution by 200ms to ensure graphData is loaded before applying logic.
+        }, 200); // Delay execution by 500ms to ensure graphData is loaded before applying logic.
 
         // Cleanup function to clear the timeout if the component unmounts
         return () => clearTimeout(timer);
@@ -337,6 +347,11 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
                         </span>
                     </div>
+                    <Button
+                        onClick={handleFilter}
+                    >
+                        Filter
+                    </Button>
 
                 </div>
 
@@ -427,37 +442,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                             ctx.fillStyle = 'black';
                             ctx.fillText(label, node.x!, node.y! + labelOffsetY);
                         }}
-                        // linkCanvasObject={(link, ctx, globalScale) => {
-                        //     const length = 30 / globalScale; // Adjust the arrow length based on global scale
-                        //     const sx = (link.source as Node).x;
-                        //     const sy = (link.source as Node).y;
-                        //     const tx = (link.target as Node).x;
-                        //     const ty = (link.target as Node).y;
-                        //     if (sx === undefined || sy === undefined || tx === undefined || ty === undefined) {
-                        //         return;
-                        //     }
-                        //     // calculate the direction of the arrow
-                        //     const dir = Math.atan2(ty - sy, tx - sx);
-
-                        //     // Draw the arrow
-                        //     ctx.beginPath();
-                        //     ctx.moveTo(sx, sy);
-                        //     ctx.lineTo(tx, ty);
-                        //     ctx.stroke();
-
-                        //     // Draw the arrow head
-                        //     ctx.beginPath();
-                        //     ctx.moveTo(tx, ty);
-                        //     ctx.lineTo(tx - length * Math.cos(dir - Math.PI / 6), ty - length * Math.sin(dir - Math.PI / 6));
-                        //     ctx.lineTo(tx - length * Math.cos(dir + Math.PI / 6), ty - length * Math.sin(dir + Math.PI / 6));
-                        //     ctx.closePath();
-                        //     ctx.fill();
-                        // }}
-                        linkDirectionalArrowLength={() => {
-                            // `arrow` can be a param here
-                            return 30;
-
-                        }}
+                        linkDirectionalArrowLength={20}
                         // linkDirectionalParticles={2}
                         // linkDirectionalParticleWidth={7}
                         linkDirectionalArrowColor={(link) => link.color || ''}
