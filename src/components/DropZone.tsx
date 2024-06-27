@@ -44,7 +44,7 @@ export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) 
                         break;
                 }
                 const array: GlobalDataType[] | null = parseData(textStr, delimiter);
-                console.log("Array: ", array);
+                console.log("Array from file: ", array);
                 // array is null when there is an error in the file structure or content
                 if (!array) {
 
@@ -71,8 +71,10 @@ export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) 
     }, [fileType, afterDrop, onLoadingChange]);
 
     const acceptedFileTypes: Accept = {
-        'text/plain': ['.txt', '.csv', '.tsv', '.json', '.tsv', '.pipe'],
-    }
+        'text/tab-separated-values': ['.tsv'],
+        'text/csv': ['.csv'],
+        'text/plain': ['.txt', '.csv', '.tsv', '.json', '.pipe']
+    };
 
 
 
