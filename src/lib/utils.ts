@@ -16,11 +16,6 @@ const validation = Joi.array().items(
   }).unknown()
 );
 
-type ValidatorResult = {
-  code: string;
-  message: string;
-}
-
 
 export function parseData(readerResult: string | ArrayBuffer | null, delimiter: string = "\t"): GlobalDataType[] | null {
   if (!readerResult) {

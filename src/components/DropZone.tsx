@@ -10,6 +10,7 @@ interface DropZoneProps {
     afterDrop: (data: GlobalDataType[]) => void,
     onLoadingChange: (loading: boolean) => void
 }
+// TODO move this up to App.tsx so I can better handle errors
 
 export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) {
     const delimiters = ["tsv", "csv", "pipe"];
@@ -63,7 +64,8 @@ export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) 
                 onLoadingChange(false);
             };
             reader.readAsText(file);
-            console.log("File: ", file);
+            onLoadingChange(false);
+            // console.log("File: ", file);
             
         });
     }, [fileType, afterDrop, onLoadingChange]);
@@ -77,7 +79,17 @@ export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) 
     const { getRootProps, getInputProps, isDragActive, isFocused, isDragReject } = useDropzone({
         onDrop,
         accept: acceptedFileTypes,
-        // validator: validateData
+        validator: (file) => {
+            // returns FileError | Array.<FileError> | null
+            if (!acceptedFileTypes[file.type]) {
+                
+                return {
+                    code: 'file-invalid-type',
+                    message: 'Invalid file type',
+                }
+            }
+            return null;
+        }
     });
 
  
@@ -133,6 +145,7 @@ export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) 
                             <p className={""}>Drag 'n' drop some files here, or click to select files</p>
                         </div>
                 }
+                {isDragReject && <p className="text-red-500">Invalid file type</p>}
 
                 <div className="">
                     {errorMessage && <p className="text-red-500 pt-10">{errorMessage}</p>}
