@@ -7,10 +7,11 @@ import DropZone from './components/DropZone';
 import { Button } from './components/ui/button';
 import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
+import {filterPromGrad} from "@/lib/GradPromUtils";
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
+  const { resetData, setGraphData, setLoading, setFilteredData, filteredData, data, setData, graphData, loading } = useContext(Context)
   const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
   const handleData = (data: GlobalDataType[]) => {
@@ -22,13 +23,29 @@ function App() {
     setLoading(loading)
   }
 
+  const filterData = (filteredData: GlobalDataType[]) => {
+    const data: GlobalDataType[] = filterPromGrad(filteredData, "PROMOTED")
+    setFilteredData(data)
+    console.log(data)
+  }
+
+  // const handleFilteredData = (filteredData: GlobalDataType[]) => {
+  //     setData(filteredData)
+  //     setShowDropZone(false)
+  //     const graphData: GraphData = processDataShopData(filteredData)
+  //     setGraphData(graphData)
+  // }
+
   useEffect(() => {
     if (data) {
       const graphData: GraphData = processDataShopData(data)
       setGraphData(graphData)
-
     }
-  }, [data])
+    // if (filteredData) {
+    //   const graphData: GraphData = processDataShopData(filteredData)
+    //   setGraphData(graphData)
+    // }
+  }, [data])  //,filteredData
 
   return (
     <>
@@ -75,7 +92,18 @@ function App() {
               </>
             )
           }
+        <div style={{position:"relative"}}>
+            <div style={{position:"absolute", float: "right", top:-260, right:600}}>
+                <Button
 
+                onClick={() => {
+                filterData(data!);
+                setFilteredData(data);
+                // handleFilteredData(filteredData!)
+                }
+                }> Filter Promoted Data </Button>
+            </div>
+        </div>
         </div>
       </div>
     </>
