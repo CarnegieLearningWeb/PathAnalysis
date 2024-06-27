@@ -12,7 +12,6 @@ import ToggleTool from "@/components/ToggleTool";
 
 // TODO make sure the node info is changed
 
-type TODO = any
 interface DirectedGraphProps {
     graphData: GraphData;
 }
@@ -28,7 +27,6 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
     const [edgesThreshold, setEdgesThreshold] = useState<number>((graphData.maxEdgeCount ?? 100) * 0.1);
     const [previousEdgesThreshold, setPreviousEdgesThreshold] = useState<number>(((graphData.maxEdgeCount ?? 100) * 0.1));
     const initialContextMenuControls: ContextMenuControls = { visible: false, x: 0, y: 0, node: null };
-    const [arrowSize, setArrowSize] = useState(30);
 
     const [contextMenu, setContextMenu] = useState<ContextMenuControls>(initialContextMenuControls);
 
