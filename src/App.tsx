@@ -29,18 +29,23 @@ function App() {
     console.log(data)
   }
 
+  // const handleFilteredData = (filteredData: GlobalDataType[]) => {
+  //     setData(filteredData)
+  //     setShowDropZone(false)
+  //     const graphData: GraphData = processDataShopData(filteredData)
+  //     setGraphData(graphData)
+  // }
 
   useEffect(() => {
     if (data) {
       const graphData: GraphData = processDataShopData(data)
       setGraphData(graphData)
-
     }
     // if (filteredData) {
     //   const graphData: GraphData = processDataShopData(filteredData)
     //   setGraphData(graphData)
     // }
-  }, [data])
+  }, [data])  //,filteredData
 
   return (
     <>
@@ -87,16 +92,17 @@ function App() {
               </>
             )
           }
-        <div>
-           <Button
-            onClick={() => {
-            filterData(data!);
-            setFilteredData(data);
-            console.log('FILTER')
-          }}
-        >
-          Filter Promoted Data
-            </Button>
+        <div style={{position:"relative"}}>
+            <div style={{position:"absolute", float: "right", top:-260, right:600}}>
+                <Button
+
+                onClick={() => {
+                filterData(data!);
+                setFilteredData(data);
+                // handleFilteredData(filteredData!)
+                }
+                }> Filter Promoted Data </Button>
+            </div>
         </div>
         </div>
       </div>

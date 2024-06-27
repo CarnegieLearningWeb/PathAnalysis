@@ -2,6 +2,7 @@ import {GlobalDataType} from "./types";
 
 
 export function filterPromGrad(data: GlobalDataType[], promOrGrad: "GRADUATED" | "PROMOTED" | "NOT_COMPLETED" | null): GlobalDataType[] {
+    // If no data has been imported into DropZone, do nothing
     if (data == null) {
     }
     if (promOrGrad !== null) {
