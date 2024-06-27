@@ -44,6 +44,7 @@
     "react-dropzone": "^14.2.3",
     "react-force-graph": "^1.44.3",
     "react-hot-toast": "^2.4.1",
+    "react-router-dom": "^6.24.0",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
     "timsort": "^0.3.0",

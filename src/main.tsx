@@ -8,16 +8,29 @@ import {
 } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Provider } from './Context.tsx'
-
+import {
+  createBrowserRouter,
+  RouterProvider,
+} from "react-router-dom";
+import Debug from './components/Debug.tsx'
 const queryClient = new QueryClient()
+
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <App />,
+  },
+  {
+    path: "/debug",
+    element: <Debug />
+  }
+])
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <Provider>
-
-
-        <App />
+        <RouterProvider router={router} />
       </Provider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
