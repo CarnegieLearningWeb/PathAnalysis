@@ -12,6 +12,7 @@ import ToggleTool from "@/components/ToggleTool";
 
 // TODO make sure the node info is changed
 
+type TODO = any
 interface DirectedGraphProps {
     graphData: GraphData;
 }
@@ -27,6 +28,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
     const [edgesThreshold, setEdgesThreshold] = useState<number>((graphData.maxEdgeCount ?? 100) * 0.1);
     const [previousEdgesThreshold, setPreviousEdgesThreshold] = useState<number>(((graphData.maxEdgeCount ?? 100) * 0.1));
     const initialContextMenuControls: ContextMenuControls = { visible: false, x: 0, y: 0, node: null };
+    const [arrowSize, setArrowSize] = useState(30);
 
     const [contextMenu, setContextMenu] = useState<ContextMenuControls>(initialContextMenuControls);
 
@@ -165,7 +167,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                 // Assuming handleThresholdChange is correctly implemented to handle the initial state
                 handleThresholdChange(initialThreshold, previousEdgesThreshold);
             }
-        }, 200); // Delay execution by 500ms to ensure graphData is loaded before applying logic.
+        }, 200); // Delay execution by 200ms to ensure graphData is loaded before applying logic.
 
         // Cleanup function to clear the timeout if the component unmounts
         return () => clearTimeout(timer);
@@ -427,7 +429,37 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                             ctx.fillStyle = 'black';
                             ctx.fillText(label, node.x!, node.y! + labelOffsetY);
                         }}
-                        linkDirectionalArrowLength={20}
+                        // linkCanvasObject={(link, ctx, globalScale) => {
+                        //     const length = 30 / globalScale; // Adjust the arrow length based on global scale
+                        //     const sx = (link.source as Node).x;
+                        //     const sy = (link.source as Node).y;
+                        //     const tx = (link.target as Node).x;
+                        //     const ty = (link.target as Node).y;
+                        //     if (sx === undefined || sy === undefined || tx === undefined || ty === undefined) {
+                        //         return;
+                        //     }
+                        //     // calculate the direction of the arrow
+                        //     const dir = Math.atan2(ty - sy, tx - sx);
+
+                        //     // Draw the arrow
+                        //     ctx.beginPath();
+                        //     ctx.moveTo(sx, sy);
+                        //     ctx.lineTo(tx, ty);
+                        //     ctx.stroke();
+
+                        //     // Draw the arrow head
+                        //     ctx.beginPath();
+                        //     ctx.moveTo(tx, ty);
+                        //     ctx.lineTo(tx - length * Math.cos(dir - Math.PI / 6), ty - length * Math.sin(dir - Math.PI / 6));
+                        //     ctx.lineTo(tx - length * Math.cos(dir + Math.PI / 6), ty - length * Math.sin(dir + Math.PI / 6));
+                        //     ctx.closePath();
+                        //     ctx.fill();
+                        // }}
+                        linkDirectionalArrowLength={() => {
+                            // `arrow` can be a param here
+                            return 30;
+
+                        }}
                         // linkDirectionalParticles={2}
                         // linkDirectionalParticleWidth={7}
                         linkDirectionalArrowColor={(link) => link.color || ''}
