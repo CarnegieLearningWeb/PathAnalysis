@@ -12,19 +12,10 @@ import {
   createBrowserRouter,
   RouterProvider,
 } from "react-router-dom";
-import Debug from './components/Debug.tsx'
+import { routes } from './lib/routes.tsx'
 const queryClient = new QueryClient()
 
-const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <App />,
-  },
-  {
-    path: "/debug",
-    element: <Debug />
-  }
-])
+const router = createBrowserRouter(routes)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
