@@ -1,5 +1,5 @@
 import './App.css';
-import { useContext, useEffect, useState } from 'react';
+import {ChangeEventHandler, useContext, useEffect, useState} from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
@@ -12,7 +12,8 @@ import Switch from "@/components/ui/switch.tsx";
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, setFilteredData, filteredData, data, setData, graphData, loading } = useContext(Context)
+  const { resetData, setGraphData, setLoading, setFilteredData, filteredData,
+      data, setData, graphData, loading } = useContext(Context)
   const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
   const handleData = (data: GlobalDataType[]) => {
@@ -24,11 +25,12 @@ function App() {
     setLoading(loading)
   }
 
-  const filterData = (data: GlobalDataType[], promOrGrad:"PROMOTED"|"GRADUATED"|null) => {
+  const filterData = (data: GlobalDataType[], filter:"PROMOTED"|"GRADUATED"|null|string) => {
     // const filteredData: GlobalDataType[] =
-    setFilteredData(filterPromGrad(data, promOrGrad))
+    const f = filterPromGrad(data, filter)
+    setFilteredData(f)
     // console.log(data)
-    return filteredData
+    // return filteredData
   }
 
   // const handleFilteredData = (filteredData: GlobalDataType[]) => {
@@ -52,7 +54,7 @@ function App() {
 
   const [isOn, setIsOn] = useState(false);
   const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
-  const [filter, setFilter] = useState<string|null>(null);
+  const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
 
   const handleToggle = () => {
     if (isSwitchEnabled){
@@ -64,12 +66,20 @@ function App() {
     setIsSwitchEnabled(event.target.checked);
   };
 
+  // const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   setFilter(event.target.value);
+  //   };
+
   useEffect(() => {
       if (isSwitchEnabled) {
-          const value = isOn ? "PROMOTED" : "GRADUATED";
+          let value = isOn ? "PROMOTED" : "GRADUATED";
           setFilter(value);
+          console.log("Filter: " + filter)
+          let f = filterData(data!, value)
+          setFilteredData(f)
+          console.log("Filter: " + filter)
+          console.log("Value: " + value)
 
-          setFilteredData(filterData(data!, value))
           console.log(filteredData)
       }
 
@@ -80,19 +90,19 @@ function App() {
 
   }, [isSwitchEnabled, isOn]);
 
-  const getValueBasedOnSwitch = () => {
-    if (isSwitchEnabled) {
-      console.log("Filter: " + filter)
-      setFilter(isOn ?  "PROMOTED":"GRADUATED" );
-      return filter
-    }
-    else {
-      // const noFilter = null
-      setFilter(null)
-      console.log("Filter: " + filter)
-      return filter
-    }
-    };
+  // const getValueBasedOnSwitch = () => {
+  //   if (isSwitchEnabled) {
+  //     console.log("Filter: " + filter)
+  //     setFilter(isOn ?  "PROMOTED":"GRADUATED" );
+  //     return filter
+  //   }
+  //   else {
+  //     // const noFilter = null
+  //     setFilter(null)
+  //     console.log("Filter: " + filter)
+  //     return filter
+  //   }
+  //   };
 
   return (
     <>
@@ -145,8 +155,11 @@ function App() {
                       <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>
                       Filter by Section Completion Status?
                   </label>
-                  <Switch isOn={isOn} handleToggle={handleToggle} filter={getValueBasedOnSwitch()}
-                          isDisabled={!isSwitchEnabled}/>
+                  <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
+                          isDisabled={!isSwitchEnabled}
+                          // onChange={handleFilterChange}
+                  />
+
               </div>
 
               {/*<div style={{position:"relative"}}>*/}

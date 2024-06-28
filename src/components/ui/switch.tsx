@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {ChangeEventHandler} from 'react';
 import './../../Switch.css';
 
 
@@ -6,7 +6,10 @@ interface SwitchProps {
   isOn: boolean;
   handleToggle: () => void;
   filter: string|null;
-  isDisabled: boolean;
+
+  isDisabled?: boolean;
+
+  onChange?: ChangeEventHandler | undefined;
 
 }
 const Switch: React.FC<SwitchProps> = ({ isOn, handleToggle }) => {
