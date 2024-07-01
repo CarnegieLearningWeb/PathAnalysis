@@ -1,5 +1,5 @@
 import './App.css';
-import {ChangeEventHandler, useContext, useEffect, useState} from 'react';
+import {useContext, useEffect, useState} from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
@@ -9,6 +9,8 @@ import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
 import {filterPromGrad} from "@/lib/GradPromUtils";
 import Switch from "@/components/ui/switch.tsx";
+import './Switch.css';
+
 
 function App() {
 
@@ -76,9 +78,9 @@ function App() {
   useEffect(() => {
       if (isSwitchEnabled) {
           let value = isOn ? "PROMOTED" : "GRADUATED";
-          // setFilter(value);
+          setFilter(value);
           // console.log("Filter: " + filter)
-          let f = filterData(data, value) // Why can't I use filter here instead of value?
+          let f = filterData(data!, value) // Why can't I use filter here instead of value?
 
           // console.log("Filter: " + filter)
 
@@ -87,26 +89,19 @@ function App() {
           console.log(f)
       }
 
-      // else{
-      //      setFilter(null)
-      // }
-      // console.log(filter)
+      else{
+          setData(data)
+          console.log(data)
+      }
+
 
   }, [isSwitchEnabled, isOn]);
 
-  // const getValueBasedOnSwitch = () => {
-  //   if (isSwitchEnabled) {
-  //     console.log("Filter: " + filter)
-  //     setFilter(isOn ?  "PROMOTED":"GRADUATED" );
-  //     return filter
-  //   }
-  //   else {
-  //     // const noFilter = null
-  //     setFilter(null)
-  //     console.log("Filter: " + filter)
-  //     return filter
-  //   }
-  //   };
+  const getValueBasedOnSwitch = () => {
+    if (isSwitchEnabled) {
+        return filter
+    };
+  }
 
   return (
     <>
@@ -154,16 +149,21 @@ function App() {
                       </>
                   )
               }
-              <div className="Filter Switch and checkbox">
+              <div className="checkbox">
                   <label>
+
                       <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>
-                      Filter by Section Completion Status?
+                      <span class="tab"></span>Filter by Section Completion Status?
                   </label>
                   <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
                           isDisabled={!isSwitchEnabled}
-                          // onChange={handleFilterChange}
-
+                      // onChange={handleFilterChange}
                   />
+                  <br></br>
+                  <br></br>
+                  <br></br>
+
+                  <label>Status: {getValueBasedOnSwitch()}</label>
 
               </div>
 

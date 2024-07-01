@@ -11,7 +11,7 @@
   background-color: grey;
   position: absolute;
   left: 0px;
-  top: 350px;
+  top: 40px;
   transition: background-color 0.2s;
 }
 
@@ -42,6 +42,21 @@
   display: none;
 }
 
-.switch.disabled{   /*Not working*/
-  visibility: hidden;
+.switch.disabled.switch-display{   /*Not working*/
+  opacity: 30;
+}
+
+.checkbox{
+  position: fixed;
+  left: 93px;
+  top: 50px;
+}
+
+.checkbox.toggler__label{
+  position: fixed;
+}
+
+.tab {
+    display: inline-block;
+    margin-left: 10px;
 }
