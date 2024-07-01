@@ -18,7 +18,7 @@ export function processDataShopData(data: GlobalDataType[]): GraphData{
         ----- NOTES -----
         The data is already sorted by Time **within each anon student id** so we can use this to calculate both the rank and the next node in the sequence.
         The data has a problem name and then each step name ordered sequentially. The graph terminates when the step name is `null` and Selection = 'Done Button'
-        So we can filter the data by Problem Name and then group by student in order to contstruct the paths. Then we overlay all of them to get the full graph.
+        So we can filter the data by Problem Name and then group by student in order to construct the paths. Then we overlay all of them to get the full graph.
         We can count the instances of each transition to get the width of the links.
 
         Right now, the sample data is from one specific problem, so the eventual API will have to fetch data based on the problem name rather than getting the whole dataset
