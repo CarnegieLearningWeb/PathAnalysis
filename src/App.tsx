@@ -28,7 +28,8 @@ function App() {
   const filterData = (data: GlobalDataType[], filter:"PROMOTED"|"GRADUATED"|null|string) => {
     // const filteredData: GlobalDataType[] =
     const f = filterPromGrad(data, filter)
-    setFilteredData(f)
+    // setFilteredData(f)
+    return f
     // console.log(data)
     // return filteredData
   }
@@ -55,6 +56,8 @@ function App() {
   const [isOn, setIsOn] = useState(false);
   const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
   const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
+  // Using Graduated as initial gives the first click the correct value but not after
+  // -- doesn't work if initial state is null
 
   const handleToggle = () => {
     if (isSwitchEnabled){
@@ -73,14 +76,15 @@ function App() {
   useEffect(() => {
       if (isSwitchEnabled) {
           let value = isOn ? "PROMOTED" : "GRADUATED";
-          setFilter(value);
-          console.log("Filter: " + filter)
-          let f = filterData(data!, value)
-          setFilteredData(f)
-          console.log("Filter: " + filter)
-          console.log("Value: " + value)
+          // setFilter(value);
+          // console.log("Filter: " + filter)
+          let f = filterData(data, value) // Why can't I use filter here instead of value?
 
-          console.log(filteredData)
+          // console.log("Filter: " + filter)
+
+          console.log("Filter: " + value)
+
+          console.log(f)
       }
 
       // else{
@@ -158,6 +162,7 @@ function App() {
                   <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
                           isDisabled={!isSwitchEnabled}
                           // onChange={handleFilterChange}
+
                   />
 
               </div>
