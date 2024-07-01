@@ -28,10 +28,14 @@ function App() {
   }
 
   const filterData = (data: GlobalDataType[], filter:"PROMOTED"|"GRADUATED"|null|string) => {
-    // const filteredData: GlobalDataType[] =
-    const f = filterPromGrad(data, filter)
-    // setFilteredData(f)
-    return f
+      if (data){
+        const f = filterPromGrad(data, filter)
+        // setFilteredData(f)
+        return f
+      }
+      else {
+
+      }
     // console.log(data)
     // return filteredData
   }
@@ -164,7 +168,6 @@ function App() {
                   <br></br>
 
                   <label>Status: {getValueBasedOnSwitch()}</label>
-
               </div>
 
               {/*<div style={{position:"relative"}}>*/}
