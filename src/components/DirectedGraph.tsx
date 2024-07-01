@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react"
+import {useContext, useEffect, useRef, useState} from "react"
 import { ForceGraph2D } from 'react-force-graph';
-import { GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject } from "@/lib/types";
+import {GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject, GlobalDataType} from "@/lib/types";
 import * as d3 from "d3";
 import html2canvas from 'html2canvas';
 
@@ -9,7 +9,10 @@ import { Cross2Icon } from "@radix-ui/react-icons";
 import { Slider } from "@/components/ui/slider"
 import { addUnusedNodes, changeLinkThreshold, removeUnusedNodes } from "@/lib/dataProcessingUtils";
 import ToggleTool from "@/components/ToggleTool";
-
+import {filterPromGrad} from "@/lib/GradPromUtils";
+import Switch from "@/components/ui/switch";
+import "./../Switch.css"
+import {Context} from "@/Context.tsx";
 // TODO make sure the node info is changed
 
 interface DirectedGraphProps {
@@ -33,6 +36,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
     const [, setRemovedNodeStorage] = useState<Node[]>([]);
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
+    const {data, setData} = useContext(Context)
     // save to photo
     const captureScreenshot = () => {
         const input = document.getElementById('graph') as HTMLElement;
@@ -54,6 +58,60 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
     }
 
+    const filterData = (data: GlobalDataType[], filter:"PROMOTED"|"GRADUATED"|null|string) => {
+      if (data){
+        const f = filterPromGrad(data, filter)
+        // setFilteredData(f)
+        return f
+      }
+      else {
+
+      }}
+
+  const [isOn, setIsOn] = useState(false);
+  const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
+  const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
+  // Using Graduated as initial gives the first click the correct value but not after
+  // -- doesn't work if initial state is null
+
+  const handleToggle = () => {
+    if (isSwitchEnabled){
+      setIsOn(!isOn);
+    }
+  };
+
+  const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setIsSwitchEnabled(event.target.checked);
+  };
+
+  // const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   setFilter(event.target.value);
+  //   };
+
+  useEffect(() => {
+      if (isSwitchEnabled) {
+          let value = isOn ? "PROMOTED" : "GRADUATED";
+          setFilter(value);
+          // console.log("Filter: " + filter)
+          let f = filterData(data!, value)
+          console.log("Filter: " + value)
+
+          console.log(f)
+      }
+
+      else{
+          setData(data)
+          console.log(data)
+      }
+
+
+  }, [isSwitchEnabled, isOn]);
+
+  const getValueBasedOnSwitch = () => {
+    if (isSwitchEnabled) {
+        return filter
+    };
+  }
 
     useEffect(() => {
         // resizing of window
@@ -175,7 +233,6 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
         <>
 
 
-
             {
                 contextMenu.visible && (
                     <div
@@ -196,15 +253,15 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                         }}
                     >
                         <div className="flex justify-between items-center">
-                            <span />
+                            <span/>
                             <div className="text-center underline font-bold">
                                 Node Info
                             </div>
                             <button
                                 className="p-0.5 bg-red-500 text-white rounded-md hover:bg-red-600"
-                                onClick={() => setContextMenu({ visible: false, x: 0, y: 0, node: null })}
+                                onClick={() => setContextMenu({visible: false, x: 0, y: 0, node: null})}
                             >
-                                <Cross2Icon />
+                                <Cross2Icon/>
                             </button>
                         </div>
                         <div className="">
@@ -224,7 +281,8 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                         )}
                         {contextMenu.node?.cumulativeSelfLoops && (
                             <div className="">
-                                <span className="font-bold">Cumulative Self Loops:</span> {contextMenu.node.cumulativeSelfLoops}
+                                <span
+                                    className="font-bold">Cumulative Self Loops:</span> {contextMenu.node.cumulativeSelfLoops}
                             </div>
                         )}
                         {contextMenu.node?.edgesIn && (
@@ -263,8 +321,6 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                                 <span className="font-bold">Rank:</span> {contextMenu.node.rank ?? ""}
                             </div>
                         )}
-
-
 
 
                     </div>
@@ -358,7 +414,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                         nodeAutoColorBy={"problemId"}
                         // cooldownTime={freezeNodes ? 0 : Infinity} // this controls the "steadiness" -- 1 is the most steady, infinity is the least
                         onNodeClick={(node, event) => {
-                            setContextMenu({ visible: true, x: event.clientX, y: event.clientY, node: node });
+                            setContextMenu({visible: true, x: event.clientX, y: event.clientY, node: node});
                         }}
                         onNodeDragEnd={(node) => {
                             if (pinnable) {
@@ -440,6 +496,31 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
                     />
                 </div>
             </div>
+
+            <div className="checkbox">
+                <label>
+
+                    <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>
+                    <span className="tab"></span>Filter by Section Completion Status?
+                </label>
+                <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
+                        isDisabled={!isSwitchEnabled}
+                    // onChange={handleFilterChange}
+                />
+                <br></br>
+                <br></br>
+                <br></br>
+
+                <label>Status: {getValueBasedOnSwitch()}</label>
+            </div>
         </>
-    )
-}
+    )}
+
+
+
+
+
+
+
+
+

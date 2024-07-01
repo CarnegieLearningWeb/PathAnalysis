@@ -86,15 +86,13 @@ function App() {
           // console.log("Filter: " + filter)
           let f = filterData(data!, value) // Why can't I use filter here instead of value?
 
-          // console.log("Filter: " + filter)
-
           console.log("Filter: " + value)
 
           console.log(f)
       }
 
       else{
-          setData(data)
+          setData(data!)
           console.log(data)
       }
 
@@ -153,34 +151,25 @@ function App() {
                       </>
                   )
               }
-              <div className="checkbox">
-                  <label>
 
-                      <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>
-                      <span class="tab"></span>Filter by Section Completion Status?
-                  </label>
-                  <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
-                          isDisabled={!isSwitchEnabled}
-                      // onChange={handleFilterChange}
-                  />
-                  <br></br>
-                  <br></br>
-                  <br></br>
 
-                  <label>Status: {getValueBasedOnSwitch()}</label>
-              </div>
+              {/*<div className="checkbox">*/}
+              {/*    <label>*/}
 
-              {/*<div style={{position:"relative"}}>*/}
-              {/*    <div style={{position:"absolute", float: "right", top:-260, right:600}}>*/}
-              {/*        <Button*/}
+              {/*        <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>*/}
+              {/*        <span class="tab"></span>Filter by Section Completion Status?*/}
+              {/*    </label>*/}
+              {/*    <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}*/}
+              {/*            isDisabled={!isSwitchEnabled}*/}
+              {/*        // onChange={handleFilterChange}*/}
+              {/*    />*/}
+              {/*    <br></br>*/}
+              {/*    <br></br>*/}
+              {/*    <br></br>*/}
 
-              {/*        onClick={() => {*/}
-              {/*        filterData(data!);*/}
-              {/*        setFilteredData(data);*/}
-              {/*        // handleFilteredData(filteredData!)*/}
-              {/*        }*/}
-              {/*        }> Filter Promoted Data </Button>*/}
-              {/*    </div>*/}
+              {/*    <label>Status: {getValueBasedOnSwitch()}</label>*/}
+              {/*</div>*/}
+
           </div>
       </div>
 
