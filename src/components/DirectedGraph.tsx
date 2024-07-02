@@ -61,12 +61,12 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
 	const filterData = (data: GlobalDataType[], filter:"PROMOTED"|"GRADUATED"|null|string) => {
 	  if (filter!=null){
-		const f = filterPromGrad(data, filter)
+		const filteredData = filterPromGrad(data, filter)
 		// setFilteredData(f)
 		// setData(f)
 		// console.log(data)
-		setCurrentGraphData(processDataShopData(f))
-		return f
+		setCurrentGraphData(processDataShopData(filteredData))
+		return filteredData
 	  }}
 
   const [isOn, setIsOn] = useState(false);
@@ -92,7 +92,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
   useEffect(() => {
 	  if (isSwitchEnabled) {
 		  let value = isOn ? "PROMOTED" : "GRADUATED";
-		  setFilter(value);
+		  // setFilter(value);
 		  // console.log("Filter: " + filter)
 		  let f = filterData(data!, value)
 		  console.log("Filter: " + value)
