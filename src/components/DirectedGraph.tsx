@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react"
+import {useContext, useEffect, useRef, useState} from "react"
 import { ForceGraph2D } from 'react-force-graph';
-import { GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject } from "@/lib/types";
+import {GraphData, ToolTip, Node, Link, ContextMenuControls, LinkObject, GlobalDataType} from "@/lib/types";
 import * as d3 from "d3";
 import html2canvas from 'html2canvas';
 
@@ -38,8 +38,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 	const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
 	const {data, setData} = useContext(Context)
-
-    // save to photo
+	// save to photo
 	const captureScreenshot = () => {
 		const input = document.getElementById('graph') as HTMLElement;
 		if (input) {
@@ -433,33 +432,6 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 								node.fy = node.y;
 								node.border = true;
 							}
-                    <ForceGraph2D
-                        // @ts-expect-error this type won't match up in typescript but it's ok
-                        graphData={currentGraphData}
-                        nodeRelSize={30}
-                        width={windowWidth}
-                        height={window.innerHeight - 200}
-                        ref={forceGraphRef}
-                        onNodeHover={handleNodeHover}
-                        onLinkHover={handleLinkHover}
-                        linkCurvature={(link) => link.curvature || 0}
-                        nodeAutoColorBy={"problemId"}
-                        // cooldownTime={freezeNodes ? 0 : Infinity} // this controls the "steadiness" -- 1 is the most steady, infinity is the least
-                        onNodeClick={(node, event) => {
-                            setContextMenu({ visible: true, x: event.clientX, y: event.clientY, node: node });
-                        }}
-                        onNodeDragEnd={(node) => {
-                            if (pinnable) {
-                                if (node.border !== true) {
-                                    toast.success("Node pinned", {
-                                        icon: "📌",
-                                        position: "bottom-right",
-                                    })
-                                }
-                                node.fx = node.x;
-                                node.fy = node.y;
-                                node.border = true;
-                            }
 
 						}}
 						onNodeRightClick={(node, event) => {
