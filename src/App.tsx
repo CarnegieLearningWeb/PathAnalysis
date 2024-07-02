@@ -14,7 +14,7 @@ import './Switch.css';
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, setFilteredData, filteredData,
+  const { resetData, setGraphData, setLoading, //setFilteredData, filteredData,
       data, setData, graphData, loading } = useContext(Context)
   const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
@@ -53,59 +53,57 @@ function App() {
       setGraphData(graphData)
     }}, [data])
 
-  useEffect(() => {
-    if (filteredData) {
-      const graphData: GraphData = processDataShopData(filteredData)
-      setGraphData(graphData)
-    }}, [filteredData])
+  // useEffect(() => {
+  //   if (filteredData) {
+  //     const graphData: GraphData = processDataShopData(filteredData)
+  //     setGraphData(graphData)
+  //   }}, [filteredData])
 
-  const [isOn, setIsOn] = useState(false);
-  const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
-  const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
+  // const [isOn, setIsOn] = useState(false);
+  // const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
+  // const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
   // Using Graduated as initial gives the first click the correct value but not after
   // -- doesn't work if initial state is null
 
-  const handleToggle = () => {
-    if (isSwitchEnabled){
-      setIsOn(!isOn);
-    }
-  };
-
-  const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setIsSwitchEnabled(event.target.checked);
-  };
+  // const handleToggle = () => {
+  //   if (isSwitchEnabled){
+  //     setIsOn(!isOn);
+  //   }
+  // };
+  //
+  // const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   setIsSwitchEnabled(event.target.checked);
+  // };
 
   // const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
   //   setFilter(event.target.value);
   //   };
 
-  useEffect(() => {
-      if (isSwitchEnabled) {
-          let value = isOn ? "PROMOTED" : "GRADUATED";
-          setFilter(value);
-          // console.log("Filter: " + filter)
-          let f = filterData(data!, value) // Why can't I use filter here instead of value?
-
-          // console.log("Filter: " + filter)
-
-          console.log("Filter: " + value)
-
-          console.log(f)
-      }
-
-      else{
-          setData(data)
-          console.log(data)
-      }
-
-
-  }, [isSwitchEnabled, isOn]);
-
-  const getValueBasedOnSwitch = () => {
-    if (isSwitchEnabled) {
-        return filter
-    };
-  }
+  // useEffect(() => {
+  //     if (isSwitchEnabled) {
+  //         let value = isOn ? "PROMOTED" : "GRADUATED";
+  //         setFilter(value);
+  //         // console.log("Filter: " + filter)
+  //         let f = filterData(data!, value) // Why can't I use filter here instead of value?
+  //
+  //         console.log("Filter: " + value)
+  //
+  //         console.log(f)
+  //     }
+  //
+  //     else{
+  //         setData(data!)
+  //         console.log(data)
+  //     }
+  //
+  //
+  // }, [isSwitchEnabled, isOn]);
+  //
+  // const getValueBasedOnSwitch = () => {
+  //   if (isSwitchEnabled) {
+  //       return filter
+  //   };
+  // }
 
   return (
     <>
@@ -153,34 +151,25 @@ function App() {
                       </>
                   )
               }
-              <div className="checkbox">
-                  <label>
 
-                      <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>
-                      <span class="tab"></span>Filter by Section Completion Status?
-                  </label>
-                  <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}
-                          isDisabled={!isSwitchEnabled}
-                      // onChange={handleFilterChange}
-                  />
-                  <br></br>
-                  <br></br>
-                  <br></br>
 
-                  <label>Status: {getValueBasedOnSwitch()}</label>
-              </div>
+              {/*<div className="checkbox">*/}
+              {/*    <label>*/}
 
-              {/*<div style={{position:"relative"}}>*/}
-              {/*    <div style={{position:"absolute", float: "right", top:-260, right:600}}>*/}
-              {/*        <Button*/}
+              {/*        <input type="checkbox" checked={isSwitchEnabled} onChange={handleCheckboxChange}/>*/}
+              {/*        <span class="tab"></span>Filter by Section Completion Status?*/}
+              {/*    </label>*/}
+              {/*    <Switch isOn={isOn} handleToggle={handleToggle} filter={filter}*/}
+              {/*            isDisabled={!isSwitchEnabled}*/}
+              {/*        // onChange={handleFilterChange}*/}
+              {/*    />*/}
+              {/*    <br></br>*/}
+              {/*    <br></br>*/}
+              {/*    <br></br>*/}
 
-              {/*        onClick={() => {*/}
-              {/*        filterData(data!);*/}
-              {/*        setFilteredData(data);*/}
-              {/*        // handleFilteredData(filteredData!)*/}
-              {/*        }*/}
-              {/*        }> Filter Promoted Data </Button>*/}
-              {/*    </div>*/}
+              {/*    <label>Status: {getValueBasedOnSwitch()}</label>*/}
+              {/*</div>*/}
+
           </div>
       </div>
 
