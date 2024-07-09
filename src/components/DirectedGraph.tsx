@@ -98,14 +98,14 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 		  console.log("Filter: " + value)
 		  console.log(f)
     // if (data) {
-	// 	const graphData: GraphData = processDataShopData(data)
-    //     setGraphData(graphData)
+		const graphData: GraphData = processDataShopData(f!)
+        setCurrentGraphData(graphData)
 
 	  }
 
 	  else {
-		  //     setData(data)
-		  console.log(data)
+		  const graphData: GraphData = processDataShopData(data!)
+		  setCurrentGraphData(graphData)
 		  // }}, [data])
 
 
