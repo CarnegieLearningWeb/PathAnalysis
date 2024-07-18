@@ -92,20 +92,20 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
   useEffect(() => {
 	  if (isSwitchEnabled) {
 		  let value = isOn ? "PROMOTED" : "GRADUATED";
-		  // setFilter(value);
+		  setFilter(value);
 		  // console.log("Filter: " + filter)
 		  let f = filterData(data!, value)
 		  console.log("Filter: " + value)
-		  console.log(f)
+		  // console.log(f)
     // if (data) {
-	// 	const graphData: GraphData = processDataShopData(data)
-    //     setGraphData(graphData)
+		const graphData: GraphData = processDataShopData(f!)
+        setCurrentGraphData(graphData)
 
 	  }
 
 	  else {
-		  //     setData(data)
-		  console.log(data)
+		  const graphData: GraphData = processDataShopData(data!)
+		  setCurrentGraphData(graphData)
 		  // }}, [data])
 
 
