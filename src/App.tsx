@@ -3,18 +3,17 @@ import {useContext, useEffect, useState} from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
-// import { NavBar } from './components/NavBar';
 import { Button } from './components/ui/button';
 import { Context } from './Context';
 import { processDataShopData } from './lib/dataProcessingUtils';
 import {filterPromGrad} from "@/lib/GradPromUtils";
-import Switch from "@/components/ui/switch.tsx";
+
 import './Switch.css';
 
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, //setFilteredData, filteredData,
+  const { resetData, setGraphData, setLoading,
       data, setData, graphData, loading } = useContext(Context)
   const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
@@ -36,16 +35,8 @@ function App() {
       else {
 
       }
-    // console.log(data)
-    // return filteredData
-  }
 
-  // const handleFilteredData = (filteredData: GlobalDataType[]) => {
-  //     setData(filteredData)
-  //     setShowDropZone(false)
-  //     const graphData: GraphData = processDataShopData(filteredData)
-  //     setGraphData(graphData)
-  // }
+  }
 
   useEffect(() => {
     if (data) {
@@ -53,57 +44,7 @@ function App() {
       setGraphData(graphData)
     }}, [data])
 
-  // useEffect(() => {
-  //   if (filteredData) {
-  //     const graphData: GraphData = processDataShopData(filteredData)
-  //     setGraphData(graphData)
-  //   }}, [filteredData])
 
-  // const [isOn, setIsOn] = useState(false);
-  // const [isSwitchEnabled, setIsSwitchEnabled] = useState(false);
-  // const [filter, setFilter] = useState<"PROMOTED"|"GRADUATED"|null|string>("GRADUATED");
-  // Using Graduated as initial gives the first click the correct value but not after
-  // -- doesn't work if initial state is null
-
-  // const handleToggle = () => {
-  //   if (isSwitchEnabled){
-  //     setIsOn(!isOn);
-  //   }
-  // };
-  //
-  // const handleCheckboxChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  //   setIsSwitchEnabled(event.target.checked);
-  // };
-
-  // const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  //   setFilter(event.target.value);
-  //   };
-
-  // useEffect(() => {
-  //     if (isSwitchEnabled) {
-  //         let value = isOn ? "PROMOTED" : "GRADUATED";
-  //         setFilter(value);
-  //         // console.log("Filter: " + filter)
-  //         let f = filterData(data!, value) // Why can't I use filter here instead of value?
-  //
-  //         console.log("Filter: " + value)
-  //
-  //         console.log(f)
-  //     }
-  //
-  //     else{
-  //         setData(data!)
-  //         console.log(data)
-  //     }
-  //
-  //
-  // }, [isSwitchEnabled, isOn]);
-  //
-  // const getValueBasedOnSwitch = () => {
-  //   if (isSwitchEnabled) {
-  //       return filter
-  //   };
-  // }
 
   return (
     <>

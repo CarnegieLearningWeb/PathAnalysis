@@ -29,6 +29,7 @@
     "@types/timsort": "^0.3.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "comlink": "^4.4.1",
     "d3": "^7.9.0",
     "danfojs-node": "^1.1.2",
     "express": "^4.19.2",
