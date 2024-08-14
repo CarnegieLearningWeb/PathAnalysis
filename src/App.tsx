@@ -1,81 +1,81 @@
 import './App.css';
-import { useContext, useEffect, useState } from 'react';
-import { GlobalDataType, GraphData } from './lib/types';
+import {useContext, useEffect, useState} from 'react';
+import {GlobalDataType, GraphData} from './lib/types';
 import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
 // import { NavBar } from './components/NavBar';
-import { Button } from './components/ui/button';
-import { Context } from './Context';
-import { processDataShopData } from './lib/dataProcessingUtils';
+import {Button} from './components/ui/button';
+import {Context} from './Context';
+import {processDataShopData} from './lib/dataProcessingUtils';
 import Loading from './components/Loading';
 
 function App() {
 
-  const { resetData, setGraphData, setLoading, data, setData, graphData, loading } = useContext(Context)
-  const [showDropZone, setShowDropZone] = useState<boolean>(true)
+    const {resetData, setGraphData, setLoading, data, setData, graphData, loading} = useContext(Context)
+    const [showDropZone, setShowDropZone] = useState<boolean>(true)
 
-  const handleData = (data: GlobalDataType[]) => {
-    setData(data)
-    setShowDropZone(false)
-  }
-
-  const handleLoading = (loading: boolean) => {
-    setLoading(loading)
-  }
-
-  useEffect(() => {
-    if (data) {
-      const graphData: GraphData = processDataShopData(data)
-      setGraphData(graphData)
-
+    const handleData = (data: GlobalDataType[]) => {
+        setData(data)
+        setShowDropZone(false)
     }
-  }, [data])
 
-  return (
-    <>
-      <div className="">
-        {/* <NavBar /> */}
-        <Button
-          className="m-2"
-          variant={"ghost"}
-          onClick={() => {
-            resetData()
-            setShowDropZone(true)
-          }}
-        >
-          Reset
-        </Button>
+    const handleLoading = (loading: boolean) => {
+        setLoading(loading)
+    }
 
-        <div className=" flex items-center justify-center pt-20">
-          {
-            loading ?
-              <Loading />
-              :
-              (
-                showDropZone && (
-                  <div className="">
-                    <DropZone afterDrop={handleData} onLoadingChange={handleLoading} />
-                  </div>
-                )
+    useEffect(() => {
+        if (data) {
+            const graphData: GraphData = processDataShopData(data)
+            setGraphData(graphData)
 
-              )
+        }
+    }, [data])
 
-          }
+    return (
+        <>
+            <div className="">
+                {/* <NavBar /> */}
+                <Button
+                    className="m-2"
+                    variant={"ghost"}
+                    onClick={() => {
+                        resetData()
+                        setShowDropZone(true)
+                    }}
+                >
+                    Reset
+                </Button>
+
+                <div className=" flex items-center justify-center pt-20">
+                    {
+                        loading ?
+                            <Loading/>
+                            :
+                            (
+                                showDropZone && (
+                                    <div className="">
+                                        <DropZone afterDrop={handleData} onLoadingChange={handleLoading}/>
+                                    </div>
+                                )
+
+                            )
+
+                    }
 
 
-          {
-            graphData && (
-              <>
-                {/* Add suspense, lazy? */}
-                <DirectedGraph graphData={graphData} />
-              </>
-            )
-          }
+                    {
+                        graphData && (
+                            <>
+                                {/* TODO: Swap DirectedGraph for your new component */}
+                                <DirectedGraph graphData={graphData}/>
+                            </>
+                        )
+                    }
 
-        </div>
-      </div>
-    </>
-  )
+                </div>
+            </div>
+        </>
+    )
 }
 
 export default App
