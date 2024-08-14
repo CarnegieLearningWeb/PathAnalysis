@@ -1,5 +1,6 @@
 import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, GlobalDataType } from "@/lib/types";
 import _ from 'lodash';
+import * as Comlink from 'comlink';
 
 // ----------------- DATA PROCESSING UTILS DataShop Data -----------------
 
@@ -131,6 +132,8 @@ export function processDataShopData(data: GlobalDataType[]): GraphData{
         maxEdgeCount,
     };
 }
+
+// Comlink.expose({ processDataShopData });
 // ----------------- DATA PROCESSING UTILS Athena Data -----------------
 
 
