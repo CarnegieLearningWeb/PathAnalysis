@@ -1,81 +1,34 @@
 import './App.css';
-import {useContext, useEffect, useState} from 'react';
-import {GlobalDataType, GraphData} from './lib/types';
-import DirectedGraph from './components/DirectedGraph';
-import DropZone from './components/DropZone';
-// import { NavBar } from './components/NavBar';
-import {Button} from './components/ui/button';
-import {Context} from './Context';
-import {processDataShopData} from './lib/dataProcessingUtils';
-import Loading from './components/Loading';
+import React, {useEffect, useState} from 'react';
+import Upload from "@/components/Upload.tsx";
+import GraphvizParent from "@/components/GraphvizParent.tsx";
+// import GraphContainer from './components/GraphContainer';
+import FilterComponent from './components/FilterComponent.tsx';
+import SelfLoopSwitch from './components/selfLoopSwitch.tsx';
+import Slider from './components/slider.tsx';
 
-function App() {
+const App: React.FC = () => {
+    const [csvData, setCsvData] = useState<string>('');
+    const [filter, setFilter] = useState<string>('');
+    const [selfLoops, setSelfLoops] = useState<boolean>(true);
+    const [minVisits, setMinVisits] = useState<number>(30);
 
-    const {resetData, setGraphData, setLoading, data, setData, graphData, loading} = useContext(Context)
-    const [showDropZone, setShowDropZone] = useState<boolean>(true)
-
-    const handleData = (data: GlobalDataType[]) => {
-        setData(data)
-        setShowDropZone(false)
-    }
-
-    const handleLoading = (loading: boolean) => {
-        setLoading(loading)
-    }
-
+    const handleToggle = () => setSelfLoops(!selfLoops);
+    const handleSlider = (value: number) => setMinVisits(value);
+    const handleDataProcessed = (uploadedCsvData: string) => setCsvData(uploadedCsvData);
     useEffect(() => {
-        if (data) {
-            const graphData: GraphData = processDataShopData(data)
-            setGraphData(graphData)
 
-        }
-    }, [data])
-
+    }, []);
     return (
-        <>
-            <div className="">
-                {/* <NavBar /> */}
-                <Button
-                    className="m-2"
-                    variant={"ghost"}
-                    onClick={() => {
-                        resetData()
-                        setShowDropZone(true)
-                    }}
-                >
-                    Reset
-                </Button>
+        <div>
+            <h1>Path Analysis Tool</h1>
+            <Upload onDataProcessed={handleDataProcessed} />
+            <FilterComponent onFilterChange={setFilter} />
+            <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
+            <Slider step={10} min={0} max={1000} value={minVisits} onChange={handleSlider} />
+            <GraphvizParent csvData={csvData} filter={filter} selfLoops={selfLoops} minVisits={minVisits} />
+        </div>
+    );
+};
 
-                <div className=" flex items-center justify-center pt-20">
-                    {
-                        loading ?
-                            <Loading/>
-                            :
-                            (
-                                showDropZone && (
-                                    <div className="">
-                                        <DropZone afterDrop={handleData} onLoadingChange={handleLoading}/>
-                                    </div>
-                                )
-
-                            )
-
-                    }
-
-
-                    {
-                        graphData && (
-                            <>
-                                {/* TODO: Swap DirectedGraph for your new component */}
-                                <DirectedGraph graphData={graphData}/>
-                            </>
-                        )
-                    }
-
-                </div>
-            </div>
-        </>
-    )
-}
-
-export default App
+export default App;
