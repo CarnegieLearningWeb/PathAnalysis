@@ -2,7 +2,6 @@ import './App.css';
 import React, {useEffect, useState} from 'react';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
-// import GraphContainer from './components/GraphContainer';
 import FilterComponent from './components/FilterComponent.tsx';
 import SelfLoopSwitch from './components/selfLoopSwitch.tsx';
 import Slider from './components/slider.tsx';
