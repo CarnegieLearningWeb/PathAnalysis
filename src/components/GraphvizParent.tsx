@@ -7,117 +7,156 @@ import {
     createOutcomeSequences,
     countEdges,
     normalizeThicknesses,
-    generateDotString
-} from './graphvizProcessing';
+    generateDotString, getTopSequences,
+} from './GraphvizProcessing';
+import '../GraphvizContainer.css';
+import SequenceSelector from './SequenceSelector';
 
 interface GraphvizParentProps {
     csvData: string;
     filter: string;
     selfLoops: boolean;
     minVisits: number;
+    onTopSequencesUpdate: (sequences: string[]) => void;
+    // selectedSequence: string;
 }
 
-const GraphvizParent: React.FC<GraphvizParentProps> = ({ csvData, filter, selfLoops, minVisits }) => {
+const GraphvizParent: React.FC<GraphvizParentProps> = ({
+                                                           csvData,
+                                                           filter,
+                                                           selfLoops,
+                                                           minVisits,
+                                                           onTopSequencesUpdate,
+                                                           // selectedSequence,
+                                                       }) => {
     const [dotString, setDotString] = useState<string>('');
     const [filteredDotString, setFilteredDotString] = useState<string | null>('');
+    const [topSequences, setTopSequences] = useState<string[]>([]);
+    const [selectedSequence, setSelectedSequence] = useState<string>('');
 
-
-    // Process the CSV data initially and when filter changes
     useEffect(() => {
-        if (!csvData) return; // Skip if no CSV data is available
+        if (!csvData) return; // Skip processing if no CSV data is available
 
+        // Step 1: Load and sort the data
         const sortedData = loadAndSortData(csvData);
 
-        // Generate the unfiltered graph
+        // Step 2: Generate the sequences for steps and outcomes
         const stepSequences = createStepSequences(sortedData, selfLoops);
-        console.log(stepSequences)
         const outcomeSequences = createOutcomeSequences(sortedData);
 
-        const {edgeCounts, totalNodeEdges, ratioEdges, edgeOutcomeCounts} = countEdges(stepSequences, outcomeSequences);
+        // Step 3: Count edges and normalize thicknesses
+        const {
+            edgeCounts,
+            totalNodeEdges,
+            ratioEdges,
+            edgeOutcomeCounts,
+            maxEdgeCount,
+            top5Sequences
+        } = countEdges(stepSequences, outcomeSequences);
+        setTopSequences(top5Sequences)
+        setSelectedSequence(top5Sequences[0])
+        const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
 
-        const normalizedThicknesses = normalizeThicknesses(ratioEdges, 10);
+        // Step 4: Find the most common sequences
+        // const mostCommonSequenceKey = Object.keys(stepSequences)
+        //     .reduce((a, b) => stepSequences[a].length > stepSequences[b].length ? a : b);
+        // const mostCommonSequence = stepSequences[mostCommonSequenceKey];
+        // const topSequences = Object.keys(stepSequences)
+        //     .sort((a, b) => stepSequences[b].length - stepSequences[a].length)
+        //     .slice(0, 5);
+        // console.log(stepSequences)
+        // const top5Sequences = getTopSequences(stepSequences,5)
+        onTopSequencesUpdate(top5Sequences);
 
-        const mostCommonSequenceKey = Object.keys(stepSequences)
-            .reduce((a, b) => stepSequences[a].length > stepSequences[b].length ? a : b);
-
-        const mostCommonSequence = stepSequences[mostCommonSequenceKey];
+        setTopSequences(top5Sequences)
+        console.log("GVP67:" + topSequences)
+        // Call the update function to pass top sequences to App component
+        // Step 5: Generate the DOT string for the unfiltered graph
         const dotStr = generateDotString(
             normalizedThicknesses,
-            mostCommonSequence,
+            // mostCommonSequence,
             ratioEdges,
             edgeOutcomeCounts,
             edgeCounts,
             totalNodeEdges,
             1,
-            minVisits
+            minVisits,
+            selectedSequence
         );
         setDotString(dotStr);
-        console.log(dotString)
-        // Generate the filtered graph if a filter is set
-        if (filter) {
-            //TODO: Add qualifier to show difference between two graphs (maybe border color to show if
-            // something increased or decreased)
-            //TODO: Make order/ranking same in both graphs
-            const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            console.log(filteredData);
 
+        // Step 6: Generate the filtered graph if a filter is provided
+        if (filter) {
+            const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
             const filteredStepSequences = createStepSequences(filteredData, selfLoops);
-            console.log(filteredStepSequences)
             const filteredOutcomeSequences = createOutcomeSequences(filteredData);
 
             const {
-                edgeCounts: filteredEdgeCounts, totalNodeEdges: filteredTotalNodeEdges,
-                ratioEdges: filteredRatioEdges, edgeOutcomeCounts: filteredEdgeOutcomeCounts
-            }
-                = countEdges(filteredStepSequences, filteredOutcomeSequences);
+                edgeCounts: filteredEdgeCounts,
+                totalNodeEdges: filteredTotalNodeEdges,
+                ratioEdges: filteredRatioEdges,
+                edgeOutcomeCounts: filteredEdgeOutcomeCounts,
+                maxEdgeCount: filteredMaxEdgeCount,
+                top5Sequences,
+            } = countEdges(filteredStepSequences, filteredOutcomeSequences);
 
-            const filteredNormalizedThicknesses = normalizeThicknesses(filteredRatioEdges, 10);
+            const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
+            // const filteredMostCommonSequenceKey = Object.keys(filteredStepSequences)
+            //     .reduce((a, b) => filteredStepSequences[a].length > filteredStepSequences[b].length ? a : b);
+            // const filteredMostCommonSequence = filteredStepSequences[filteredMostCommonSequenceKey];
 
-            const filteredMostCommonSequenceKey = Object.keys(filteredStepSequences)
-                .reduce((a, b) => filteredStepSequences[a].length > filteredStepSequences[b].length ? a : b);
-
-            const filteredMostCommonSequence = filteredStepSequences[filteredMostCommonSequenceKey];
+            // Generate the DOT string for the filtered graph
             const filteredDotStr = generateDotString(
                 filteredNormalizedThicknesses,
-                filteredMostCommonSequence,
+                // filteredMostCommonSequence,
                 filteredRatioEdges,
                 filteredEdgeOutcomeCounts,
                 filteredEdgeCounts,
                 filteredTotalNodeEdges,
                 1,
-                minVisits
+                minVisits,
+                selectedSequence
             );
-            let edge: string;
-            for (edge in edgeCounts) {
-                if (edgeCounts[edge] != filteredEdgeCounts[edge]) {
-                    console.log(edge, filteredEdgeCounts[edge] - edgeCounts[edge])
-                    if (isNaN(filteredEdgeCounts[edge] - edgeCounts[edge])) {
-                        console.log("NaN: " + edge, filteredEdgeCounts[edge], edgeCounts[edge])
-                    }
-                }
-            }
-            // console.log(filteredDotStr)
+
             setFilteredDotString(filteredDotStr);
-            console.log(filteredDotString)
         } else {
             setFilteredDotString(null); // Clear filtered graph if no filter is set
         }
 
-    }, [csvData, filter, selfLoops, minVisits]);
+    }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
 
-
+    const handleSequenceSelect = (sequence: string) => {
+        setSelectedSequence(sequence);
+    };
 
     return (
-        <div>
+        <div className="graphviz-container">
+            {/*<SequenceSelector*/}
+            {/*            sequences={topSequences}*/}
+            {/*            selectedSequence={selectedSequence}*/}
+            {/*            onSequenceSelect={handleSequenceSelect}*/}
+            {/*        />*/}
             <ErrorBoundary>
-                <div className={"container"}>
-                    {dotString && <Graphviz dot={dotString} options={{useWorker: false, height: 600, width: 600}}/>}
-                    <label>{filter}</label>
-                    {filteredDotString &&
-                        <Graphviz dot={filteredDotString} options={{useWorker: false, height: 600, width: 600}}/>}
+                <div>
+
+                    <div className="graphs">
+                        {dotString && (
+                            <Graphviz
+                                dot={dotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                        {filteredDotString && (
+                            <Graphviz
+                                dot={filteredDotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                    </div>
                 </div>
             </ErrorBoundary>
         </div>
-    )
+    );
 }
-export default GraphvizParent
+
+export default GraphvizParent;
