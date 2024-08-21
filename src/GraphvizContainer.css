@@ -1,0 +1,21 @@
+.graphviz-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row; /* Change to row to align items horizontally */
+    width: 100%; /* Ensure the container takes full width */
+}
+
+.graphs {
+    display: flex;
+    flex-direction: row; /* Ensure the graphs are aligned in a row */
+    justify-content: space-around;
+    align-items: center;
+    gap: 20px;
+    width: 100%; /* Ensure the graphs container takes full width */
+}
+
+.graphs > div {
+    flex: 1; /* Allow the graphs to scale according to available space */
+    max-width: 600px; /* Set a max-width for each graph */
+}
