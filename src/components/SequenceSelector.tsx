@@ -18,8 +18,8 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
     return (
         <div>
             <select value={selectedSequence} onChange={(e) => onSequenceSelect(e.target.value)}>
-                {sequences.map((sequence, index) => (
-                    <option key={index} value={sequence}>
+                {sequences.map((sequence, count) => (
+                    <option key={count} value={sequence}>
                         {sequence}
                     </option>
                 ))}
