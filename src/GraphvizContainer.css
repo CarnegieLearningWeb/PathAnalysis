@@ -4,6 +4,9 @@
     align-items: center;
     flex-direction: row; /* Change to row to align items horizontally */
     width: 100%; /* Ensure the container takes full width */
+    margin-top: -20px; /* Move the container up by 20px */
+    position: relative;
+    transform: translateY(-20px) translateX(30px); /* Move the container up by 20px */
 }
 
 .graphs {
