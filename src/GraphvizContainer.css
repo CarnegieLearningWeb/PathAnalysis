@@ -4,9 +4,8 @@
     align-items: center;
     flex-direction: row; /* Change to row to align items horizontally */
     width: 100%; /* Ensure the container takes full width */
-    margin-top: -20px; /* Move the container up by 20px */
     position: relative;
-    transform: translateY(-20px) translateX(30px); /* Move the container up by 20px */
+    transform: translateY(-150px); /* Move the container up by 20px */
 }
 
 .graphs {
@@ -14,11 +13,11 @@
     flex-direction: row; /* Ensure the graphs are aligned in a row */
     justify-content: space-around;
     align-items: center;
-    gap: 20px;
+    /*gap: 10px;*/
     width: 100%; /* Ensure the graphs container takes full width */
 }
 
 .graphs > div {
     flex: 1; /* Allow the graphs to scale according to available space */
-    max-width: 600px; /* Set a max-width for each graph */
+    max-width: 800px; /* Set a max-width for each graph */
 }

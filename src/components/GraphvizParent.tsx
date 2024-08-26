@@ -488,6 +488,9 @@ import {
 } from './GraphvizProcessing';
 import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
+import '../GraphvizContainer.css';
+import sequenceSelector from "@/components/SequenceSelector.tsx";
+import SequenceSelector from "@/components/SequenceSelector.tsx";
 
 interface GraphvizParentProps {
     csvData: string;
@@ -511,9 +514,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                        }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | string>('')
+    const [top5Sequences, setTop5Sequences] = useState<SequenceCount | string>('')
     const [selectedSequence, setSelectedSequence] = useState<string[]>([])
-    const [selectedSequenceIndex, setSelectedSequenceIndex] = useState<number>(0);
+    // const [selectedSequenceIndex, setSelectedSequenceIndex] = useState<number>(0);
 
     useEffect(() => {
         const sortedData = loadAndSortData(csvData);
@@ -529,11 +532,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             top5Sequences
         } = countEdges(stepSequences, outcomeSequences);
 
-        const formattedTop5Sequences = top5Sequences.map(([sequenceKey, count]) => ({
-            sequence: JSON.parse(sequenceKey),
-            count,
-        }));
-        setTop5Sequences(formattedTop5Sequences);
+        setTop5Sequences(top5Sequences)
 
         const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
 
@@ -545,7 +544,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             totalNodeEdges,
             1,
             minVisits,
-            formattedTop5Sequences[selectedSequenceIndex]?.sequence || []
+            selectedSequence
         );
 
         setDotString(generatedDotStr);
@@ -564,12 +563,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 ratioEdges: filteredRatioEdges,
                 edgeOutcomeCounts: filteredEdgeOutcomeCounts,
                 maxEdgeCount: filteredMaxEdgeCount,
-                top5Sequences
             } = countEdges(filteredStepSequences, filteredOutcomeSequences);
-            const formattedTop5Sequences = top5Sequences.map(([sequenceKey, count]) => ({
-                sequence: JSON.parse(sequenceKey),
-                count,
-            }));
+
             const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
 
             let filteredDotStr = generateDotString(
@@ -580,7 +575,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 filteredTotalNodeEdges,
                 1,
                 minVisits,
-                formattedTop5Sequences[selectedSequenceIndex]?.sequence || []
+                selectedSequence
             );
 
             setFilteredDotString(filteredDotStr);
@@ -588,40 +583,35 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             setFilteredDotString(null);
         }
     }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
-    // const handleSequenceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    //     const selectedIndex = parseInt(event.target.value);
-    //     setSelectedSequence(top5Sequences[selectedSequence] || []);
-    // };
+    const handleSequenceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedIndex: number = parseInt(event.target.value);
+        setSelectedSequence(top5Sequences[selectedIndex].sequence || []);
+    };
+    // const handleTop5Sequences = useState(top5Sequences);
 
     return (
         <div className="graphviz-container">
+            <SequenceSelector onSelectSequence={handleSequenceChange} sequences={top5Sequences}/>
+
             <ErrorBoundary>
-                <select onChange={(e) => setSelectedSequenceIndex(Number(e.target.value))}
-                        value={selectedSequenceIndex}>
-                    {top5Sequences.map((seq, index) => (
-                        <option key={index} value={index}>
-                            Count {index + 1}
-                        </option>
-                    ))}
-                </select>
-    <div className="graphs">
-        {dotString && (
-            <Graphviz
-                dot={dotString}
-                options={{useWorker: false, height: 600, width: 600}}
-            />
-        )}
-        {filteredDotString && (
-            <Graphviz
-                dot={filteredDotString}
-                options={{useWorker: false, height: 600, width: 600}}
-            />
-        )}
-    </div>
-</ErrorBoundary>
-</div>
-)}
-    ;
+                <div className="graphs">
+                    {dotString && (
+                        <Graphviz
+                            dot={dotString}
+                            options={{useWorker: false, height: 800, width: 600}}
+                        />
+                    )}
+                    {filteredDotString && (
+                        <Graphviz
+                            dot={filteredDotString}
+                            options={{useWorker: false, height: 800, width: 600}}
+                        />
+                    )}
+                </div>
+            </ErrorBoundary>
+        </div>
+    );
+}
 //     return (
 //         <div className="graphviz-container">
 //             <ErrorBoundary>
@@ -645,4 +635,4 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 // }
 
 
-    export default GraphvizParent;
+export default GraphvizParent;

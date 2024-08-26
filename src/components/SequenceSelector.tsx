@@ -1,7 +1,8 @@
 import React from 'react';
+import {SequenceCount} from "@/components/GraphvizParent.tsx";
 
 interface SequenceSelectorProps {
-    sequences: string[];
+    sequences: SequenceCount|string;
     selectedSequence: string;
     onSequenceSelect: (sequence: string) => void;
 }
@@ -11,7 +12,7 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
     selectedSequence,
     onSequenceSelect,
 }) => {
-    if (sequences.length === 0) {
+    if (sequences == '') {
         return <div>No sequences available</div>; // Display a message when no sequences are present
     }
 
@@ -20,7 +21,7 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
             <select value={selectedSequence} onChange={(e) => onSequenceSelect(e.target.value)}>
                 {sequences.map((sequence, count) => (
                     <option key={count} value={sequence}>
-                        {sequence}
+                        {count}
                     </option>
                 ))}
             </select>
