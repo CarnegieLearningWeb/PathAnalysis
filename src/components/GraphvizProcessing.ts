@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import {SequenceCount} from "@/components/GraphvizParent.tsx";
+import {SequenceCount} from "@/Context";
 
 interface CSVRow {
     'Session Id': string;
@@ -69,29 +69,12 @@ export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: s
     }, {} as { [key: string]: string[] });
 };
 
-// export function getTopSequences(stepSequences: any, topN: number = 5) {
-//     // const topSequences = Object.values(stepSequences)
-//     //         .sort((a, b) => stepSequences[b].length - stepSequences[a].length)
-//     //         .slice(0, topN);
-//
-//     const sequenceCounts = Object.entries(stepSequences).reduce((acc: any, [key, value]) => {
-//         acc[key] = value.count;
-//         return acc;
-//     }, {});
-//     console.log("counts: " + sequenceCounts[stepSequences[0]])
-//     const sortedSequences = Object.entries(sequenceCounts)
-//         .sort(([, a], [, b]) => b - a)
-//         .slice(0, topN);
-//     console.log("sorted sequences: " + sequenceCounts[sortedSequences[0]])
-//     // return sortedSequences.map(([sequence]) => sequence);
-//     return topSequences
-// }
 export function getTopSequences(stepSequences: any, topN: number = 5) {
     // Create a frequency map to count how many times each unique sequence (list) occurs
     const sequenceCounts: { [sequence: string]: number } = {};
 
     // Iterate over the values (which are lists) of the stepSequences dictionary
-    Object.values(stepSequences).forEach((sequence: string[]) => {
+    Object.values(stepSequences).forEach((sequence) => {
         const sequenceKey = JSON.stringify(sequence); // Convert the list to a string key
 
         // Count occurrences of each unique sequence
@@ -135,7 +118,7 @@ export const countEdges = (
     maxEdgeCount: number;
     ratioEdges: { [p: string]: number };
     edgeCounts: { [p: string]: number };
-    top5Sequences: SequenceCount;
+    topSequences: SequenceCount[];
 } => {
     const edgeCounts: { [key: string]: number } = {};
     const totalNodeEdges: { [key: string]: number } = {};
@@ -176,7 +159,7 @@ export const countEdges = (
         ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 0);
     });
 
-    return {edgeCounts, totalNodeEdges, ratioEdges, edgeOutcomeCounts, maxEdgeCount, top5Sequences};
+    return {edgeCounts, totalNodeEdges, ratioEdges, edgeOutcomeCounts, maxEdgeCount, topSequences: top5Sequences};
 };
 
 
@@ -272,13 +255,13 @@ export function generateDotString(
     totalNodeEdges: EdgeCounts['totalNodeEdges'],
     threshold: number,
     min_visits: number,
-    selectedSequence: string[]
+    selectedSequence: SequenceCount["sequence"]
 ): string {
     const stepsInSelectedSequence = selectedSequence//.split('->');
     // console.log(mostCommonSequence)
-    console.log("selectedSequence" + stepsInSelectedSequence)
+    console.log("selectedSequenceR" + stepsInSelectedSequence)
     // console.log(selectedSequence[stepsInSelectedSequence])
-    const totalSteps = stepsInSelectedSequence.length;
+    const totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
     console.log("totalSteps" + totalSteps)
     // Create node definitions in the DOT string
     let dotString = 'digraph G {\n';
