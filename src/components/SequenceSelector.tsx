@@ -2,7 +2,7 @@ import React from 'react';
 import {SequenceCount} from "@/Context";
 
 interface SequenceSelectorProps {
-    sequences: SequenceCount[] | null;
+    sequences: SequenceCount[]|null;
     selectedSequence: string[] | null;
     onSequenceSelect: (sequence: string[]) => void;
 }
@@ -26,7 +26,7 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
     // })
     return (
         <div>
-            <select value={selectedSequence} onChange={(e) => onSequenceSelect(e.target.value)}>
+            <select value={selectedSequence} onChange={(e) => onSequenceSelect([e.target.value])}>
                 {sequences.map((seq: SequenceCount) => (
                     <option key={seq.sequence.join(',')} value={seq.sequence.join(',')}>
                         (Count: {seq.count})

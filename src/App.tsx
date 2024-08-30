@@ -17,8 +17,11 @@ const App: React.FC = () => {
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | null>(null);
 
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
-        setSelectedSequence(selectedSequence); // Fix: Use the correct parameter to update the state
-        console.log(`Selected sequence: ${selectedSequence}`);
+        if (top5Sequences) {
+            setSelectedSequence(selectedSequence); // Fix: Use the correct parameter to update the state
+            console.log(`Selected sequence: ${selectedSequence}`);
+            //Selected sequence gets this far but doesn't update in GraphvizProcessing
+        }
     };
 
     const handleToggle = () => setSelfLoops(!selfLoops);
@@ -32,7 +35,7 @@ const App: React.FC = () => {
             <Upload onDataProcessed={handleDataProcessed}/>
             <FilterComponent onFilterChange={setFilter}/>
             <h2>{selectedSequence}</h2>
-            <SequenceSelector onSequenceSelect={handleSelectSequence} sequences={top5Sequences}
+            <SequenceSelector onSequenceSelect={handleSelectSequence} sequences={top5Sequences!}
                               selectedSequence={selectedSequence}/>
             <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle}/>
             <Slider step={5} min={0} max={500}

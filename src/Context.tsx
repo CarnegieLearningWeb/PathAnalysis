@@ -1,5 +1,6 @@
-import { createContext, useState } from 'react';
-import { GlobalDataType, GraphData } from './lib/types';
+import {createContext, useState} from 'react';
+import {GlobalDataType, GraphData} from './lib/types';
+
 interface ContextInterface {
     data: GlobalDataType[] | null;
     graphData: GraphData | null;
@@ -12,10 +13,12 @@ interface ContextInterface {
     setTop5Sequences: (top5Sequences: SequenceCount[]) => void;
 
 }
+
 export interface SequenceCount {
     sequence: string[] | null; // or whatever type your steps are (e.g., number[])
-    count: number;
+    count: number | null;
 }
+
 export const Context = createContext({} as ContextInterface);
 const initialState = {
     data: null,
@@ -29,16 +32,16 @@ interface ProviderProps {
 }
 
 
-export const Provider = ({ children }: ProviderProps) => {
+export const Provider = ({children}: ProviderProps) => {
     const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
-    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[]|null>(initialState.top5Sequences)
+    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const resetData = () => {
         setData(null)
         setGraphData(null)
         console.log("Data reset");
-        
+
     }
 
     return (
