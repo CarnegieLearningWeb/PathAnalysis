@@ -19,5 +19,5 @@
 
 .graphs > div {
     flex: 1; /* Allow the graphs to scale according to available space */
-    max-width: 800px; /* Set a max-width for each graph */
+    max-width: 600px; /* Set a max-width for each graph */
 }

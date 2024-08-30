@@ -56,7 +56,7 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange}) =>
     };
 
     return (
-        <div style={{width: '300px', margin: '40px auto', textAlign: 'right', display: 'flex', float: 'right',  }}>
+        <div style={{width: '300px', margin: '40px auto', textAlign: 'left', display: 'flex', float: 'left',  }}>
             <p style={{marginLeft: '10px'}}>Minimum # of Edge Visits to Display: {value}</p>
             <input
                 type="range"
