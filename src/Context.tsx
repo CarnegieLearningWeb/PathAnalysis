@@ -1,53 +1,70 @@
-import { createContext, useState } from 'react';
-import { GlobalDataType, GraphData } from './lib/types';
+import {createContext, useState} from 'react';
+import {GlobalDataType, GraphData} from './lib/types';
+
 interface ContextInterface {
     data: GlobalDataType[] | null;
     graphData: GraphData | null;
-    filteredData: GlobalDataType[] | null
-    setFilteredData: (filteredData: GlobalDataType[] | null) => void;
     loading: boolean;
+    top5Sequences: SequenceCount[] | null;
+    selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
     setGraphData: (graphData: GraphData | null) => void;
+    setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
+    setSelectedSequence: (selectedSequence: string[] | undefined) => void;
     resetData: () => void;
 
 }
+
+export interface SequenceCount {
+    sequence: string[] | undefined;
+    count: number;//| null;
+}
+
 export const Context = createContext({} as ContextInterface);
 const initialState = {
     data: null,
-    filteredData: null,
     graphData: null,
-    loading: false
+    loading: false,
+    top5Sequences: null,
+    selectedSequence: undefined,
 }
 
 interface ProviderProps {
     children: React.ReactNode;
 }
-export const Provider = ({ children }: ProviderProps) => {
+
+
+export const Provider = ({children}: ProviderProps) => {
     const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
-    const [filteredData, setFilteredData] = useState<GlobalDataType[] | null>(initialState.filteredData)
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
+    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
+    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
 
     const resetData = () => {
         setData(null)
         setGraphData(null)
+        setTop5Sequences(null)
+        setSelectedSequence(undefined)
         console.log("Data reset");
-        
+
     }
 
     return (
         <Context.Provider
             value={{
                 data,
-                filteredData,
                 graphData,
                 loading,
-                setFilteredData,
+                top5Sequences,
+                selectedSequence,
                 setLoading,
                 setData,
                 setGraphData,
-                resetData
+                resetData,
+                setTop5Sequences,
+                setSelectedSequence,
             }}
         >
             {children}
