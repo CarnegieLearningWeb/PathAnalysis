@@ -10,7 +10,7 @@ import {
 import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import {Context, SequenceCount} from "@/Context.tsx";
+import {Context} from "@/Context.tsx";
 
 interface GraphvizParentProps {
     csvData: string;

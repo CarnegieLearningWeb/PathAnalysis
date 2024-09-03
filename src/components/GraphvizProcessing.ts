@@ -69,7 +69,7 @@ export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: s
     }, {} as { [key: string]: string[] });
 };
 
-export function getTopSequences(stepSequences: any, topN: number = 5) {
+export function getTopSequences(stepSequences: { [key: string]: string[] }, topN: number = 5) {
     // Create a frequency map to count how many times each unique sequence (list) occurs
     const sequenceCounts: { [sequence: string]: number } = {};
 

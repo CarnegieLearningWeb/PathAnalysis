@@ -14,7 +14,7 @@ const App: React.FC = () => {
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [minVisits, setMinVisits] = useState<number>(0);
     const {top5Sequences} = useContext(Context);
-    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | null>(null);
+    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(undefined);
 
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
         if (top5Sequences) {
