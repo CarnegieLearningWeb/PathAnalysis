@@ -96,7 +96,7 @@ export function getTopSequences(stepSequences: any, topN: number = 5) {
         count,
     }));
 
-    console.log(topSequences); // Log the top sequences for debugging
+    console.log("Processing topSequences: " + topSequences); // Log the top sequences for debugging
     return topSequences; // Return the array of top sequences
 }
 
@@ -120,11 +120,11 @@ export const countEdges = (
     edgeCounts: { [p: string]: number };
     topSequences: SequenceCount[];
 } => {
-    const edgeCounts: { [key: string]: number } = {};
     const totalNodeEdges: { [key: string]: number } = {};
-    const ratioEdges: { [key: string]: number } = {};
     const edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } } = {};
     let maxEdgeCount = 0;
+    const ratioEdges: { [key: string]: number } = {};
+    const edgeCounts: { [key: string]: number } = {};
 
     const top5Sequences = getTopSequences(stepSequences, 5)
 
@@ -162,7 +162,9 @@ export const countEdges = (
     return {edgeCounts, totalNodeEdges, ratioEdges, edgeOutcomeCounts, maxEdgeCount, topSequences: top5Sequences};
 };
 
-
+// export function getInitialSelection(top5Sequences:SequenceCount[]){
+//     return top5Sequences[0].sequence
+// }
 // Function to normalize edge thicknesses based on their ratio
 export function normalizeThicknessesRatios(
     ratioEdges: { [key: string]: number },
@@ -261,9 +263,9 @@ export function generateDotString(
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
     console.log("TOTAL STEP NUMBER: " + selectedSequence.length)
-    const stepsInSelectedSequence = selectedSequence//.split('->');
+    // const stepsInSelectedSequence = selectedSequence//.split('->');
     // console.log(mostCommonSequence)
-    console.log("selectedSequenceR" + stepsInSelectedSequence)
+    // console.log("selectedSequenceR" + stepsInSelectedSequence)
     // console.log(selectedSequence[stepsInSelectedSequence])
     // Create node definitions in the DOT string
     let dotString = 'digraph G {\n';
@@ -271,7 +273,7 @@ export function generateDotString(
     let totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
     console.log("totalSteps" + totalSteps)
     for (let rank = 0; rank < totalSteps; rank++) {
-        const step = stepsInSelectedSequence![rank];
+        const step = selectedSequence[rank];
         const color = calculateColor(rank, totalSteps);
         const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 
