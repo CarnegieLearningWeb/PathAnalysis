@@ -2,8 +2,8 @@ import React from 'react';
 import {SequenceCount} from "@/Context";
 
 interface SequenceSelectorProps {
-    sequences: SequenceCount[]|null;
-    selectedSequence: string[] | null;
+    sequences: SequenceCount[];
+    selectedSequence: string[] | undefined;
     onSequenceSelect: (sequence: string[]) => void;
 }
 
@@ -28,8 +28,8 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
         <div>
             <select value={selectedSequence} onChange={(e) => onSequenceSelect([e.target.value])}>
                 {sequences.map((seq: SequenceCount) => (
-                    <option key={seq.sequence.join(',')} value={seq.sequence.join(',')}>
-                        (Count: {seq.count})
+                    <option key={seq.sequence!.join(',')} value={seq.sequence!.join(',')}>
+                        (Color nodes by path taken {seq.count} times)
                     </option>
                 ))}
             </select>

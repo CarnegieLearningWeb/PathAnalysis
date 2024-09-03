@@ -5,7 +5,7 @@
     flex-direction: row; /* Change to row to align items horizontally */
     width: 100%; /* Ensure the container takes full width */
     position: relative;
-    transform: translateY(-150px); /* Move the container up by 20px */
+    transform: translateY(-150px);
 }
 
 .graphs {
@@ -19,5 +19,5 @@
 
 .graphs > div {
     flex: 1; /* Allow the graphs to scale according to available space */
-    max-width: 600px; /* Set a max-width for each graph */
+    max-width: 400px; /* Set a max-width for each graph */
 }

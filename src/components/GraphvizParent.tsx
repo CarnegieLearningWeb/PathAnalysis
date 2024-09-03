@@ -17,7 +17,7 @@ interface GraphvizParentProps {
     filter: string | null;
     selfLoops: boolean;
     minVisits: number;
-    selectedSequence: string[]|null;
+    selectedSequence: string[] | undefined;
 
 }
 
@@ -29,8 +29,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                        }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | null>(null);
+    const {selectedSequence, setSelectedSequence} = useContext(Context)
     const {top5Sequences, setTop5Sequences} = useContext(Context);
+
 
     useEffect(() => {
         if (csvData) {
@@ -46,13 +47,17 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 maxEdgeCount,
                 topSequences
             } = countEdges(stepSequences, outcomeSequences);
-
-            if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences)) {
+            console.log("No 5: " + topSequences)
+            if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
+                // console.log(true)
+                console.log("BF: " + topSequences![0].sequence)
                 setTop5Sequences(topSequences);
-            }
 
-            if (!selectedSequence && topSequences.length > 0) {
-                setSelectedSequence(topSequences[0].sequence);
+                if (top5Sequences && selectedSequence === undefined) {
+                    console.log("AR: " + top5Sequences![0].sequence)
+                    setSelectedSequence(top5Sequences![0].sequence);
+                    console.log(selectedSequence)
+                }
             }
 
             const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
@@ -69,7 +74,39 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             setDotString(generatedDotStr);
         }
-    }, [csvData, selfLoops, minVisits, top5Sequences, selectedSequence]);
+    }, [csvData, selfLoops, minVisits, selectedSequence]);
+
+    // useEffect(() => {
+    //     if (csvData && selectedSequence) {
+    //         const sortedData = loadAndSortData(csvData);
+    //         const stepSequences = createStepSequences(sortedData, selfLoops);
+    //         const outcomeSequences = createOutcomeSequences(sortedData);
+    //
+    //         const {
+    //             edgeCounts,
+    //             totalNodeEdges,
+    //             ratioEdges,
+    //             edgeOutcomeCounts,
+    //             maxEdgeCount,
+    //         } = countEdges(stepSequences, outcomeSequences);
+    //
+    //         const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
+    //         const updatedDotStr = generateDotString(
+    //             normalizedThicknesses,
+    //             ratioEdges,
+    //             edgeOutcomeCounts,
+    //             edgeCounts,
+    //             totalNodeEdges,
+    //             1,
+    //             minVisits,
+    //             selectedSequence
+    //         );
+    //
+    //         setDotString(updatedDotStr);
+    //         console.log(dotString)
+    //     }
+    // }, [selectedSequence, csvData]);
+
 
     useEffect(() => {
         if (filter) {
@@ -102,48 +139,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         } else {
             setFilteredDotString(null);
         }
-    }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
+    }, [csvData, filter, selfLoops, minVisits, selectedSequence, top5Sequences]);
 
-useEffect(() => {
-        if (dotString && selectedSequence) {
-            const sortedData = loadAndSortData(csvData);
-            const stepSequences = createStepSequences(sortedData, selfLoops);
-            const outcomeSequences = createOutcomeSequences(sortedData);
 
-            const {
-                edgeCounts,
-                totalNodeEdges,
-                ratioEdges,
-                edgeOutcomeCounts,
-                maxEdgeCount,
-            } = countEdges(stepSequences, outcomeSequences);
-
-            const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
-            const updatedDotStr = generateDotString(
-                normalizedThicknesses,
-                ratioEdges,
-                edgeOutcomeCounts,
-                edgeCounts,
-                totalNodeEdges,
-                1,
-                minVisits,
-                selectedSequence
-            );
-
-            setDotString(updatedDotStr);
-        }
-    }, [selectedSequence]);
     return (
         <div className="graphviz-container">
             <ErrorBoundary>
                 <div className="graphs">
-                    {dotString && (
+                    {dotString && selectedSequence && (
                         <Graphviz
                             dot={dotString}
                             options={{useWorker: false, height: 800, width: 600}}
                         />
                     )}
-                    {filteredDotString && (
+                    {filteredDotString && selectedSequence && (
                         <Graphviz
                             dot={filteredDotString}
                             options={{useWorker: false, height: 800, width: 600}}

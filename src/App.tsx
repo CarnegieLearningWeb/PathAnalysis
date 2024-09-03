@@ -12,7 +12,7 @@ const App: React.FC = () => {
     const [csvData, setCsvData] = useState<string>('');
     const [filter, setFilter] = useState<string>('');
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
-    const [minVisits, setMinVisits] = useState<number>(10);
+    const [minVisits, setMinVisits] = useState<number>(0);
     const {top5Sequences} = useContext(Context);
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | null>(null);
 
