@@ -12,7 +12,9 @@ const validation = Joi.array().items(
   Joi.object({
     'Problem Name': Joi.string().required(),
     'Step Name': Joi.string().allow('', null).required(),
-    'Outcome': Joi.string().valid('OK', 'BUG', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'ERROR').required(),
+    'Outcome': Joi.string().valid('OK', 'JIT', 'ERROR', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'FREEBIE_JIT').required(),
+
+    // 'Outcome': Joi.string().valid('OK', 'BUG', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'ERROR').required(),
   }).unknown()
 );
 
