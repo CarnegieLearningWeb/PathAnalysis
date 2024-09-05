@@ -260,6 +260,7 @@ export function generateDotString(
     selectedSequence: SequenceCount["sequence"]
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
+        console.log(selectedSequence)
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
     console.log("TOTAL STEP NUMBER: " + selectedSequence.length)
@@ -269,11 +270,11 @@ export function generateDotString(
     // console.log(selectedSequence[stepsInSelectedSequence])
     // Create node definitions in the DOT string
     let dotString = 'digraph G {\n';
-
-    let totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
+    console.log()
+    let totalSteps = selectedSequence[0].split(",").length//stepsInSelectedSequence.length;
     console.log("totalSteps" + totalSteps)
     for (let rank = 0; rank < totalSteps; rank++) {
-        const step = selectedSequence[rank];
+        const step = selectedSequence[0].split(",")[rank];
         const color = calculateColor(rank, totalSteps);
         const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 

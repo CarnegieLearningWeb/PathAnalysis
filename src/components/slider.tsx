@@ -65,7 +65,7 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange}) =>
                 step={step}
                 value={value}
                 onChange={handleSliderChange}
-                style={{flex: 1}} // Use flex to make it responsive
+                // style={{flex: 1}} // Use flex to make it responsive
             />
 
             <input

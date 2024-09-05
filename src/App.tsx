@@ -13,10 +13,12 @@ const App: React.FC = () => {
     const [filter, setFilter] = useState<string>('');
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [minVisits, setMinVisits] = useState<number>(0);
-    const {top5Sequences} = useContext(Context);
-    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(undefined);
+    const {top5Sequences,selectedSequence, setSelectedSequence} = useContext(Context);
+    const {loading, setLoading} = useContext(Context)
 
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
+        console.log("SS: ", top5Sequences)
+
         if (top5Sequences) {
             setSelectedSequence(selectedSequence); // Fix: Use the correct parameter to update the state
             console.log(`Selected sequence: ${selectedSequence}`);
@@ -27,12 +29,14 @@ const App: React.FC = () => {
     const handleToggle = () => setSelfLoops(!selfLoops);
     const handleSlider = (value: number) => setMinVisits(value);
     const handleDataProcessed = (uploadedCsvData: string) => setCsvData(uploadedCsvData);
-
+    const handleLoadingChange = (loading: boolean) => {
+        setLoading(loading);
+    };
 
     return (
         <div>
             <h1>Path Analysis Tool</h1>
-            <Upload onDataProcessed={handleDataProcessed}/>
+            <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
             <FilterComponent onFilterChange={setFilter}/>
             <h2>{selectedSequence}</h2>
             <SequenceSelector onSequenceSelect={handleSelectSequence} sequences={top5Sequences!}
@@ -47,7 +51,7 @@ const App: React.FC = () => {
                 filter={filter}
                 selfLoops={selfLoops}
                 minVisits={minVisits}
-                selectedSequence={selectedSequence}
+                // selectedSequence={selectedSequence}
             />
         </div>
     );

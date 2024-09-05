@@ -17,7 +17,7 @@ interface GraphvizParentProps {
     filter: string | null;
     selfLoops: boolean;
     minVisits: number;
-    selectedSequence: string[] | undefined;
+    // selectedSequence: string[] | undefined;
 
 }
 
@@ -29,8 +29,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                        }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const {selectedSequence, setSelectedSequence} = useContext(Context)
-    const {top5Sequences, setTop5Sequences} = useContext(Context);
+    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences} = useContext(Context)
 
 
     useEffect(() => {
@@ -52,11 +51,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 // console.log(true)
                 console.log("BF: " + topSequences![0].sequence)
                 setTop5Sequences(topSequences);
-
-                if (top5Sequences && selectedSequence === undefined) {
-                    console.log("AR: " + top5Sequences![0].sequence)
-                    setSelectedSequence(top5Sequences![0].sequence);
-                    console.log(selectedSequence)
+                console.log(top5Sequences, selectedSequence)
+                if (topSequences && selectedSequence === undefined) {
+                    console.log("AR: " + topSequences![0].sequence)
+                    setSelectedSequence(topSequences![0].sequence);
+                    console.log("selectedSequence Here", selectedSequence)
                 }
             }
 
@@ -71,10 +70,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 minVisits,
                 selectedSequence
             );
-
+            console.log("NOW")
             setDotString(generatedDotStr);
+            console.log(dotString)
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences]);
 
     // useEffect(() => {
     //     if (csvData && selectedSequence) {
@@ -146,7 +146,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         <div className="graphviz-container">
             <ErrorBoundary>
                 <div className="graphs">
-                    {dotString && selectedSequence && (
+                    {dotString && (
                         <Graphviz
                             dot={dotString}
                             options={{useWorker: false, height: 800, width: 600}}
