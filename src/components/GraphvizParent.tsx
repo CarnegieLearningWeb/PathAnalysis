@@ -11,6 +11,7 @@ import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
+import {initial} from "lodash";
 
 /**
  * Props interface for the GraphvizParent component.
@@ -44,7 +45,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const [dotString, setDotString] = useState<string | null>(null);
     // State to hold the filtered DOT string based on the filter criteria
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-
+    const [topDotstring, setTopDotstring] = useState<string|null>(null)
     // Access the selected sequence and top 5 sequences from the context
     const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
 
@@ -90,11 +91,23 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 totalNodeEdges,
                 1,
                 minVisits,
-                selectedSequence
+                selectedSequence, false
             );
-
             // Update the state with the generated DOT string
             setDotString(generatedDotStr);
+
+            const generatedTopDotStr = generateDotString(
+                normalizedThicknesses,
+                ratioEdges,
+                edgeOutcomeCounts,
+                edgeCounts,
+                totalNodeEdges,
+                1,
+                minVisits,
+                selectedSequence, true
+            );
+            setTopDotstring(generatedTopDotStr)
+
         }
     }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences]);
 
@@ -132,7 +145,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 filteredTotalNodeEdges,
                 1,
                 minVisits,
-                selectedSequence
+                selectedSequence,
+                false
             );
 
             // Update the state with the filtered DOT string
@@ -147,6 +161,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         <div className="graphviz-container">
             <ErrorBoundary>
                 <div className="graphs">
+                    {topDotstring && (
+                        <Graphviz
+                            dot={topDotstring}
+                            options={{ useWorker: false, height: 800, width: 600 }}
+                        />
+                    )}
                     {dotString && (
                         <Graphviz
                             dot={dotString}

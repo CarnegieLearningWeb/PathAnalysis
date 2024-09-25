@@ -7,8 +7,12 @@ interface CSVRow {
     'Step Name': string;
     'Outcome': string;
     'CF (Workspace Progress Status)': string;
+    'Problem Name': string;
+    'Anon Student Id': string;
 }
 
+
+// TODO: Add compare first 3 and last 3 problems by student
 /**
  * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
  * @param csvData - The raw CSV data as a string.
@@ -26,6 +30,8 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         'Step Name': row['Step Name'] || 'DoneButton',
         'Outcome': row['Outcome'],
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+        'Problem Name': row['Problem Name'],
+        'Anon Student Id': row['Anon Student Id']
     }));
 
     return transformedData.sort((a, b) => {
@@ -35,6 +41,7 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         return a['Session Id'].localeCompare(b['Session Id']);
     });
 };
+
 
 /**
  * Creates step sequences from sorted data, optionally allowing self-loops.
@@ -93,8 +100,9 @@ export function getTopSequences(stepSequences: { [key: string]: string[] }, topN
         }
     });
 
-    // Sort the sequences based on their counts in descending order and take the top N
+    // Filter sequences of length 5 or greater then sort the sequences based on their counts in descending order and take the top N
     const sortedSequences = Object.entries(sequenceCounts)
+        .filter(([sequence]) => JSON.parse(sequence).length >= 5)
         .sort(([, countA], [, countB]) => countB - countA)
         .slice(0, topN);
 
@@ -290,52 +298,80 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
     totalNodeEdges: EdgeCounts['totalNodeEdges'],
     threshold: number,
     min_visits: number,
-    selectedSequence: SequenceCount["sequence"]
+    selectedSequence: SequenceCount["sequence"],
+    justTopSequence: boolean
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
-        console.log(selectedSequence)
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
 
     let dotString = 'digraph G {\n';
     let totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
     let steps = selectedSequence
-    console.log(totalSteps, steps)
-    for (let rank = 0; rank < totalSteps; rank++) {
-        const step = steps[rank];
-        const color = calculateColor(rank, totalSteps);
-        console.log(step, color)
-        const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 
-        dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
-
-    }
-
-// Create edge definitions in the DOT string based on normalized thickness and thresholds
-    for (const edge of Object.keys(normalizedThicknesses)) {
-        if (normalizedThicknesses[edge] >= threshold) {
-            const [currentStep, nextStep] = edge.split('->');
-            const thickness = normalizedThicknesses[edge];
-            const outcomes = edgeOutcomeCounts[edge] || {};
-            const edgeCount = edgeCounts[edge] || 0;
+    if (justTopSequence) {
+        for (let rank = 0; rank < totalSteps; rank++) {
+            const currentStep = steps[rank];
+            const nextStep = steps[rank + 1];
+            const edgeKey = `${currentStep}->${nextStep}`;
+            const thickness = normalizedThicknesses[edgeKey] || 1; // Default thickness if not present
+            const outcomes = edgeOutcomeCounts[edgeKey] || {};
+            const edgeCount = edgeCounts[edgeKey] || 0;
             const totalCount = totalNodeEdges[currentStep] || 0;
-            const color = calculateEdgeColors(outcomes);
-            const outcomesStr = Object.entries(outcomes)
-                .map(([outcome, count]) => `${outcome}: ${count}`)
-                .join('\n\t\t ');
+            const color = calculateColor(rank, totalSteps)
+            const edgeColor = calculateEdgeColors(outcomes);
+            const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
+
+            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
 
             if (edgeCount > min_visits) {
                 const tooltip = `${currentStep} to ${nextStep}\n`
                     + `- Edge Count: \n\t\t ${edgeCount}\n`
                     + `- Total Count for ${currentStep}: \n\t\t${totalCount}\n`
-                    + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                    + `- Outcomes: \n\t\t ${outcomesStr}\n`
-                    + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
+                    + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                    + `- Outcomes: \n\t\t ${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t ')}\n`
+                    + `- Color Codes: \n\t\t Hex: ${color}`;
 
-                dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
+                dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
+            }
+        }
+    } else {
+        console.log(totalSteps, steps)
+        for (let rank = 0; rank < totalSteps; rank++) {
+            const step = steps[rank];
+            const color = calculateColor(rank, totalSteps);
+            console.log(step, color)
+            const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
+
+            dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
+        }
+        // Create edge definitions in the DOT string based on normalized thickness and thresholds
+        for (const edge of Object.keys(normalizedThicknesses)) {
+            if (normalizedThicknesses[edge] >= threshold) {
+                const [currentStep, nextStep] = edge.split('->');
+                const thickness = normalizedThicknesses[edge];
+                const outcomes = edgeOutcomeCounts[edge] || {};
+                const edgeCount = edgeCounts[edge] || 0;
+                const totalCount = totalNodeEdges[currentStep] || 0;
+                const color = calculateEdgeColors(outcomes);
+                const outcomesStr = Object.entries(outcomes)
+                    .map(([outcome, count]) => `${outcome}: ${count}`)
+                    .join('\n\t\t ');
+
+                if (edgeCount > min_visits) {
+                    const tooltip = `${currentStep} to ${nextStep}\n`
+                        + `- Edge Count: \n\t\t ${edgeCount}\n`
+                        + `- Total Count for ${currentStep}: \n\t\t${totalCount}\n`
+                        + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                        + `- Outcomes: \n\t\t ${outcomesStr}\n`
+                        + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
+
+                    dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
+                }
             }
         }
     }
+
 
     dotString += '}';
     return dotString;

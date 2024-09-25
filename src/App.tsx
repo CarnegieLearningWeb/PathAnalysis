@@ -1,12 +1,12 @@
 import './App.css';
-import React, { useContext, useState } from 'react';
+import React, {useContext, useState} from 'react';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
 import FilterComponent from './components/FilterComponent.tsx';
 import SelfLoopSwitch from './components/selfLoopSwitch.tsx';
 import Slider from './components/slider.tsx';
 import SequenceSelector from "@/components/SequenceSelector.tsx";
-import { Context, SequenceCount } from "@/Context.tsx";
+import {Context, SequenceCount} from "@/Context.tsx";
 
 /**
  * The main `App` component of the Path Analysis Tool, responsible for
@@ -15,6 +15,12 @@ import { Context, SequenceCount } from "@/Context.tsx";
  *
  * @returns JSX.Element
  */
+
+// TODO: Upload whole workspace or single problem (# of unique problem names)
+// TODO: Compare students vs. problem statistics
+// TODO: Dropdown of students
+// TODO: Most common sequence displayed without extra
+
 const App: React.FC = () => {
     // State to hold the uploaded CSV data as a string
     const [csvData, setCsvData] = useState<string>('');
@@ -26,7 +32,7 @@ const App: React.FC = () => {
     const [minVisits, setMinVisits] = useState<number>(0);
 
     // Extracting context values from the `Context` provider
-    const { top5Sequences, selectedSequence, setSelectedSequence, setLoading } = useContext(Context);
+    const {top5Sequences, selectedSequence, setSelectedSequence, setLoading} = useContext(Context);
 
     /**
      * Handles the selection of a sequence from the top 5 sequences.
@@ -78,13 +84,15 @@ const App: React.FC = () => {
             <h1>Path Analysis Tool</h1>
 
             {/* Upload component allows uploading and processing of CSV data */}
-            <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange} />
+            <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
 
             {/* FilterComponent allows filtering the graph data */}
-            <FilterComponent onFilterChange={setFilter} />
+            <FilterComponent onFilterChange={setFilter}/>
 
             {/* Display the currently selected sequence */}
-            <h2>{selectedSequence}</h2>
+            {selectedSequence && (
+                <h2>{selectedSequence.toString().split('->').join(' -> ')}</h2>
+            )}
 
             {/* SequenceSelector allows choosing one of the top 5 sequences */}
             <SequenceSelector
@@ -94,7 +102,7 @@ const App: React.FC = () => {
             />
 
             {/* SelfLoopSwitch toggles whether self-loops should be included in the graph */}
-            <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
+            <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle}/>
 
             {/* Slider adjusts the minimum visits for displaying edges in the graph */}
             <Slider
