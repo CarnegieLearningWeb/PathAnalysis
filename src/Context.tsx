@@ -6,6 +6,8 @@ interface ContextInterface {
     graphData: GraphData | null;
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
+    f3L3: boolean;
+    setF3L3: (f3L3: boolean) => void;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
@@ -28,6 +30,7 @@ const initialState = {
     loading: false,
     top5Sequences: null,
     selectedSequence: undefined,
+    f3L3: false,
 }
 
 interface ProviderProps {
@@ -41,12 +44,14 @@ export const Provider = ({children}: ProviderProps) => {
     const [loading, setLoading] = useState<boolean>(initialState.loading)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
+    const [f3L3, setF3L3] = useState(false)
 
     const resetData = () => {
         setData(null)
         setGraphData(null)
         setTop5Sequences(null)
         setSelectedSequence(undefined)
+        setF3L3(false)
         console.log("Data reset");
 
     }
@@ -59,12 +64,14 @@ export const Provider = ({children}: ProviderProps) => {
                 loading,
                 top5Sequences,
                 selectedSequence,
+                f3L3,
                 setLoading,
                 setData,
                 setGraphData,
                 resetData,
                 setTop5Sequences,
                 setSelectedSequence,
+                setF3L3,
             }}
         >
             {children}

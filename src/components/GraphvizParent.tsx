@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {
     generateDotString,
     normalizeThicknesses,
@@ -10,8 +10,7 @@ import {
 import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import { Context } from "@/Context.tsx";
-import {initial} from "lodash";
+import {Context} from "@/Context.tsx";
 
 /**
  * Props interface for the GraphvizParent component.
@@ -36,18 +35,19 @@ interface GraphvizParentProps {
  * @returns JSX.Element
  */
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
-    csvData,
-    filter,
-    selfLoops,
-    minVisits,
-}) => {
+                                                           csvData,
+                                                           filter,
+                                                           selfLoops,
+                                                           minVisits,
+                                                       }) => {
     // State to hold the main DOT string generated for the Graphviz graph
     const [dotString, setDotString] = useState<string | null>(null);
     // State to hold the filtered DOT string based on the filter criteria
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const [topDotstring, setTopDotstring] = useState<string|null>(null)
+    const [topDotstring, setTopDotstring] = useState<string | null>(null)
     // Access the selected sequence and top 5 sequences from the context
-    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences,
+        f3L3, setF3L3} = useContext(Context);
 
     /**
      * useEffect hook to generate and update the graph's DOT string whenever
@@ -56,7 +56,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     useEffect(() => {
         if (csvData) {
             // Load and sort the CSV data
-            const sortedData = loadAndSortData(csvData);
+            const sortedData = loadAndSortData(csvData, setF3L3, f3L3);
             // Generate step and outcome sequences from the sorted data
             const stepSequences = createStepSequences(sortedData, selfLoops);
             const outcomeSequences = createOutcomeSequences(sortedData);
@@ -95,7 +95,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             );
             // Update the state with the generated DOT string
             setDotString(generatedDotStr);
-
             const generatedTopDotStr = generateDotString(
                 normalizedThicknesses,
                 ratioEdges,
@@ -118,7 +117,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     useEffect(() => {
         if (filter) {
             // Load and sort the CSV data
-            const sortedData = loadAndSortData(csvData);
+            const sortedData = loadAndSortData(csvData, setF3L3, f3L3);
             // Filter the data based on the filter condition
             const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
             // Generate step and outcome sequences from the filtered data
@@ -164,19 +163,19 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     {topDotstring && (
                         <Graphviz
                             dot={topDotstring}
-                            options={{ useWorker: false, height: 800, width: 600 }}
+                            options={{useWorker: false, height: 800, width: 600}}
                         />
                     )}
                     {dotString && (
                         <Graphviz
                             dot={dotString}
-                            options={{ useWorker: false, height: 800, width: 600 }}
+                            options={{useWorker: false, height: 800, width: 600}}
                         />
                     )}
                     {filteredDotString && selectedSequence && (
                         <Graphviz
                             dot={filteredDotString}
-                            options={{ useWorker: false, height: 800, width: 600 }}
+                            options={{useWorker: false, height: 800, width: 600}}
                         />
                     )}
                 </div>

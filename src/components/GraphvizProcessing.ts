@@ -1,5 +1,7 @@
 import Papa from 'papaparse';
 import {SequenceCount} from "@/Context";
+import {Context} from "@/Context";
+import React, {useContext} from "react";
 
 interface CSVRow {
     'Session Id': string;
@@ -7,39 +9,103 @@ interface CSVRow {
     'Step Name': string;
     'Outcome': string;
     'CF (Workspace Progress Status)': string;
-    'Problem Name': string;
-    'Anon Student Id': string;
+    'Problem Name'?: string;
+    'Anon Student Id'?: string;
 }
-
 
 // TODO: Add compare first 3 and last 3 problems by student
 /**
  * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
  * @param csvData - The raw CSV data as a string.
+ * @param setF3L3
+ * @param f3l3
  * @returns The transformed and sorted CSV rows.
  */
-export const loadAndSortData = (csvData: string): CSVRow[] => {
+export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.SetStateAction<boolean>>, f3l3 = false): CSVRow[] => {
+
+
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
         skipEmptyLines: true
     }).data;
 
-    const transformedData = parsedData.map(row => ({
-        'Session Id': row['Session Id'],
-        'Time': row['Time'],
-        'Step Name': row['Step Name'] || 'DoneButton',
-        'Outcome': row['Outcome'],
-        'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
-        'Problem Name': row['Problem Name'],
-        'Anon Student Id': row['Anon Student Id']
-    }));
+    const problems = parsedData.map(row => row['Problem Name'])
+    console.log(new Set(problems))
+    if (new Set(problems).size > 1) {
+        setF3L3(true)
+    } else {
+        setF3L3(false)
+    }
 
-    return transformedData.sort((a, b) => {
-        if (a['Session Id'] === b['Session Id']) {
-            return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
-        }
-        return a['Session Id'].localeCompare(b['Session Id']);
-    });
+
+    if (!f3l3) {
+        const transformedData = parsedData.map(row => ({
+            'Session Id': row['Session Id'],
+            'Time': row['Time'],
+            'Step Name': row['Step Name'] || 'DoneButton',
+            'Outcome': row['Outcome'],
+            'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+        }));
+        return transformedData.sort((a, b) => {
+            if (a['Session Id'] === b['Session Id']) {
+                return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
+            }
+            return a['Session Id'].localeCompare(b['Session Id']);
+        })
+    } else {
+        const transformedData = parsedData.map(row => ({
+            'Session Id': row['Session Id'],
+            'Time': row['Time'],
+            'Step Name': row['Step Name'] || 'DoneButton',
+            'Outcome': row['Outcome'],
+            'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+            'Problem Name': row['Problem Name'],
+            'Anon Student Id': row['Anon Student Id']
+        }));
+        const sortedData = transformedData.sort((a, b) => {
+            if (a['Anon Student Id'] === b['Anon Student Id']) {
+                return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
+            }
+            return a['Anon Student Id']!.localeCompare(b['Anon Student Id']!);
+
+        })
+        const seen = new Set<string>();
+        const uniqueData: CSVRow[] = []
+        sortedData.forEach((item) => {
+            // get rid of ID/Problem duplicates to get just the first
+            const key = `${item['Anon Student Id']}-${item['Problem Name']}`;
+            if (!seen.has(key)) {
+                uniqueData.push(item);
+                seen.add(key);
+            }
+        });
+        console.log(uniqueData)
+
+        const seenIDs = new Set<string>();
+        const uniqueIDs = []
+        uniqueData.forEach((item) => {
+            const key = item['Anon Student Id']
+            //TODO: add count
+            if (!seenIDs.has(key!)) {
+                uniqueIDs.push(key);
+                //TODO: += 1 everytime an id has been seen before
+                seenIDs.add(key!);
+            }
+            // TODO: Pull out only student IDs with at least 6 problems
+            if (item['Anon Student Id']){
+
+            }}
+
+        )
+
+        // df.sort_values(['Anon Student Id','Time']).drop_duplicates(['Anon Student Id','Problem Name'], keep='first')
+        //TODO: f3l3 python logic here and return CSVRow[]
+
+    }
+    //
+    // }
+    console.log("multi problems?", f3l3)
+
 };
 
 
@@ -49,6 +115,7 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
  * @param selfLoops - A boolean to include self-loops.
  * @returns A dictionary mapping session IDs to sequences of step names.
  */
+//TODO: if f3l3 == true, use each ID/Problem pair to index the original data to get all steps in that problem sequence
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
         const sessionId = row['Session Id'];
@@ -100,7 +167,7 @@ export function getTopSequences(stepSequences: { [key: string]: string[] }, topN
         }
     });
 
-    // Filter sequences of length 5 or greater then sort the sequences based on their counts in descending order and take the top N
+    // Filter sequences of length 5 or greater than sort the sequences based on their counts in descending order and take the top N
     const sortedSequences = Object.entries(sequenceCounts)
         .filter(([sequence]) => JSON.parse(sequence).length >= 5)
         .sort(([, countA], [, countB]) => countB - countA)
