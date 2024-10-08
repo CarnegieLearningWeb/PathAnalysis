@@ -95,6 +95,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             );
             // Update the state with the generated DOT string
             setDotString(generatedDotStr);
+            console.log(dotString)
             const generatedTopDotStr = generateDotString(
                 normalizedThicknesses,
                 ratioEdges,

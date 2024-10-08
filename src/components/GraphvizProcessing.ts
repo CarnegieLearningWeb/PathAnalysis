@@ -1,17 +1,8 @@
 import Papa from 'papaparse';
-import {SequenceCount} from "@/Context";
-import {Context} from "@/Context";
-import React, {useContext} from "react";
+import {CSVRow, SequenceCount} from "@/Context";
+import React from "react";
+import {filterRowsByProblems, getAllMatchingRows, groupByStudentId, sortBySessionIdAndTime} from "@/first3Last3.ts"
 
-interface CSVRow {
-    'Session Id': string;
-    'Time': string;
-    'Step Name': string;
-    'Outcome': string;
-    'CF (Workspace Progress Status)': string;
-    'Problem Name'?: string;
-    'Anon Student Id'?: string;
-}
 
 // TODO: Add compare first 3 and last 3 problems by student
 /**
@@ -62,52 +53,17 @@ export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.S
             'Problem Name': row['Problem Name'],
             'Anon Student Id': row['Anon Student Id']
         }));
-        const sortedData = transformedData.sort((a, b) => {
-            if (a['Anon Student Id'] === b['Anon Student Id']) {
-                return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
-            }
-            return a['Anon Student Id']!.localeCompare(b['Anon Student Id']!);
+        const sortedData = sortBySessionIdAndTime(transformedData);
+        // console.log("Sorted Data: ", sortedData);
+        // Step 2: Group by 'Anon Student Id' and extract first/last 3 unique 'Problem Name's
+        const perStudentProblems = groupByStudentId(sortedData);
+        // console.log("Per Student Problems: ", perStudentProblems);
+        // Step 4: Filter rows from the original data based on first3 and last3 problem names
+        const filteredTransformedData = filterRowsByProblems(transformedData, perStudentProblems);
 
-        })
-        const seen = new Set<string>();
-        const uniqueData: CSVRow[] = []
-        sortedData.forEach((item) => {
-            // get rid of ID/Problem duplicates to get just the first
-            const key = `${item['Anon Student Id']}-${item['Problem Name']}`;
-            if (!seen.has(key)) {
-                uniqueData.push(item);
-                seen.add(key);
-            }
-        });
-        console.log(uniqueData)
-
-        const seenIDs = new Set<string>();
-        const uniqueIDs = []
-        uniqueData.forEach((item) => {
-            const key = item['Anon Student Id']
-            //TODO: add count
-            if (!seenIDs.has(key!)) {
-                uniqueIDs.push(key);
-                //TODO: += 1 everytime an id has been seen before
-                seenIDs.add(key!);
-            }
-            // TODO: Pull out only student IDs with at least 6 problems
-            if (item['Anon Student Id']){
-
-            }}
-
-        )
-
-        // df.sort_values(['Anon Student Id','Time']).drop_duplicates(['Anon Student Id','Problem Name'], keep='first')
-        //TODO: f3l3 python logic here and return CSVRow[]
-
+        return getAllMatchingRows(transformedData, filteredTransformedData);
     }
-    //
-    // }
-    console.log("multi problems?", f3l3)
-
 };
-
 
 /**
  * Creates step sequences from sorted data, optionally allowing self-loops.
