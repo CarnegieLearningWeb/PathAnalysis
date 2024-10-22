@@ -81,7 +81,7 @@ const App: React.FC = () => {
     // Rendering the components that allow user interaction and display the graph
     return (
         <div>
-            <h1>Path Analysis Tool</h1>
+            <h1 className="Title">Path Analysis Tool</h1>
 
             {/* Upload component allows uploading and processing of CSV data */}
             <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>

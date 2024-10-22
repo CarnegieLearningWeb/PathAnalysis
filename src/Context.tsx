@@ -7,10 +7,10 @@ interface ContextInterface {
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
     f3L3: boolean;
-    setF3L3: (f3L3: boolean) => void;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
-    setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
+    setF3L3: (f3L3: boolean) => void;
+    setLoading: (loading: boolean) => void;
     setGraphData: (graphData: GraphData | null) => void;
     setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
     setSelectedSequence: (selectedSequence: string[] | undefined) => void;
@@ -50,19 +50,19 @@ interface ProviderProps {
 
 
 export const Provider = ({children}: ProviderProps) => {
-    const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
-    const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
+    // const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
+    // const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
-    const [f3L3, setF3L3] = useState(false)
+    const [f3L3, setF3L3] = useState<boolean>(initialState.f3L3)
 
     const resetData = () => {
-        setData(null)
-        setGraphData(null)
+        // setData(null)
+        // setGraphData(null)
         setTop5Sequences(null)
         setSelectedSequence(undefined)
-        setF3L3(false)
+        setF3L3(null)
         console.log("Data reset");
 
     }
@@ -70,15 +70,15 @@ export const Provider = ({children}: ProviderProps) => {
     return (
         <Context.Provider
             value={{
-                data,
-                graphData,
+                // data,
+                // graphData,
                 loading,
                 top5Sequences,
                 selectedSequence,
                 f3L3,
                 setLoading,
-                setData,
-                setGraphData,
+                // setData,
+                // setGraphData,
                 resetData,
                 setTop5Sequences,
                 setSelectedSequence,

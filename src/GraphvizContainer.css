@@ -5,19 +5,29 @@
     flex-direction: row; /* Change to row to align items horizontally */
     width: 100%; /* Ensure the container takes full width */
     position: relative;
-    transform: translateY(-150px);
+    transform: translateY(-90px);
 }
 
 .graphs {
-    display: flex;
+    display: -webkit-flex;
     flex-direction: row; /* Ensure the graphs are aligned in a row */
-    justify-content: space-around;
-    align-items: center;
-    /*gap: 10px;*/
-    width: 100%; /* Ensure the graphs container takes full width */
+/*    justify-content: space-around;*/
+/*    align-items: center;*/
+    gap: -100px;
+/*    width: 100%; !* Ensure the graphs container takes full width *!*/
 }
 
 .graphs > div {
     flex: 1; /* Allow the graphs to scale according to available space */
-    max-width: 400px; /* Set a max-width for each graph */
+    max-width: 600px; /* Set a max-width for each graph */
+    transform: translateX(-20px);
+}
+
+.graph-caption {
+    font-weight: bold;
+    text-align: center;
+    display:  flow;  /* Ensures it takes up full width */
+    margin-top: -100px;  /* Optional: Adds space between graph and caption */
+    transform: TranslateX(375px);
+
 }

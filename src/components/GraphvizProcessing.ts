@@ -1,20 +1,10 @@
 import Papa from 'papaparse';
 import {CSVRow, SequenceCount} from "@/Context";
 import React from "react";
-import {filterRowsByProblems, getAllMatchingRows, groupByStudentId, sortBySessionIdAndTime} from "@/first3Last3.ts"
+// import {filterRowsByProblems, getAllMatchingRows, groupByStudentId, sortBySessionIdAndTime} from "@/first3Last3.ts"
+import {combineFirstAndLast, getFirstAndLast3, sortAndDeduplicate} from "@/f3l3.ts";
 
-
-// TODO: Add compare first 3 and last 3 problems by student
-/**
- * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
- * @param csvData - The raw CSV data as a string.
- * @param setF3L3
- * @param f3l3
- * @returns The transformed and sorted CSV rows.
- */
-export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.SetStateAction<boolean>>, f3l3 = false): CSVRow[] => {
-
-
+export const loadData = (csvData: string, setF3L3: React.Dispatch<React.SetStateAction<boolean>>): CSVRow[] => {
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
         skipEmptyLines: true
@@ -27,8 +17,19 @@ export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.S
     } else {
         setF3L3(false)
     }
+    return parsedData
+};
 
-
+// TODO: Add compare first 3 and last 3 problems by student
+/**
+ * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
+ * @param csvData - The raw CSV data as a string.
+ * @param setF3L3
+ * @param f3l3
+ * @returns The transformed and sorted CSV rows.
+ */
+export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetStateAction<boolean>>, f3l3: boolean): CSVRow[] => {
+    const parsedData = loadData(csvData, setF3L3)
     if (!f3l3) {
         const transformedData = parsedData.map(row => ({
             'Session Id': row['Session Id'],
@@ -53,15 +54,19 @@ export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.S
             'Problem Name': row['Problem Name'],
             'Anon Student Id': row['Anon Student Id']
         }));
-        const sortedData = sortBySessionIdAndTime(transformedData);
-        // console.log("Sorted Data: ", sortedData);
-        // Step 2: Group by 'Anon Student Id' and extract first/last 3 unique 'Problem Name's
-        const perStudentProblems = groupByStudentId(sortedData);
-        // console.log("Per Student Problems: ", perStudentProblems);
-        // Step 4: Filter rows from the original data based on first3 and last3 problem names
-        const filteredTransformedData = filterRowsByProblems(transformedData, perStudentProblems);
+        // const sortedData = sortBySessionIdAndTime(transformedData);
+        // // console.log("Sorted Data: ", sortedData);
+        // // Step 2: Group by 'Anon Student Id' and extract first/last 3 unique 'Problem Name's
+        // const perStudentProblems = groupByStudentId(sortedData);
+        // // console.log("Per Student Problems: ", perStudentProblems);
+        // // Step 4: Filter rows from the original data based on first3 and last3 problem names
+        // const filteredTransformedData = filterRowsByProblems(transformedData, perStudentProblems);
+        //
+        // return getAllMatchingRows(transformedData, filteredTransformedData);
+        const sortedData = sortAndDeduplicate(transformedData);
+        const perStudentProblems = getFirstAndLast3(sortedData);
 
-        return getAllMatchingRows(transformedData, filteredTransformedData);
+        return combineFirstAndLast(parsedData, perStudentProblems);
     }
 };
 
@@ -71,18 +76,18 @@ export const loadAndSortData = (csvData: string, setF3L3: React.Dispatch<React.S
  * @param selfLoops - A boolean to include self-loops.
  * @returns A dictionary mapping session IDs to sequences of step names.
  */
-//TODO: if f3l3 == true, use each ID/Problem pair to index the original data to get all steps in that problem sequence
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
-        const sessionId = row['Session Id'];
-        if (!acc[sessionId]) acc[sessionId] = [];
+        const IDProblemName = row['Anon Student Id']!+row['Problem Name']!
+        console.log(IDProblemName)
+        if (!acc[IDProblemName!]) acc[IDProblemName] = [];
 
         const stepName = row['Step Name'];
 
-        if (selfLoops || acc[sessionId].length === 0 || acc[sessionId][acc[sessionId].length - 1] !== stepName) {
-            acc[sessionId].push(stepName);
+        if (selfLoops || acc[IDProblemName].length === 0 || acc[IDProblemName][acc[IDProblemName].length - 1] !== stepName) {
+            acc[IDProblemName].push(stepName);
         }
-
+        console.log('StepSequences:', acc)
         return acc;
     }, {} as { [key: string]: string[] });
 };
@@ -310,7 +315,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  * @param threshold - Minimum thickness value to include an edge in the visualization.
  * @param min_visits - Minimum number of visits an edge must have to be included in the graph.
  * @param selectedSequence - The selected sequence of steps used to color the nodes.
- *
+ * @param justTopSequence - boolean to determine if the graphviz is plotting only the top sequence
  * @returns A string in Graphviz DOT format that represents the graph.
  */export function generateDotString(
     normalizedThicknesses: { [key: string]: number },
@@ -322,7 +327,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
     threshold: number,
     min_visits: number,
     selectedSequence: SequenceCount["sequence"],
-    justTopSequence: boolean
+    justTopSequence?: boolean
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -368,6 +373,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
 
             dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
         }
+
         // Create edge definitions in the DOT string based on normalized thickness and thresholds
         for (const edge of Object.keys(normalizedThicknesses)) {
             if (normalizedThicknesses[edge] >= threshold) {
