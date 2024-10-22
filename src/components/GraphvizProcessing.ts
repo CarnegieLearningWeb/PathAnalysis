@@ -37,6 +37,8 @@ export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetState
             'Step Name': row['Step Name'] || 'DoneButton',
             'Outcome': row['Outcome'],
             'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+            'Problem Name': row['Problem Name'],
+            'Anon Student Id': row['Anon Student Id']
         }));
         return transformedData.sort((a, b) => {
             if (a['Session Id'] === b['Session Id']) {
@@ -78,7 +80,8 @@ export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetState
  */
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
-        const IDProblemName = row['Anon Student Id']!+row['Problem Name']!
+        console.log(`Student ID: ${row['Anon Student Id']}, Problem Name: ${row['Problem Name']}`);
+        const IDProblemName = row['Anon Student Id']! + row['Problem Name']!
         console.log(IDProblemName)
         if (!acc[IDProblemName!]) acc[IDProblemName] = [];
 
@@ -99,9 +102,10 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
  */
 export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
-        const sessionId = row['Session Id'];
-        if (!acc[sessionId]) acc[sessionId] = [];
-        acc[sessionId].push(row['Outcome']);
+        const IDProblemName = row['Anon Student Id']! + row['Problem Name']!
+        console.log(IDProblemName)
+        if (!acc[IDProblemName!]) acc[IDProblemName] = [];
+        acc[IDProblemName].push(row['Outcome']);
         return acc;
     }, {} as { [key: string]: string[] });
 };
@@ -167,7 +171,7 @@ export const countEdges = (
     maxEdgeCount: number;
     ratioEdges: { [p: string]: number };
     edgeCounts: { [p: string]: number };
-    topSequences: SequenceCount[];
+    topSequences?: SequenceCount[];
 } => {
     const totalNodeEdges: { [key: string]: number } = {};
     const edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } } = {};
@@ -176,9 +180,9 @@ export const countEdges = (
     const edgeCounts: { [key: string]: number } = {};
     const top5Sequences = getTopSequences(stepSequences, 5);
 
-    Object.keys(stepSequences).forEach((sessionId) => {
-        const steps = stepSequences[sessionId];
-        const outcomes = outcomeSequences[sessionId];
+    Object.keys(stepSequences).forEach((IDProblemName) => {
+        const steps = stepSequences[IDProblemName];
+        const outcomes = outcomeSequences[IDProblemName];
 
         if (steps.length < 2) return;
 
