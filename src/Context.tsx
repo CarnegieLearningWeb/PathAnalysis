@@ -31,7 +31,7 @@ export interface CSVRow {
     'CF (Workspace Progress Status)': string;
     'Problem Name'?: string;
     'Anon Student Id'?: string;
-    'isInFirstOrLast3'?: boolean;
+    'first or last'?: string;
 }
 
 export const Context = createContext({} as ContextInterface);
@@ -55,7 +55,7 @@ export const Provider = ({children}: ProviderProps) => {
     const [loading, setLoading] = useState<boolean>(initialState.loading)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
-    const [f3L3, setF3L3] = useState<boolean>(initialState.f3L3)
+    const [f3L3, setF3L3] = useState<boolean | null>(initialState.f3L3)
 
     const resetData = () => {
         // setData(null)

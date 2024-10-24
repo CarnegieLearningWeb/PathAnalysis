@@ -67,7 +67,6 @@ export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetState
         // return getAllMatchingRows(transformedData, filteredTransformedData);
         const sortedData = sortAndDeduplicate(transformedData);
         const perStudentProblems = getFirstAndLast3(sortedData);
-
         return combineFirstAndLast(parsedData, perStudentProblems);
     }
 };
@@ -80,17 +79,21 @@ export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetState
  */
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
-        console.log(`Student ID: ${row['Anon Student Id']}, Problem Name: ${row['Problem Name']}`);
-        const IDProblemName = row['Anon Student Id']! + row['Problem Name']!
-        console.log(IDProblemName)
-        if (!acc[IDProblemName!]) acc[IDProblemName] = [];
-
+        const studentId = row['Anon Student Id'];
+        const problemName = row['Problem Name'];
         const stepName = row['Step Name'];
+
+        if (!studentId || !problemName || !stepName) {
+            console.log('Missing data in row:', row);
+            return acc; // Skip this iteration if critical data is missing
+        }
+
+        const IDProblemName = studentId + '_' + problemName;
+        if (!acc[IDProblemName]) acc[IDProblemName] = [];
 
         if (selfLoops || acc[IDProblemName].length === 0 || acc[IDProblemName][acc[IDProblemName].length - 1] !== stepName) {
             acc[IDProblemName].push(stepName);
         }
-        console.log('StepSequences:', acc)
         return acc;
     }, {} as { [key: string]: string[] });
 };
@@ -100,15 +103,33 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
  * @param sortedData - The sorted CSV rows.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
+/**
+ * Creates outcome sequences from sorted data.
+ * @param sortedData - The sorted CSV rows.
+ * @returns A dictionary mapping session IDs to sequences of outcomes.
+ */
+export const createOutcomeSequences = (sortedData: CSVRow[]|Array[]): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
-        const IDProblemName = row['Anon Student Id']! + row['Problem Name']!
-        console.log(IDProblemName)
-        if (!acc[IDProblemName!]) acc[IDProblemName] = [];
-        acc[IDProblemName].push(row['Outcome']);
+        const studentId = row['Anon Student Id'];
+        const problemName = row['Problem Name'];
+        const outcome = row['Outcome'];
+
+        // Check if any of the required fields are missing
+        if (!studentId || !problemName || !outcome) {
+            console.log('Missing data in row:', row);
+            return acc; // Skip this row if any critical field is missing
+        }
+
+        const IDProblemName = studentId + '_' + problemName;
+        console.log('IDProblemName', IDProblemName)
+        if (!acc[IDProblemName]) acc[IDProblemName] = [];
+
+        acc[IDProblemName].push(outcome);
+
         return acc;
     }, {} as { [key: string]: string[] });
 };
+
 
 /**
  * Finds the top N most frequent step sequences.
@@ -171,7 +192,7 @@ export const countEdges = (
     maxEdgeCount: number;
     ratioEdges: { [p: string]: number };
     edgeCounts: { [p: string]: number };
-    topSequences?: SequenceCount[];
+    topSequences: SequenceCount[];
 } => {
     const totalNodeEdges: { [key: string]: number } = {};
     const edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } } = {};
@@ -196,7 +217,6 @@ export const countEdges = (
             edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
             edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
             totalNodeEdges[currentStep] = (totalNodeEdges[currentStep] || 0) + 1;
-
             if (edgeCounts[edgeKey] > maxEdgeCount) maxEdgeCount = edgeCounts[edgeKey];
         }
     });
@@ -331,7 +351,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
     threshold: number,
     min_visits: number,
     selectedSequence: SequenceCount["sequence"],
-    justTopSequence?: boolean
+    justTopSequence: boolean
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -368,11 +388,11 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
             }
         }
     } else {
-        console.log(totalSteps, steps)
+        // console.log(totalSteps, steps)
         for (let rank = 0; rank < totalSteps; rank++) {
             const step = steps[rank];
             const color = calculateColor(rank, totalSteps);
-            console.log(step, color)
+            // console.log(step, color)
             const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 
             dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
@@ -390,7 +410,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
                 const outcomesStr = Object.entries(outcomes)
                     .map(([outcome, count]) => `${outcome}: ${count}`)
                     .join('\n\t\t ');
-
+                console.log("EC", edgeCount)
                 if (edgeCount > min_visits) {
                     const tooltip = `${currentStep} to ${nextStep}\n`
                         + `- Edge Count: \n\t\t ${edgeCount}\n`

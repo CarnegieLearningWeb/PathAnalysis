@@ -12,6 +12,7 @@ import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
 import {Context} from "@/Context.tsx";
 
+//TODO: Can't upload a second file. Broken?
 /**
  * Props interface for the GraphvizParent component.
  * @interface GraphvizParentProps
@@ -67,6 +68,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
                 // Generate step and outcome sequences from the sorted data
                 const stepSequences = createStepSequences(sortedData, selfLoops);
+                console.log('StepSequences', stepSequences)
                 const outcomeSequences = createOutcomeSequences(sortedData);
 
                 // Count edges and sequences, including top 5 sequences
@@ -119,52 +121,75 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 setTopDotString(generatedTopDotStr)
 
 
-        } else {
-            for (const x in ['first', 'last']) {
-                const data = sortedData.filter(row => row['first or last'] === x)
-                // Generate step and outcome sequences from the sorted data
-                const stepSequences = createStepSequences(data, selfLoops);
-                console.log(stepSequences)
-                const outcomeSequences = createOutcomeSequences(data);
+            } else {
+                for (const x of ['first', 'last']) {
+                    console.log("x", x)
+                    const data = sortedData.filter(row => row['first or last'] === x)
+                    console.log("UseEffect Data", data)
+                    // Generate step and outcome sequences from the sorted data
+                    const stepSequences = createStepSequences(data, selfLoops);
+                    const outcomeSequences = createOutcomeSequences(data);
+                    console.log("outcome counts", outcomeSequences)
 
-                // Count edges and sequences, including top 5 sequences
-                const {
-                    edgeCounts,
-                    totalNodeEdges,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    maxEdgeCount,
-                } = countEdges(stepSequences, outcomeSequences);
+                    // Count edges and sequences, including top 5 sequences
+                    const {
+                        edgeCounts,
+                        totalNodeEdges,
+                        ratioEdges,
+                        edgeOutcomeCounts,
+                        maxEdgeCount,
+                        topSequences,
+                    } = countEdges(stepSequences, outcomeSequences);
 
-                // // If the top 5 sequences differ, update the context with the new sequences
-                // if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
-                //     setTop5Sequences(topSequences);
-                //     // If no sequence is selected, select the first sequence
-                //     if (topSequences && selectedSequence === undefined) {
-                //         setSelectedSequence(topSequences![0].sequence);
-                //     }
-                // }
+                    // If the top 5 sequences differ, update the context with the new sequences
+                    if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
+                        setTop5Sequences(topSequences);
+                        // If no sequence is selected, select the first sequence
+                        if (topSequences && selectedSequence === undefined) {
+                            setSelectedSequence(topSequences![0].sequence);
+                        }
+                    }
 
-                // Normalize the edge thicknesses based on the edge counts
-                const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
-                // Generate the Graphviz DOT string using the processed data
-                const generatedDotStr = generateDotString(
-                    normalizedThicknesses,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    edgeCounts,
-                    totalNodeEdges,
-                    1,
-                    minVisits,
-                    selectedSequence,
-                    false,
-                );
-                // Update the state with the generated DOT string
-                if (x == 'first'){setFirst3DotString(generatedDotStr)}
-                else {setLast3DotString(generatedDotStr)}
+                    // Normalize the edge thicknesses based on the edge counts
+                    const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
+                    // Generate the Graphviz DOT string using the processed data
+                    const generatedDotStr = generateDotString(
+                        normalizedThicknesses,
+                        ratioEdges,
+                        edgeOutcomeCounts,
+                        edgeCounts,
+                        totalNodeEdges,
+                        1,
+                        minVisits,
+                        selectedSequence,
+                        false,
+                    );
+                    console.log(generatedDotStr)
+
+                    // Update the state with the generated DOT string
+                    if (x == 'first') {
+                        setFirst3DotString(generatedDotStr)
+                    } else {
+                        setLast3DotString(generatedDotStr)
+                    }
+                    setDotString(generatedDotStr);
+                    console.log(dotString)
+                    const generatedTopDotStr = generateDotString(
+                        normalizedThicknesses,
+                        ratioEdges,
+                        edgeOutcomeCounts,
+                        edgeCounts,
+                        totalNodeEdges,
+                        1,
+                        minVisits,
+                        selectedSequence,
+                        true,
+                    );
+                    setTopDotString(generatedTopDotStr)
+                }
             }
-        }}
-    }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences,f3L3]);
+        }
+    }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences, f3L3]);
 
     /**
      * useEffect hook to update the filtered graph's DOT string whenever
@@ -216,6 +241,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         <div className="graphviz-container">
             <ErrorBoundary>
                 <div className="graphs">
+                    <caption className="graph-caption">First 3</caption>
+                    {first3DotString && (
+                        <Graphviz
+                            dot={first3DotString}
+                            options={{useWorker: false, height: 800, width: 600}}
+                        />
+                    )}
+                    <caption className="graph-caption">Last 3</caption>
+                    {last3DotString && (
+                        <Graphviz
+                            dot={last3DotString}
+                            options={{useWorker: false, height: 800, width: 600}}
+                        />
+                    )}
                     <caption className="graph-caption">Chosen Top Sequence</caption>
                     {topDotString && (
                         <Graphviz
@@ -240,7 +279,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 </div>
             </ErrorBoundary>
         </div>
-    );
+    )
+        ;
 };
 
 export default GraphvizParent;

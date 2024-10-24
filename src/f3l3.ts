@@ -85,6 +85,6 @@ export const filterRowsByProblems = (data: CSVRow[], perStudentProblems: Record<
 // Step 4: Combine first 3 and last 3 into one dataset
 export const combineFirstAndLast = (originalData: CSVRow[], perStudentProblems: Record<string, { first3: string[], last3: string[] }>): CSVRow[] => {
     // Filter the original data based on matching 'Anon Student Id' and 'Problem Name'
-    console.log(filterRowsByProblems(originalData, perStudentProblems))
+    console.log("frbp", filterRowsByProblems(originalData, perStudentProblems))
     return filterRowsByProblems(originalData, perStudentProblems);
 };
