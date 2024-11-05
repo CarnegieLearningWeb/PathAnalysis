@@ -5,12 +5,12 @@ import {
     countEdges,
     createStepSequences,
     createOutcomeSequences,
-    sortData, loadData
+    sortData
 } from './GraphvizProcessing';
 import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import {Context} from "@/Context.tsx";
+import {Context, CSVRow} from "@/Context.tsx";
 
 //TODO: Can't upload a second file. Broken?
 /**
@@ -41,95 +41,34 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                            selfLoops,
                                                            minVisits,
                                                        }) => {
-    // State to hold the main DOT string generated for the Graphviz graph
-    const [dotString, setDotString] = useState<string | null>(null);
-    // State to hold the filtered DOT string based on the filter criteria
-    const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const [topDotString, setTopDotString] = useState<string | null>(null)
-    // Access the selected sequence and top 5 sequences from the context
-    const [first3DotString, setFirst3DotString] = useState<string | null>(null)
-    const [last3DotString, setLast3DotString] = useState<string | null>(null)
+        // State to hold the main DOT string generated for the Graphviz graph
+        const [dotString, setDotString] = useState<string | null>(null);
+        // State to hold the filtered DOT string based on the filter criteria
+        const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
+        const [topDotString, setTopDotString] = useState<string | null>(null)
+        // Access the selected sequence and top 5 sequences from the context
+        const [first3DotString, setFirst3DotString] = useState<string | null>(null)
+        const [last3DotString, setLast3DotString] = useState<string | null>(null)
 
-    const {
-        selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences,
-        f3L3, setF3L3
-    } = useContext(Context);
+        const {
+            selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences,
+            f3L3, setF3L3} = useContext(Context);
 
-    /**
-     * useEffect hook to generate and update the graph's DOT string whenever
-     * csvData, selfLoops, minVisits, or selectedSequence changes.
-     */
-    useEffect(() => {
-        if (csvData) {
-            // const loadedData = loadData(csvData, setF3L3)
-            // Load and sort the CSV data
-            const sortedData = sortData(csvData, setF3L3, f3L3);
-            if (!f3L3) {
+        /**
+         * useEffect hook to generate and update the graph's DOT string whenever
+         * csvData, selfLoops, minVisits, or selectedSequence changes.
+         */
+        useEffect(() => {
+            if (csvData) {
 
-                // Generate step and outcome sequences from the sorted data
-                const stepSequences = createStepSequences(sortedData, selfLoops);
-                console.log('StepSequences', stepSequences)
-                const outcomeSequences = createOutcomeSequences(sortedData);
+                // Load and sort the CSV data
+                const sortedData = sortData(csvData, setF3L3, f3L3);
+                if (!f3L3) {
 
-                // Count edges and sequences, including top 5 sequences
-                const {
-                    edgeCounts,
-                    totalNodeEdges,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    maxEdgeCount,
-                    topSequences
-                } = countEdges(stepSequences, outcomeSequences);
-
-                // If the top 5 sequences differ, update the context with the new sequences
-                if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
-                    setTop5Sequences(topSequences);
-                    // If no sequence is selected, select the first sequence
-                    if (topSequences && selectedSequence === undefined) {
-                        setSelectedSequence(topSequences![0].sequence);
-                    }
-                }
-
-                // Normalize the edge thicknesses based on the edge counts
-                const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
-                // Generate the Graphviz DOT string using the processed data
-                const generatedDotStr = generateDotString(
-                    normalizedThicknesses,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    edgeCounts,
-                    totalNodeEdges,
-                    1,
-                    minVisits,
-                    selectedSequence,
-                    false,
-                );
-                // Update the state with the generated DOT string
-                setDotString(generatedDotStr);
-                console.log(dotString)
-                const generatedTopDotStr = generateDotString(
-                    normalizedThicknesses,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    edgeCounts,
-                    totalNodeEdges,
-                    1,
-                    minVisits,
-                    selectedSequence,
-                    true,
-                );
-                setTopDotString(generatedTopDotStr)
-
-
-            } else {
-                for (const x of ['first', 'last']) {
-                    console.log("x", x)
-                    const data = sortedData.filter(row => row['first or last'] === x)
-                    console.log("UseEffect Data", data)
                     // Generate step and outcome sequences from the sorted data
-                    const stepSequences = createStepSequences(data, selfLoops);
-                    const outcomeSequences = createOutcomeSequences(data);
-                    console.log("outcome counts", outcomeSequences)
+                    const stepSequences = createStepSequences(sortedData, selfLoops);
+                    console.log('StepSequences', stepSequences)
+                    const outcomeSequences = createOutcomeSequences(sortedData);
 
                     // Count edges and sequences, including top 5 sequences
                     const {
@@ -138,7 +77,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         ratioEdges,
                         edgeOutcomeCounts,
                         maxEdgeCount,
-                        topSequences,
+                        topSequences
                     } = countEdges(stepSequences, outcomeSequences);
 
                     // If the top 5 sequences differ, update the context with the new sequences
@@ -164,14 +103,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         selectedSequence,
                         false,
                     );
-                    console.log(generatedDotStr)
-
                     // Update the state with the generated DOT string
-                    if (x == 'first') {
-                        setFirst3DotString(generatedDotStr)
-                    } else {
-                        setLast3DotString(generatedDotStr)
-                    }
                     setDotString(generatedDotStr);
                     console.log(dotString)
                     const generatedTopDotStr = generateDotString(
@@ -186,102 +118,183 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         true,
                     );
                     setTopDotString(generatedTopDotStr)
+
+
                 }
             }
-        }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences, f3L3]);
+        }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences, f3L3]);
 
-    /**
-     * useEffect hook to update the filtered graph's DOT string whenever
-     * the filter, csvData, selfLoops, or minVisits changes.
-     */
-    useEffect(() => {
-        if (filter) {
-            // Load and sort the CSV data
-            const sortedData = sortData(csvData, setF3L3, f3L3);
-            // Filter the data based on the filter condition
-            const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            // Generate step and outcome sequences from the filtered data
-            const filteredStepSequences = createStepSequences(filteredData, selfLoops);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+        useEffect(() => {
+                if (f3L3) {
+                    const sortedData:CSVRow[] = sortData(csvData, setF3L3, f3L3);
+                    ['first', 'last'].forEach((x) => {
+                        console.log("x", x)
+                        const data:CSVRow[] = sortedData.filter(row => row['first or last'] === x)
+                        console.log("UseEffect Data", data)
+                        // Generate step and outcome sequences from the sorted data
+                        const stepSequences:{[p:string]:string[]} = createStepSequences(data, selfLoops);
+                        const outcomeSequences:{[p:string]:string[]} = createOutcomeSequences(data);
+                        console.log("outcome counts", outcomeSequences)
 
-            // Count edges in the filtered data
-            const {
-                edgeCounts: filteredEdgeCounts,
-                totalNodeEdges: filteredTotalNodeEdges,
-                ratioEdges: filteredRatioEdges,
-                edgeOutcomeCounts: filteredEdgeOutcomeCounts,
-                maxEdgeCount: filteredMaxEdgeCount,
-            } = countEdges(filteredStepSequences, filteredOutcomeSequences);
+                        // Count edges and sequences, including top 5 sequences
+                        const {
+                            edgeCounts,
+                            totalNodeEdges,
+                            ratioEdges,
+                            edgeOutcomeCounts,
+                            maxEdgeCount,
+                            topSequences,
+                        } = countEdges(stepSequences, outcomeSequences);
 
-            // Normalize the edge thicknesses for the filtered data
-            const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
-            // Generate the Graphviz DOT string for the filtered data
-            const filteredDotStr = generateDotString(
-                filteredNormalizedThicknesses,
-                filteredRatioEdges,
-                filteredEdgeOutcomeCounts,
-                filteredEdgeCounts,
-                filteredTotalNodeEdges,
-                1,
-                minVisits,
-                selectedSequence,
-                false,
-            );
+                        // If the top 5 sequences differ, update the context with the new sequences
+                        if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
+                            setTop5Sequences(topSequences);
+                            // If no sequence is selected, select the first sequence
+                            if (topSequences && selectedSequence === undefined) {
+                                setSelectedSequence(topSequences![0].sequence);
+                            }
+                        }
 
-            // Update the state with the filtered DOT string
-            setFilteredDotString(filteredDotStr);
-        } else {
-            setFilteredDotString(null);  // Reset filtered graph if no filter is applied
-        }
-    }, [csvData, filter, selfLoops, minVisits, selectedSequence, top5Sequences]);
+                        // Normalize the edge thicknesses based on the edge counts
+                        const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
+                        // Generate the Graphviz DOT string using the processed data
+                        const generatedDotStr = generateDotString(
+                            normalizedThicknesses,
+                            ratioEdges,
+                            edgeOutcomeCounts,
+                            edgeCounts,
+                            totalNodeEdges,
+                            1,
+                            minVisits,
+                            selectedSequence,
+                            false,
+                        );
+                        console.log(generatedDotStr)
 
-    // Render the Graphviz graphs within an error boundary
-    return (
-        <div className="graphviz-container">
-            <ErrorBoundary>
-                <div className="graphs">
-                    <caption className="graph-caption">First 3</caption>
-                    {first3DotString && (
-                        <Graphviz
-                            dot={first3DotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
-                    )}
-                    <caption className="graph-caption">Last 3</caption>
-                    {last3DotString && (
-                        <Graphviz
-                            dot={last3DotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
-                    )}
-                    <caption className="graph-caption">Chosen Top Sequence</caption>
-                    {topDotString && (
-                        <Graphviz
-                            dot={topDotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
-                    )}
-                    <caption className="graph-caption">All Students</caption>
-                    {dotString && (
-                        <Graphviz
-                            dot={dotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
-                    )}
-                    <caption className="graph-caption">{filter}</caption>
-                    {filteredDotString && selectedSequence && (
-                        <Graphviz
-                            dot={filteredDotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
-                    )}
-                </div>
-            </ErrorBoundary>
-        </div>
-    )
+                        // Update the state with the generated DOT string
+                        if (x === 'first') {
+                            setFirst3DotString(generatedDotStr)
+                        } else {
+                            setLast3DotString(generatedDotStr)
+                        }
+                        setDotString(generatedDotStr);
+                        console.log(dotString)
+                        const generatedTopDotStr = generateDotString(
+                            normalizedThicknesses,
+                            ratioEdges,
+                            edgeOutcomeCounts,
+                            edgeCounts,
+                            totalNodeEdges,
+                            1,
+                            minVisits,
+                            selectedSequence,
+                            true,
+                        );
+                        setTopDotString(generatedTopDotStr)
+                    });
+
+
+                } else {
+                    setFirst3DotString(null)
+                    setLast3DotString(null)
+                }
+            },
+            [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences, f3L3]
+        )
         ;
-};
+
+        /**
+         * useEffect hook to update the filtered graph's DOT string whenever
+         * the filter, csvData, selfLoops, or minVisits changes.
+         */
+        useEffect(() => {
+            if (filter) {
+                // Load and sort the CSV data
+                const sortedData = sortData(csvData, setF3L3, f3L3);
+                // Filter the data based on the filter condition
+                const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
+                // Generate step and outcome sequences from the filtered data
+                const filteredStepSequences = createStepSequences(filteredData, selfLoops);
+                const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+
+                // Count edges in the filtered data
+                const {
+                    edgeCounts: filteredEdgeCounts,
+                    totalNodeEdges: filteredTotalNodeEdges,
+                    ratioEdges: filteredRatioEdges,
+                    edgeOutcomeCounts: filteredEdgeOutcomeCounts,
+                    maxEdgeCount: filteredMaxEdgeCount,
+                } = countEdges(filteredStepSequences, filteredOutcomeSequences);
+
+                // Normalize the edge thicknesses for the filtered data
+                const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
+                // Generate the Graphviz DOT string for the filtered data
+                const filteredDotStr = generateDotString(
+                    filteredNormalizedThicknesses,
+                    filteredRatioEdges,
+                    filteredEdgeOutcomeCounts,
+                    filteredEdgeCounts,
+                    filteredTotalNodeEdges,
+                    1,
+                    minVisits,
+                    selectedSequence,
+                    false,
+                );
+
+                // Update the state with the filtered DOT string
+                setFilteredDotString(filteredDotStr);
+            } else {
+                setFilteredDotString(null);  // Reset filtered graph if no filter is applied
+            }
+        }, [csvData, filter, selfLoops, minVisits, selectedSequence, top5Sequences]);
+
+// Render the Graphviz graphs within an error boundary
+        return (
+            <div className="graphviz-container">
+                <ErrorBoundary>
+                    <div className="graphs">
+                        <caption className="graph-caption">First 3</caption>
+                        {first3DotString && (
+                            <Graphviz
+                                dot={first3DotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                        <caption className="graph-caption">Last 3</caption>
+                        {last3DotString && (
+                            <Graphviz
+                                dot={last3DotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                        <caption className="graph-caption">Chosen Top Sequence</caption>
+                        {topDotString && (
+                            <Graphviz
+                                dot={topDotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                        <caption className="graph-caption">All Students</caption>
+                        {dotString && (
+                            <Graphviz
+                                dot={dotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                        <caption className="graph-caption">{filter}</caption>
+                        {filteredDotString && selectedSequence && (
+                            <Graphviz
+                                dot={filteredDotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        )}
+                    </div>
+                </ErrorBoundary>
+            </div>
+        )
+            ;
+    }
+;
 
 export default GraphvizParent;
 

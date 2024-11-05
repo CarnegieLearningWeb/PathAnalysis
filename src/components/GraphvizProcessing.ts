@@ -56,15 +56,6 @@ export const sortData = (csvData: string, setF3L3: React.Dispatch<React.SetState
             'Problem Name': row['Problem Name'],
             'Anon Student Id': row['Anon Student Id']
         }));
-        // const sortedData = sortBySessionIdAndTime(transformedData);
-        // // console.log("Sorted Data: ", sortedData);
-        // // Step 2: Group by 'Anon Student Id' and extract first/last 3 unique 'Problem Name's
-        // const perStudentProblems = groupByStudentId(sortedData);
-        // // console.log("Per Student Problems: ", perStudentProblems);
-        // // Step 4: Filter rows from the original data based on first3 and last3 problem names
-        // const filteredTransformedData = filterRowsByProblems(transformedData, perStudentProblems);
-        //
-        // return getAllMatchingRows(transformedData, filteredTransformedData);
         const sortedData = sortAndDeduplicate(transformedData);
         const perStudentProblems = getFirstAndLast3(sortedData);
         return combineFirstAndLast(parsedData, perStudentProblems);
@@ -108,7 +99,7 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
  * @param sortedData - The sorted CSV rows.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]|Array[]): { [key: string]: string[] } => {
+export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
     return sortedData.reduce((acc, row) => {
         const studentId = row['Anon Student Id'];
         const problemName = row['Problem Name'];
@@ -120,8 +111,8 @@ export const createOutcomeSequences = (sortedData: CSVRow[]|Array[]): { [key: st
             return acc; // Skip this row if any critical field is missing
         }
 
-        const IDProblemName = studentId + '_' + problemName;
-        console.log('IDProblemName', IDProblemName)
+        const IDProblemName:string = studentId + '_' + problemName;
+        // console.log('IDProblemName', IDProblemName)
         if (!acc[IDProblemName]) acc[IDProblemName] = [];
 
         acc[IDProblemName].push(outcome);
@@ -137,7 +128,7 @@ export const createOutcomeSequences = (sortedData: CSVRow[]|Array[]): { [key: st
  * @param topN - The number of top sequences to return (default is 5).
  * @returns An array of the top sequences and their counts.
  */
-export function getTopSequences(stepSequences: { [key: string]: string[] }, topN: number = 5) {
+export function getTopSequences(stepSequences: { [key: string]: string[] }, topN: number = 5):{sequence:any, count:number} {
     // Create a frequency map to count how many times each unique sequence (list) occurs
     const sequenceCounts: { [sequence: string]: number } = {};
 
@@ -160,7 +151,7 @@ export function getTopSequences(stepSequences: { [key: string]: string[] }, topN
         .slice(0, topN);
 
     // Convert to the desired format: { sequence: [step1, step2, step3], count }
-    const topSequences = sortedSequences.map(([sequenceKey, count]) => ({
+    const topSequences:{sequence:any, count:number} = sortedSequences.map(([sequenceKey, count]) => ({
         sequence: JSON.parse(sequenceKey), // Convert the string back to an array
         count,
     }));

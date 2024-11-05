@@ -1,17 +1,17 @@
 import {createContext, useState} from 'react';
-import {GlobalDataType, GraphData} from './lib/types';
+// import {GlobalDataType, GraphData} from './lib/types';
 
 interface ContextInterface {
-    data: GlobalDataType[] | null;
-    graphData: GraphData | null;
+    // data: GlobalDataType[] | null;
+    // graphData: GraphData | null;
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
-    f3L3: boolean;
+    f3L3: boolean | undefined;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
-    setData: (data: GlobalDataType[] | null) => void;
+    // setData: (data: GlobalDataType[] | null) => void;
     setF3L3: (f3L3: boolean) => void;
     setLoading: (loading: boolean) => void;
-    setGraphData: (graphData: GraphData | null) => void;
+    // setGraphData: (graphData: GraphData | null) => void;
     setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
     setSelectedSequence: (selectedSequence: string[] | undefined) => void;
     resetData: () => void;
@@ -55,14 +55,14 @@ export const Provider = ({children}: ProviderProps) => {
     const [loading, setLoading] = useState<boolean>(initialState.loading)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
-    const [f3L3, setF3L3] = useState<boolean | null>(initialState.f3L3)
+    const [f3L3, setF3L3] = useState<boolean | undefined>(initialState.f3L3)
 
     const resetData = () => {
         // setData(null)
         // setGraphData(null)
         setTop5Sequences(null)
         setSelectedSequence(undefined)
-        setF3L3(null)
+        setF3L3(undefined)
         console.log("Data reset");
 
     }
