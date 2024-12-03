@@ -116,7 +116,7 @@ export default function DirectedGraph({ graphData }: DirectedGraphProps) {
 
     const handleLinkHover = (link: Link | null) => {
         if (link) {
-            setTooltip({ display: true, text: `${link.numOfTransitions + " paths" ?? "no paths"}`, x: tooltip.x, y: tooltip.y, fx: undefined, fy: undefined });
+            setTooltip({ display: true, text: `${link.numOfTransitions} paths`, x: tooltip.x, y: tooltip.y, fx: undefined, fy: undefined });
         }
         else {
             setTooltip((prev) => ({ ...prev, display: false }));
