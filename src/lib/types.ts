@@ -206,3 +206,11 @@ export type StudentPath = {
     problemId?: string;
     sectionId?: string;
 }
+
+export type ParseResult = {
+    data: GlobalDataType[] | null;
+    error?: {
+      type: 'parsing' | 'validation';
+      details: string[];
+    };
+  }

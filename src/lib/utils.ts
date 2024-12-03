@@ -1,6 +1,6 @@
 import {type ClassValue, clsx} from "clsx"
 import {twMerge} from "tailwind-merge"
-import {GlobalDataType} from "./types"
+import {ParseResult} from "./types"
 import Papa from "papaparse"
 import Joi from "joi"
 
@@ -23,54 +23,102 @@ const dataSchema = Joi.array().items(
         .unknown(true)
 );
 
-export function parseData(readerResult: string | ArrayBuffer | null, delimiter: string = ","): GlobalDataType[] | null {
-    if (!readerResult || typeof readerResult !== 'string') {
-        return null;
-    }
+export function parseData(readerResult: string | ArrayBuffer | null, delimiter: string = ","): ParseResult {
+  if (!readerResult || typeof readerResult !== 'string') {
+      return {
+          data: null,
+          error: {
+              type: 'parsing',
+              details: ['Invalid input: File content is empty or invalid']
+          }
+      };
+  }
 
-    try {
-        // Handle JSON files
-        if (delimiter === '') {
-            try {
-                const jsonData = JSON.parse(readerResult);
-                const {error, value} = dataSchema.validate(jsonData);
-                if (error) {
-                    console.error('Validation error:', error.details);
-                    return null;
-                }
-                return value;
-            } catch (e) {
-                console.error('JSON parsing failed:', e);
-                return null;
-            }
-        }
+  try {
+      // Handle JSON files
+      if (delimiter === '') {
+          try {
+              const jsonData = JSON.parse(readerResult);
+              const {error, value} = dataSchema.validate(jsonData, {abortEarly: false});
 
-        // Handle CSV/TSV files
-        const parseResult = Papa.parse(readerResult, {
-            header: true,
-            delimiter: delimiter,
-            skipEmptyLines: true,
-            transformHeader: (header) => header.trim(),
-            quoteChar: '"',
-            escapeChar: '"',
-            dynamicTyping: true,
-        });
+              if (error) {
+                  // Format validation errors directly here
+                  const missingFields = new Set<string>();
+                  error.details.forEach(detail => {
+                      const fieldName = detail.path[detail.path.length - 1].toString();
+                      missingFields.add(fieldName);
+                  });
 
-        if (parseResult.errors.length > 0) {
-            console.error('Parsing errors:', parseResult.errors);
-            return null;
-        }
+                  const message = `Validation Error: The following fields are missing from the dataset: ${Array.from(missingFields).join(', ')}`;
+                  return {
+                      data: null,
+                      error: {
+                          type: 'validation',
+                          details: [message]
+                      }
+                  };
+              }
+              return {data: value};
+          } catch (e) {
+              return {
+                  data: null,
+                  error: {
+                      type: 'parsing',
+                      details: ['Invalid JSON format']
+                  }
+              };
+          }
+      }
 
-        // Validate the parsed data
-        const {error, value} = dataSchema.validate(parseResult.data);
-        if (error) {
-            console.error('Validation error:', error.details);
-            return null;
-        }
+      // Handle CSV/TSV files
+      const parseResult = Papa.parse(readerResult, {
+          header: true,
+          delimiter: delimiter,
+          skipEmptyLines: true,
+          transformHeader: (header) => header.trim(),
+          quoteChar: '"',
+          escapeChar: '"',
+          dynamicTyping: true,
+      });
 
-        return value;
-    } catch (error) {
-        console.error('Error parsing data:', error);
-        return null;
-    }
+      if (parseResult.errors.length > 0) {
+          return {
+              data: null,
+              error: {
+                  type: 'parsing',
+                  details: parseResult.errors.map(err => `Row ${err.row}: ${err.message}`)
+              }
+          };
+      }
+
+      // Validate the parsed data
+      const {error, value} = dataSchema.validate(parseResult.data, {abortEarly: false});
+      if (error) {
+          // Format validation errors directly here
+          const missingFields = new Set<string>();
+          error.details.forEach(detail => {
+              const fieldName = detail.path[detail.path.length - 1].toString();
+              missingFields.add(fieldName);
+          });
+
+          const message = `Validation Error: The following fields are missing from the dataset: ${Array.from(missingFields).join(', ')}`;
+          return {
+              data: null,
+              error: {
+                  type: 'validation',
+                  details: [message]
+              }
+          };
+      }
+
+      return {data: value};
+  } catch (error) {
+      return {
+          data: null,
+          error: {
+              type: 'parsing',
+              details: [`Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`]
+          }
+      };
+  }
 }

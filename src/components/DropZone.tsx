@@ -1,19 +1,18 @@
 import {useCallback, useState} from 'react';
 import {Accept, useDropzone} from 'react-dropzone';
-import {GlobalDataType} from '@/lib/types';
+import {GlobalDataType, ParseResult} from '@/lib/types';
 import {parseData} from '@/lib/utils';
 import {Label} from "@/components/ui/label"
 import {RadioGroup, RadioGroupItem} from "@/components/ui/radio-group"
-import toast from 'react-hot-toast';
 
 interface DropZoneProps {
     afterDrop: (data: GlobalDataType[]) => void,
-    onLoadingChange: (loading: boolean) => void
+    onLoadingChange: (loading: boolean) => void,
+    onError: (error: string) => void,
 }
 
-export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
+export default function DropZone({afterDrop, onLoadingChange, onError}: DropZoneProps) {
     const delimiters = ["csv", "tsv"];
-    const [errorMessage, setErrorMessage] = useState<string>("");
 
     const [fileType, setFileType] = useState<string>(delimiters[1])
 
@@ -50,12 +49,11 @@ export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
                         break;
                 }
 
-                const array = parseData(textStr, delimiter);
-                if (!array) {
-                    toast.error("Invalid file structure or content");
-                    setErrorMessage("Invalid file structure or content");
+                const array: ParseResult = parseData(textStr, delimiter);
+                if (!array.data) {
+                    onError(array.error?.details.join('\n') || 'Error parsing file');
                 } else {
-                    afterDrop(array);
+                    afterDrop(array.data);
                 }
 
                 onLoadingChange(false);
@@ -142,9 +140,7 @@ export default function DropZone({afterDrop, onLoadingChange}: DropZoneProps) {
                 }
                 {isDragReject && <p className="text-red-500">Invalid file type</p>}
 
-                <div className="">
-                    {errorMessage && <p className="text-red-500 pt-10">{errorMessage}</p>}
-                </div>
+            
             </div>
 
 
