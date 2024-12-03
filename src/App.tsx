@@ -1,7 +1,7 @@
 import './App.css';
 import {useContext, useEffect, useState} from 'react';
 import {GlobalDataType, GraphData} from './lib/types';
-import DirectedGraph from './components/DirectedGraph';
+// import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
 // import { NavBar } from './components/NavBar';
 import {Button} from './components/ui/button';
@@ -63,14 +63,14 @@ function App() {
                     }
 
 
-                    {
-                        graphData && (
-                            <>
-                                {/* TODO: Swap DirectedGraph for your new component */}
-                                <DirectedGraph graphData={graphData}/>
-                            </>
-                        )
-                    }
+                    {/*{*/}
+                    {/*    graphData && (*/}
+                    {/*        <>*/}
+                    {/*            /!* TODO: Swap DirectedGraph for your new component *!/*/}
+                    {/*            <DirectedGraph graphData={graphData}/>*/}
+                    {/*        </>*/}
+                    {/*    )*/}
+                    {/*}*/}
 
                 </div>
             </div>

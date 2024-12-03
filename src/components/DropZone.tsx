@@ -10,7 +10,6 @@ interface DropZoneProps {
     afterDrop: (data: GlobalDataType[]) => void,
     onLoadingChange: (loading: boolean) => void
 }
-// TODO move this up to App.tsx so I can better handle errors
 
 export default function DropZone({ afterDrop, onLoadingChange }: DropZoneProps) {
     const delimiters = ["tsv", "csv", "pipe"];
