@@ -151,7 +151,7 @@ export function getTopSequences(stepSequences: { [key: string]: string[] }, topN
         .slice(0, topN);
 
     // Convert to the desired format: { sequence: [step1, step2, step3], count }
-    const topSequences:{sequence:any, count:number} = sortedSequences.map(([sequenceKey, count]) => ({
+    const topSequences = sortedSequences.map(([sequenceKey, count]) => ({
         sequence: JSON.parse(sequenceKey), // Convert the string back to an array
         count,
     }));
