@@ -1,9 +1,7 @@
 import './App.css';
 import { useContext, useEffect, useState } from 'react';
 import { GlobalDataType, GraphData } from './lib/types';
-// import DirectedGraph from './components/DirectedGraph';
 import DropZone from './components/DropZone';
-// import { NavBar } from './components/NavBar';
 
 import { Button } from './components/ui/button';
 import { Context } from './Context';
@@ -12,9 +10,8 @@ import Loading from './components/Loading';
 
 function App() {
 
-    const { resetData, setGraphData, setLoading, data, setData, loading } = useContext(Context);
+    const { resetData, setGraphData, setLoading, data, setData, loading, error, setError } = useContext(Context);
     const [showDropZone, setShowDropZone] = useState<boolean>(true);
-    const [error, setError] = useState<string>("");
     const handleData = (data: GlobalDataType[]) => {
         setData(data)
         setShowDropZone(false)
