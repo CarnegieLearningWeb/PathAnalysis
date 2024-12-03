@@ -71,13 +71,6 @@ function App() {
 
                     }
 
-
-                    {
-                        data && <div>
-                            <h1 className="text-2xl font-bold">Uploaded Data</h1>
-                            <pre>{JSON.stringify(data, null, 2)}</pre>
-                        </div>
-                    }
                     {/*{*/}
                     {/*    graphData && (*/}
                     {/*        <>*/}
