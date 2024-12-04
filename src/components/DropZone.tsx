@@ -88,21 +88,21 @@ export default function DropZone({afterDrop, onLoadingChange, onError}: DropZone
 
     const fileTypeOptions = [
         {
-            label: 'Tab Separated',
-            value: delimiters.find((delimiter) => delimiter === 'tsv') as string
-        },
-        {
             label: 'Comma Separated',
             value: delimiters.find((delimiter) => delimiter === 'csv') as string
+        },
+        {
+            label: 'Tab Separated',
+            value: delimiters.find((delimiter) => delimiter === 'tsv') as string
         },
         // {
         //     label: 'Pipe Separated',
         //     value: delimiters.find((delimiter) => delimiter === 'pipe') as string
         // },
-        {
-            label: 'JSON',
-            value: delimiters.find((delimiter) => delimiter === 'json') as string
-        }
+        // {
+        //     label: 'JSON',
+        //     value: delimiters.find((delimiter) => delimiter === 'json') as string
+        // }
     ]
     return (
         <>
