@@ -1,8 +1,10 @@
-import {createContext, useState} from 'react';
-import {GlobalDataType, GraphData} from './lib/types';
-
+import {createContext, ReactNode, useState} from 'react';
+import { GlobalDataType, GraphData } from './lib/types';
+// import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 interface ContextInterface {
     data: GlobalDataType[] | null;
+    error: string | null;
+    setError: (error: string | null) => void;
     graphData: GraphData | null;
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
@@ -31,7 +33,7 @@ const initialState = {
 }
 
 interface ProviderProps {
-    children: React.ReactNode;
+    children: ReactNode;
 }
 
 
@@ -39,11 +41,28 @@ export const Provider = ({children}: ProviderProps) => {
     const [data, setData] = useState<GlobalDataType[] | null>(initialState.data)
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
+    const [error, setError] = useState<string | null>(null)
+    // const queryClient = useQueryClient();
+
+    // const { data: uploadedData } = useQuery<GlobalDataType[]>({
+    //     queryKey: ['uploadedData'],
+    //     staleTime: Infinity,
+    // });
+    //
+    // const { mutate: uploadData } = useMutation({
+    //     mutationKey: ['uploadedData'],
+    //     mutationFn: async (data: GlobalDataType[]) => data,
+    //     onSuccess: (data) => {
+    //         queryClient.setQueryData(['uploadedData'], data);
+    //     },
+    // });
+
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
 
     const resetData = () => {
         setData(null)
+        setError(null)
         setGraphData(null)
         setTop5Sequences(null)
         setSelectedSequence(undefined)
@@ -59,6 +78,8 @@ export const Provider = ({children}: ProviderProps) => {
                 loading,
                 top5Sequences,
                 selectedSequence,
+                error,
+                setError,
                 setLoading,
                 setData,
                 setGraphData,

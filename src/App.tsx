@@ -1,4 +1,12 @@
 import './App.css';
+import {useContext, useEffect, useState} from 'react';
+import {GlobalDataType, GraphData} from './lib/types';
+import DropZone from './components/DropZone';
+
+import {Button} from './components/ui/button';
+import {Context} from './Context';
+import {processDataShopData} from './lib/dataProcessingUtils';
+import Loading from './components/Loading';
 import React, {useContext, useState} from 'react';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
@@ -8,13 +16,7 @@ import Slider from './components/slider.tsx';
 import SequenceSelector from "@/components/SequenceSelector.tsx";
 import {Context, SequenceCount} from "@/Context.tsx";
 
-/**
- * The main `App` component of the Path Analysis Tool, responsible for
- * managing the data, user inputs, and rendering the relevant components
- * like file upload, filtering, sequence selection, and Graphviz visualization.
- *
- * @returns JSX.Element
- */
+function App() {
 
 // TODO: Upload whole workspace or single problem (# of unique problem names)
 // TODO: Compare students vs. problem statistics
@@ -30,6 +32,12 @@ const App: React.FC = () => {
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisits, setMinVisits] = useState<number>(0);
+    const {resetData, setGraphData, setLoading, data, setData, loading, error, setError} = useContext(Context);
+    const [showDropZone, setShowDropZone] = useState<boolean>(true);
+    const handleData = (data: GlobalDataType[]) => {
+        setData(data)
+        setShowDropZone(false)
+    }
 
     // Extracting context values from the `Context` provider
     const {top5Sequences, selectedSequence, setSelectedSequence, setLoading} = useContext(Context);
@@ -42,6 +50,14 @@ const App: React.FC = () => {
      */
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
         console.log("SS: ", top5Sequences);
+    const handleError = (errorMessage: string) => {
+        setError(errorMessage);
+    }
+
+    useEffect(() => {
+        if (data) {
+            const graphData: GraphData = processDataShopData(data)
+            setGraphData(graphData)
 
         if (top5Sequences) {
             // Update the selected sequence in the context
@@ -85,6 +101,38 @@ const App: React.FC = () => {
 
             {/* Upload component allows uploading and processing of CSV data */}
             <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
+        <>
+            <div className="">
+                {/* <NavBar /> */}
+                <Button
+                    className="m-2"
+                    variant={"ghost"}
+                    onClick={() => {
+                        resetData()
+                        setShowDropZone(true)
+                    }}
+                >
+                    Reset
+                </Button>
+                {error && (
+                    <div className="text-red-500 p-4 m-4 bg-red-50 rounded-md">
+                        {error.split('\n').map((errorLine, index) => (
+                            <p key={index} className="mb-1">{errorLine}</p>
+                        ))}
+                    </div>
+                )}
+                <div className=" flex items-center justify-center pt-20">
+                    {
+                        loading ?
+                            <Loading/>
+                            :
+                            (
+                                showDropZone && (
+                                    <div className="">
+                                        <DropZone afterDrop={handleData} onLoadingChange={handleLoading}
+                                                  onError={handleError}/>
+                                    </div>
+                                )
 
             {/* FilterComponent allows filtering the graph data */}
             <FilterComponent onFilterChange={setFilter}/>
