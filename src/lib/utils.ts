@@ -15,7 +15,7 @@ const validation = Joi.array().items(
     'Outcome': Joi.string().valid('OK', 'JIT', 'ERROR', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'FREEBIE_JIT').required(),
 
     // 'Outcome': Joi.string().valid('OK', 'BUG', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'ERROR').required(),
-  }).unknown()
+  }).unknown());
 const dataSchema = Joi.array().items(
     Joi.object({
         'Time': Joi.alternatives().try(

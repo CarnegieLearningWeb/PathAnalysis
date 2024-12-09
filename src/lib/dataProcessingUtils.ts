@@ -1,6 +1,6 @@
 import { IncomingData, Node, Link, GraphData, LinkObject, NodeObject, IncomingDataRaw, GlobalDataType } from "@/lib/types";
 import _ from 'lodash';
-import * as Comlink from 'comlink';
+// import * as Comlink from 'comlink';
 
 // ----------------- DATA PROCESSING UTILS DataShop Data -----------------
 

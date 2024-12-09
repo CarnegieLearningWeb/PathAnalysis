@@ -1,10 +1,10 @@
 // Import Comlink from CDN or local source
 import {GlobalDataType} from "@/lib/types.ts";
-
+// import * as Comlink from 'comlink';
 importScripts('https://unpkg.com/comlink/dist/umd/comlink.js');
 
 // Define the data processing logic
-function parseData(text: string, delimiter: string): GlobalDataType[] | null {
+function parseData(text: string, delimiter: string): string[][] | null {
     // Example parsing logic
     // Split the text into lines, then split each line into columns based on the delimiter
     const lines = text.split('\n');
