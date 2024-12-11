@@ -46,24 +46,20 @@ function App() {
      * @param {SequenceCount["sequence"]} selectedSequence - The selected sequence from the top 5.
      */
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
-        console.log("SS: ", top5Sequences, selectedSequence);
-        useEffect(() => {
-            if (data) {
-                const graphData: GraphData = processDataShopData(data)
-                setGraphData(graphData)
+            console.log("SS: ", top5Sequences, selectedSequence);
 
-                if (top5Sequences) {
-                    // Update the selected sequence in the context
-                    setSelectedSequence(selectedSequence);
-                    console.log(`Selected sequence: ${selectedSequence}`);
-                }
+            if (top5Sequences) {
+                // Update the selected sequence in the context
+                setSelectedSequence(selectedSequence);
+                console.log(`Selected sequence: ${selectedSequence}`);
             }
-        })
-        ;
+
+        }
+    ;
+
+    const handleError = (errorMessage: string) => {
+        setError(errorMessage);
     }
-    // const handleError = (errorMessage: string) => {
-    //     setError(errorMessage);
-    // }
 
 
     /**
@@ -124,22 +120,22 @@ function App() {
                     </div>
                 )}
 
-                {/* Main Content */}
-                {/*<div className="flex items-center justify-center pt-20">*/}
-                {/*    {loading ? (*/}
-                {/*        <Loading/>*/}
-                {/*    ) : (*/}
-                {/*        showDropZone && (*/}
-                {/*            <div>*/}
-                {/*                <DropZone*/}
-                {/*                    afterDrop={handleData}*/}
-                {/*                    onLoadingChange={handleLoadingChange}*/}
-                {/*                    onError={handleError}*/}
-                {/*                />*/}
-                {/*            </div>*/}
-                {/*        )*/}
-                {/*    )}*/}
-                {/*</div>*/}
+                 Main Content
+                <div className="flex items-center justify-center pt-20">
+                    {loading ? (
+                        <Loading/>
+                    ) : (
+                        showDropZone && (
+                            <div>
+                                <DropZone
+                                    afterDrop={handleDataProcessed}
+                                    onLoadingChange={handleLoadingChange}
+                                    onError={handleError}
+                                />
+                            </div>
+                        )
+                    )}
+                </div>
 
                 {!loading && csvData && (
                     <div>
@@ -182,7 +178,7 @@ function App() {
             </div>
         </div>
     );
-};
+}
 
 
 export default App
