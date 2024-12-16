@@ -48,6 +48,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const [topDotstring, setTopDotstring] = useState<string|null>(null)
     // Access the selected sequence and top 5 sequences from the context
     const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+    const [menuVisible, setMenuVisible] = useState(false);
+
+    const toggleMenu = () => setMenuVisible(!menuVisible);
 
     /**
      * useEffect hook to generate and update the graph's DOT string whenever
@@ -158,26 +161,39 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
     // Render the Graphviz graphs within an error boundary
     return (
-        <div className="graphviz-container">
+        <div className="graphviz-container flex flex-col gap-8">
             <ErrorBoundary>
-                <div className="graphs">
+                <div className="graphs flex flex-col items-center gap-8">
                     {topDotstring && (
-                        <Graphviz
-                            dot={topDotstring}
-                            options={{ useWorker: false, height: 800, width: 600 }}
-                        />
+                        <div className="graph-item flex flex-col items-center">
+                            <h2 className="text-lg font-semibold text-center mb-2">Chosen Common Sequence</h2>
+                            <h4 className="text-lg font-normal text-center">Taken x Times</h4>
+
+                            <Graphviz
+                                dot={topDotstring}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        </div>
                     )}
                     {dotString && (
-                        <Graphviz
-                            dot={dotString}
-                            options={{ useWorker: false, height: 800, width: 600 }}
-                        />
+                        <div className="graph-item flex flex-col items-center">
+                            <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
+                            <Graphviz
+                                dot={dotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        </div>
                     )}
                     {filteredDotString && selectedSequence && (
-                        <Graphviz
-                            dot={filteredDotString}
-                            options={{ useWorker: false, height: 800, width: 600 }}
-                        />
+                        <div className="graph-item flex flex-col items-center">
+                            <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
+                            <h2 className="text-lg font-normal text-center mb-4">{filter}</h2>
+
+                            <Graphviz
+                                dot={filteredDotString}
+                                options={{useWorker: false, height: 800, width: 600}}
+                            />
+                        </div>
                     )}
                 </div>
             </ErrorBoundary>

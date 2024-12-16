@@ -50,7 +50,7 @@ const Upload: React.FC<UploadProps> = ({ onDataProcessed, onLoadingChange }) => 
 
     return (
         <div className="upload">
-            <input type="file" accept=".csv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
+            <input type="file" accept=".csv, .tsv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
         </div>
     );
 };

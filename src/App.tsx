@@ -22,7 +22,7 @@ function App() {
 
 
     // State to hold the uploaded CSV data as a string
-    const [csvData, setCsvData] = useState<string>('');
+    // const [csvData, setCsvData] = useState<string>('');
     // State to manage the filter value for filtering the graph data
     const [filter, setFilter] = useState<string>('');
     // State to toggle whether self-loops (transitions back to the same node) should be included
@@ -30,14 +30,14 @@ function App() {
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisits, setMinVisits] = useState<number>(0);
     const {resetData, setGraphData, data, setData, loading, error, setError} = useContext(Context);
-    const [showDropZone, setShowDropZone] = useState<boolean>(true);
+    // const [showDropZone, setShowDropZone] = useState<boolean>(true);
     // const handleData = (data: GlobalDataType[]) => {
     //     setData(data)
     //     setShowDropZone(false)
     // }
 
     // Extracting context values from the `Context` provider
-    const {top5Sequences, setSelectedSequence, setLoading, selectedSequence} = useContext(Context); //
+    const {top5Sequences, setSelectedSequence, setLoading, selectedSequence, csvData, setCSVData} = useContext(Context); //
 
     /**
      * Handles the selection of a sequence from the top 5 sequences.
@@ -79,7 +79,7 @@ function App() {
      *
      * @param {string} uploadedCsvData - The CSV data from the uploaded file.
      */
-    const handleDataProcessed = (uploadedCsvData: string) => setCsvData(uploadedCsvData);
+    const handleDataProcessed = (uploadedCsvData: string) => setCSVData(uploadedCsvData);
 
     /**
      * Updates the loading state when the file upload or processing begins or ends.
@@ -96,8 +96,9 @@ function App() {
             <h1>Path Analysis Tool</h1>
 
             {/* Upload component allows uploading and processing of CSV data */}
-            <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
-
+            <div className="upload flex items-center w-full mb-2">
+                <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
+            </div>
             <div className="container">
                 {/* Reset Button */}
                 <Button
@@ -105,7 +106,7 @@ function App() {
                     variant="ghost"
                     onClick={() => {
                         resetData();
-                        setShowDropZone(true);
+                        // setShowDropZone(true);
                     }}
                 >
                     Reset
@@ -120,22 +121,22 @@ function App() {
                     </div>
                 )}
 
-                 Main Content
-                <div className="flex items-center justify-center pt-20">
-                    {loading ? (
-                        <Loading/>
-                    ) : (
-                        showDropZone && (
-                            <div>
-                                <DropZone
-                                    afterDrop={handleDataProcessed}
-                                    onLoadingChange={handleLoadingChange}
-                                    onError={handleError}
-                                />
-                            </div>
-                        )
-                    )}
-                </div>
+                {/*Main Content*/}
+                {/*<div className="flex items-center justify-center pt-20">*/}
+                {/*    {loading ? (*/}
+                {/*        <Loading/>*/}
+                {/*    ) : (*/}
+                {/*        showDropZone && (*/}
+                {/*            <div>*/}
+                {/*                <DropZone*/}
+                {/*                    afterDrop={handleDataProcessed}*/}
+                {/*                    onLoadingChange={handleLoadingChange}*/}
+                {/*                    onError={handleError}*/}
+                {/*                />*/}
+                {/*            </div>*/}
+                {/*        )*/}
+                {/*    )}*/}
+                {/*</div>*/}
 
                 {!loading && csvData && (
                     <div>
@@ -165,14 +166,18 @@ function App() {
                             value={minVisits}
                             onChange={handleSlider}
                         />
+                        <div className="relative w-full h-[800px] border border-gray-300 bg-white overflow-auto">
+                            <div className="w-max h-max mx-auto">
+                                {/* GraphvizParent component generates and displays the graph based on the CSV data */}
+                                <GraphvizParent
+                                    csvData={csvData}
+                                    filter={filter}
+                                    selfLoops={selfLoops}
+                                    minVisits={minVisits}
+                                />
+                            </div>
+                        </div>
 
-                        {/* GraphvizParent component generates and displays the graph based on the CSV data */}
-                        <GraphvizParent
-                            csvData={csvData}
-                            filter={filter}
-                            selfLoops={selfLoops}
-                            minVisits={minVisits}
-                        />
                     </div>
                 )}
             </div>

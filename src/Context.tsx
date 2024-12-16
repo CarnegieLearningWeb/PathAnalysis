@@ -6,6 +6,9 @@ interface ContextInterface {
     error: string | null;
     setError: (error: string | null) => void;
     graphData: GraphData | null;
+
+    csvData: string;
+
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
@@ -14,6 +17,9 @@ interface ContextInterface {
     setGraphData: (graphData: GraphData | null) => void;
     setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
     setSelectedSequence: (selectedSequence: string[] | undefined) => void;
+
+    setCSVData: (csvData: string) => void;
+
     resetData: () => void;
 
 }
@@ -30,6 +36,7 @@ const initialState = {
     loading: false,
     top5Sequences: null,
     selectedSequence: undefined,
+    csvData:'',
 }
 
 interface ProviderProps {
@@ -42,6 +49,10 @@ export const Provider = ({children}: ProviderProps) => {
     const [graphData, setGraphData] = useState<GraphData | null>(initialState.graphData)
     const [loading, setLoading] = useState<boolean>(initialState.loading)
     const [error, setError] = useState<string | null>(null)
+
+    const [csvData, setCSVData] = useState<string>(initialState.csvData)
+
+
     // const queryClient = useQueryClient();
 
     // const { data: uploadedData } = useQuery<GlobalDataType[]>({
@@ -62,6 +73,7 @@ export const Provider = ({children}: ProviderProps) => {
 
     const resetData = () => {
         setData(null)
+        setCSVData('')
         setError(null)
         setGraphData(null)
         setTop5Sequences(null)
@@ -79,13 +91,15 @@ export const Provider = ({children}: ProviderProps) => {
                 top5Sequences,
                 selectedSequence,
                 error,
+                csvData,
                 setError,
                 setLoading,
                 setData,
                 setGraphData,
-                resetData,
                 setTop5Sequences,
                 setSelectedSequence,
+                setCSVData,
+                resetData,
             }}
         >
             {children}
