@@ -1,4 +1,6 @@
-import React, { useContext, useEffect, useState } from 'react';
+// React component code
+import React, {useContext, useEffect, useRef, useState} from 'react';
+import {graphviz} from 'd3-graphviz';
 import {
     generateDotString,
     normalizeThicknesses,
@@ -7,20 +9,10 @@ import {
     createOutcomeSequences,
     loadAndSortData
 } from './GraphvizProcessing';
-import Graphviz from "graphviz-react";
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import { Context } from "@/Context.tsx";
-import {initial} from "lodash";
+import {Context} from "@/Context.tsx";
 
-/**
- * Props interface for the GraphvizParent component.
- * @interface GraphvizParentProps
- * @property {string} csvData - The raw CSV data used to generate the graph.
- * @property {string | null} filter - Optional filter string to filter the graph data.
- * @property {boolean} selfLoops - Whether self-loops (transitions back to the same node) should be included.
- * @property {number} minVisits - The minimum number of visits a step sequence must have to be displayed in the graph.
- */
 interface GraphvizParentProps {
     csvData: string;
     filter: string | null;
@@ -28,43 +20,28 @@ interface GraphvizParentProps {
     minVisits: number;
 }
 
-/**
- * GraphvizParent component handles the processing and visualization of CSV data
- * as a directed graph using the Graphviz library.
- *
- * @param {GraphvizParentProps} props - The properties required by the component.
- * @returns JSX.Element
- */
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
-    csvData,
-    filter,
-    selfLoops,
-    minVisits,
-}) => {
-    // State to hold the main DOT string generated for the Graphviz graph
+                                                           csvData,
+                                                           filter,
+                                                           selfLoops,
+                                                           minVisits,
+                                                       }) => {
     const [dotString, setDotString] = useState<string | null>(null);
-    // State to hold the filtered DOT string based on the filter criteria
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
-    const [topDotstring, setTopDotstring] = useState<string|null>(null)
-    // Access the selected sequence and top 5 sequences from the context
-    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
-    const [menuVisible, setMenuVisible] = useState(false);
+    const [topDotString, setTopDotString] = useState<string | null>(null);
+    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences} = useContext(Context);
 
-    const toggleMenu = () => setMenuVisible(!menuVisible);
+    // Refs for rendering the Graphviz graphs
+    const graphRefMain = useRef<HTMLDivElement>(null);
+    const graphRefFiltered = useRef<HTMLDivElement>(null);
+    const graphRefTop = useRef<HTMLDivElement>(null);
 
-    /**
-     * useEffect hook to generate and update the graph's DOT string whenever
-     * csvData, selfLoops, minVisits, or selectedSequence changes.
-     */
     useEffect(() => {
         if (csvData) {
-            // Load and sort the CSV data
             const sortedData = loadAndSortData(csvData);
-            // Generate step and outcome sequences from the sorted data
             const stepSequences = createStepSequences(sortedData, selfLoops);
             const outcomeSequences = createOutcomeSequences(sortedData);
 
-            // Count edges and sequences, including top 5 sequences
             const {
                 edgeCounts,
                 totalNodeEdges,
@@ -74,61 +51,52 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 topSequences
             } = countEdges(stepSequences, outcomeSequences);
 
-            // If the top 5 sequences differ, update the context with the new sequences
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
                 setTop5Sequences(topSequences);
-                // If no sequence is selected, select the first sequence
                 if (topSequences && selectedSequence === undefined) {
                     setSelectedSequence(topSequences![0].sequence);
                 }
             }
 
-            // Normalize the edge thicknesses based on the edge counts
             const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
-            // Generate the Graphviz DOT string using the processed data
-            const generatedDotStr = generateDotString(
-                normalizedThicknesses,
-                ratioEdges,
-                edgeOutcomeCounts,
-                edgeCounts,
-                totalNodeEdges,
-                1,
-                minVisits,
-                selectedSequence, false
-            );
-            // Update the state with the generated DOT string
-            setDotString(generatedDotStr);
 
-            const generatedTopDotStr = generateDotString(
-                normalizedThicknesses,
-                ratioEdges,
-                edgeOutcomeCounts,
-                edgeCounts,
-                totalNodeEdges,
-                1,
-                minVisits,
-                selectedSequence, true
+            setDotString(
+                generateDotString(
+                    normalizedThicknesses,
+                    ratioEdges,
+                    edgeOutcomeCounts,
+                    edgeCounts,
+                    totalNodeEdges,
+                    1,
+                    minVisits,
+                    selectedSequence,
+                    false
+                )
             );
-            setTopDotstring(generatedTopDotStr)
 
+            setTopDotString(
+                generateDotString(
+                    normalizedThicknesses,
+                    ratioEdges,
+                    edgeOutcomeCounts,
+                    edgeCounts,
+                    totalNodeEdges,
+                    1,
+                    minVisits,
+                    selectedSequence,
+                    true
+                )
+            );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setDotString, dotString, setTop5Sequences, top5Sequences]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences]);
 
-    /**
-     * useEffect hook to update the filtered graph's DOT string whenever
-     * the filter, csvData, selfLoops, or minVisits changes.
-     */
     useEffect(() => {
         if (filter) {
-            // Load and sort the CSV data
             const sortedData = loadAndSortData(csvData);
-            // Filter the data based on the filter condition
             const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            // Generate step and outcome sequences from the filtered data
             const filteredStepSequences = createStepSequences(filteredData, selfLoops);
             const filteredOutcomeSequences = createOutcomeSequences(filteredData);
 
-            // Count edges in the filtered data
             const {
                 edgeCounts: filteredEdgeCounts,
                 totalNodeEdges: filteredTotalNodeEdges,
@@ -137,68 +105,130 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 maxEdgeCount: filteredMaxEdgeCount,
             } = countEdges(filteredStepSequences, filteredOutcomeSequences);
 
-            // Normalize the edge thicknesses for the filtered data
             const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
-            // Generate the Graphviz DOT string for the filtered data
-            const filteredDotStr = generateDotString(
-                filteredNormalizedThicknesses,
-                filteredRatioEdges,
-                filteredEdgeOutcomeCounts,
-                filteredEdgeCounts,
-                filteredTotalNodeEdges,
-                1,
-                minVisits,
-                selectedSequence,
-                false
+
+            setFilteredDotString(
+                generateDotString(
+                    filteredNormalizedThicknesses,
+                    filteredRatioEdges,
+                    filteredEdgeOutcomeCounts,
+                    filteredEdgeCounts,
+                    filteredTotalNodeEdges,
+                    1,
+                    minVisits,
+                    selectedSequence,
+                    false
+                )
             );
-
-            // Update the state with the filtered DOT string
-            setFilteredDotString(filteredDotStr);
         } else {
-            setFilteredDotString(null);  // Reset filtered graph if no filter is applied
+            setFilteredDotString(null);
         }
-    }, [csvData, filter, selfLoops, minVisits, selectedSequence, top5Sequences]);
+    }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
 
-    // Render the Graphviz graphs within an error boundary
+    // Render Graphviz graphs using d3-graphviz
+    const renderGraph = (dot: string | null, ref: React.RefObject<HTMLDivElement>) => {
+        if (dot && ref.current) {
+            graphviz(ref.current)
+                .width(800)
+                .height(600)
+                .renderDot(dot);
+        }
+    };
+
+    // Export a graph as high-quality PNG
+    const exportGraphAsPNG = (
+        ref: React.RefObject<HTMLDivElement>,
+        fileName: string,
+        scale: number = 2, // Scale for higher quality
+        margin: number = 20 // Smaller margin in pixels
+    ) => {
+        if (ref.current) {
+            const svgElement = ref.current.querySelector('svg');
+            if (svgElement) {
+                const svgData = new XMLSerializer().serializeToString(svgElement);
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                const img = new Image();
+
+                img.onload = () => {
+                    const graphWidth = img.width * scale;
+                    const graphHeight = img.height * scale;
+
+                    // Set canvas size with smaller margins
+                    canvas.width = graphWidth + margin * 2;
+                    canvas.height = graphHeight + margin * 2;
+
+                    // Fill background (optional)
+                    context!.fillStyle = 'white';
+                    context!.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Draw the graph centered within the canvas
+                    const xOffset = (canvas.width - graphWidth) / 2;
+                    const yOffset = (canvas.height - graphHeight) / 2;
+                    context!.drawImage(img, xOffset, yOffset, graphWidth, graphHeight);
+
+                    // Export to PNG
+                    const pngData = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.href = pngData;
+                    link.download = `${fileName}.png`;
+                    link.click();
+                };
+
+                img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+            }
+        }
+    };
+
+    useEffect(() => renderGraph(dotString, graphRefMain), [dotString]);
+    useEffect(() => renderGraph(filteredDotString, graphRefFiltered), [filteredDotString]);
+    useEffect(() => renderGraph(topDotString, graphRefTop), [topDotString]);
+
     return (
-        <div className="graphviz-container flex flex-col gap-8">
+        <div className="graphviz-container flex flex-col gap-8 w-full items-center">
             <ErrorBoundary>
-                <div className="graphs flex flex-col items-center gap-8">
-                    {topDotstring && (
+                <div className="graphs flex justify-center gap-8 w-full">
+                    {topDotString && (
                         <div className="graph-item flex flex-col items-center">
-                            <h2 className="text-lg font-semibold text-center mb-2">Chosen Common Sequence</h2>
-                            <h4 className="text-lg font-normal text-center">Taken x Times</h4>
-
-                            <Graphviz
-                                dot={topDotstring}
-                                options={{useWorker: false, height: 800, width: 600}}
-                            />
+                            <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
+                            <div ref={graphRefTop} className="w-auto h-auto"></div>
+                            <button
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
+                                onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')}
+                            >
+                                Export as PNG
+                            </button>
                         </div>
                     )}
                     {dotString && (
                         <div className="graph-item flex flex-col items-center">
                             <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
-                            <Graphviz
-                                dot={dotString}
-                                options={{useWorker: false, height: 800, width: 600}}
-                            />
+                            <div ref={graphRefMain} className="w-auto h-auto"></div>
+                            <button
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
+                                onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')}
+                            >
+                                Export as PNG
+                            </button>
                         </div>
                     )}
-                    {filteredDotString && selectedSequence && (
+                    {filteredDotString && (
                         <div className="graph-item flex flex-col items-center">
                             <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
-                            <h2 className="text-lg font-normal text-center mb-4">{filter}</h2>
-
-                            <Graphviz
-                                dot={filteredDotString}
-                                options={{useWorker: false, height: 800, width: 600}}
-                            />
+                            <div ref={graphRefFiltered} className="w-auto h-auto"></div>
+                            <button
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
+                                onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')}
+                            >
+                                Export as PNG
+                            </button>
                         </div>
                     )}
                 </div>
             </ErrorBoundary>
         </div>
     );
-};
+}
 
 export default GraphvizParent;

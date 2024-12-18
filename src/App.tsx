@@ -29,6 +29,7 @@ function App() {
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisits, setMinVisits] = useState<number>(0);
+    const [menuVisible, setMenuVisible] = useState(false);
     const {resetData, setGraphData, data, setData, loading, error, setError} = useContext(Context);
     // const [showDropZone, setShowDropZone] = useState<boolean>(true);
     // const handleData = (data: GlobalDataType[]) => {
@@ -61,7 +62,7 @@ function App() {
         setError(errorMessage);
     }
 
-
+    const toggleMenu = () => setMenuVisible(!menuVisible);
     /**
      * Toggles the self-loops inclusion in the graph by switching the state.
      */
@@ -93,8 +94,9 @@ function App() {
     // Rendering the components that allow user interaction and display the graph
     return (
         <div>
-            <h1>Path Analysis Tool</h1>
-
+            <div className="header-bar">
+                <h1>Path Analysis Tool</h1>
+            </div>
             {/* Upload component allows uploading and processing of CSV data */}
             <div className="upload flex items-center w-full mb-2">
                 <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange}/>
@@ -104,10 +106,7 @@ function App() {
                 <Button
                     className="m-2"
                     variant="ghost"
-                    onClick={() => {
-                        resetData();
-                        // setShowDropZone(true);
-                    }}
+                    onClick={resetData}
                 >
                     Reset
                 </Button>
@@ -120,45 +119,39 @@ function App() {
                         ))}
                     </div>
                 )}
+                {/* Display the currently selected sequence */}
 
-                {/*Main Content*/}
-                {/*<div className="flex items-center justify-center pt-20">*/}
-                {/*    {loading ? (*/}
-                {/*        <Loading/>*/}
-                {/*    ) : (*/}
-                {/*        showDropZone && (*/}
-                {/*            <div>*/}
-                {/*                <DropZone*/}
-                {/*                    afterDrop={handleDataProcessed}*/}
-                {/*                    onLoadingChange={handleLoadingChange}*/}
-                {/*                    onError={handleError}*/}
-                {/*                />*/}
-                {/*            </div>*/}
-                {/*        )*/}
-                {/*    )}*/}
-                {/*</div>*/}
+                <div className="selected-sequence-bar flex justify-between bg-gray-200 p-4 mb-4">
+                    <h2 className="text-lg font-semibold">Selected Sequence:</h2>
+                    {selectedSequence && (
+                        <h2 className="flex-1 text-sm break-words whitespace-normal ml-2">
+                            {selectedSequence.toString().split(',').join(' → ')}
+                        </h2>
+                    )}
+                </div>
+                {/* Properties Button */}
+                <button
+                    className="flex-auto top-10 left-10 bg-blue-500 text-white z-30 rounded-md p-4 mb-4"
+                    onClick={toggleMenu}
+                >
+                    {menuVisible ? "Hide Properties" : "Show Properties"}
+                </button>
 
-                {!loading && csvData && (
-                    <div>
-                        {/* FilterComponent allows filtering the graph data */}
-                        <FilterComponent onFilterChange={setFilter}/>
+                {/* Properties Menu */}
 
-                        {/* Display the currently selected sequence */}
-                        {selectedSequence && (
-                            <h2>{selectedSequence.toString().split('->').join(' -> ')}</h2>
-                        )}
-
-                        {/* SequenceSelector allows choosing one of the top 5 sequences */}
+                {menuVisible && (
+                    <div className="absolute top-50 left-4 p-4 bg-gray-200 z-30 shadow-lg w-85 rounded-lg">
+                        <h3 className="text-md font-semibold mb-4">Properties Menu</h3>
+                        <FilterComponent onFilterChange={setFilter} />
+                        {/*{selectedSequence && (*/}
+                        {/*    <h2>{selectedSequence.toString().split('->').join(' -> ')}</h2>*/}
+                        {/*)}*/}
                         <SequenceSelector
                             onSequenceSelect={handleSelectSequence}
                             sequences={top5Sequences!}
                             selectedSequence={selectedSequence}
                         />
-
-                        {/* SelfLoopSwitch toggles whether self-loops should be included in the graph */}
-                        <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle}/>
-
-                        {/* Slider adjusts the minimum visits for displaying edges in the graph */}
+                        <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
                         <Slider
                             step={5}
                             min={0}
@@ -166,6 +159,12 @@ function App() {
                             value={minVisits}
                             onChange={handleSlider}
                         />
+                    </div>
+                )}
+
+                {/* Graph and Data Display */}
+                {!loading && csvData && (
+                    <div>
                         <div className="relative w-full h-[800px] border border-gray-300 bg-white overflow-auto">
                             <div className="w-max h-max mx-auto">
                                 {/* GraphvizParent component generates and displays the graph based on the CSV data */}
@@ -177,13 +176,12 @@ function App() {
                                 />
                             </div>
                         </div>
-
                     </div>
                 )}
             </div>
         </div>
     );
-}
+};
 
 
 export default App

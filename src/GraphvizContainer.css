@@ -8,14 +8,14 @@
 /*    transform: translateY(-150px);*/
 /*}*/
 
-.graphs {
-    display: flex;
-    flex-direction: row; /* Ensure the graphs are aligned in a row */
-    justify-content: space-around;
-    align-items: center;
-    /*gap: 10px;*/
-    width: 100%; /* Ensure the graphs container takes full width */
-}
+/*.graphs {*/
+/*    display: flex;*/
+/*    flex-direction: row; !* Ensure the graphs are aligned in a row *!*/
+/*    justify-content: space-around;*/
+/*    align-items: center;*/
+/*    !*gap: 10px;*!*/
+/*    width: 100%; !* Ensure the graphs container takes full width *!*/
+/*}*/
 
 /*.graphs > div {*/
 /*    flex: 1; !* Allow the graphs to scale according to available space *!*/

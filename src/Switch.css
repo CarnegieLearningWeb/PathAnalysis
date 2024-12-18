@@ -9,7 +9,7 @@
   height: 25px;
   border-radius: 25px;
   background-color: grey;
-  position: relative;
+  position: sticky;
   left: 0px;
   top: 0px;
   transition: background-color 0.2s;

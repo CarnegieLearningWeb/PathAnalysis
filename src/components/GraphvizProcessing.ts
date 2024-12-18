@@ -12,7 +12,6 @@ interface CSVRow {
 }
 
 
-// TODO: Add compare first 3 and last 3 problems by student
 /**
  * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
  * @param csvData - The raw CSV data as a string.
