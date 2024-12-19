@@ -5,11 +5,10 @@ import { Label } from './ui/label';
 
 interface UploadProps {
     onDataProcessed: (csvData: string) => void; // Callback function to handle processed CSV data
-    onLoadingChange: (loading: boolean) => void; // Callback function to manage loading state
 }
 
 // Functional component for file upload
-function Upload({ onDataProcessed, onLoadingChange }: UploadProps) {
+function Upload({ onDataProcessed }: UploadProps) {
     // Access loading state and setter from Context
     const { loading, setLoading } = useContext(Context);
 
@@ -21,8 +20,6 @@ function Upload({ onDataProcessed, onLoadingChange }: UploadProps) {
         if (file) {
             // Set loading state to true when the file is selected
             setLoading(true);
-            onLoadingChange(loading);
-            console.log(onLoadingChange);
 
             // Create a FileReader to read the contents of the uploaded file
             const reader = new FileReader();
@@ -34,14 +31,12 @@ function Upload({ onDataProcessed, onLoadingChange }: UploadProps) {
 
                 // Set loading state to false when the file is processed
                 setLoading(false);
-                onLoadingChange(loading);
             };
 
             // Define what happens in case of an error while reading the file
             reader.onerror = () => {
                 // Set loading state to false in case of an error
                 setLoading(false);
-                onLoadingChange(loading);
             };
 
             // Read the file as text

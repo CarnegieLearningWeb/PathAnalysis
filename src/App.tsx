@@ -10,6 +10,7 @@ import Slider from './components/slider.tsx';
 import SequenceSelector from "@/components/SequenceSelector.tsx";
 import { Context, SequenceCount } from "@/Context.tsx";
 import { Separator } from "@/components/ui/separator"
+import Loading from './components/Loading.tsx';
 
 function App() {
     // State to hold the uploaded CSV data as a string
@@ -70,10 +71,7 @@ function App() {
      *
      * @param {boolean} loading - Whether the data is currently loading/processing.
      */
-    const handleLoadingChange = (loading: boolean) => {
-        setLoading(loading);
-        // toggle the visibility of the controls based on the loading state
-    };
+ 
     // Rendering the components that allow user interaction and display the graph
     return (
         <div className='p-3'>
@@ -90,8 +88,9 @@ function App() {
                     </div>
                 </div>
             </header>
-            <Upload onDataProcessed={handleDataProcessed} onLoadingChange={handleLoadingChange} />
-
+            {!showControls && <Upload onDataProcessed={handleDataProcessed}  />}
+            
+            {loading && <Loading />}
             {/* Display Error Message */}
             {error && (
                 <div className="text-red-500 p-4 m-4 bg-red-50 rounded-md">
@@ -102,10 +101,10 @@ function App() {
             )}
             {/* Display the currently selected sequence */}
 
-          
             {
                 showControls && (
-                    <>
+                    <div className="p-5 m-2">
+                        
                         <div className="selected-sequence-bar flex justify-between bg-gray-200 p-4 mb-4">
                             <h2 className="text-lg font-semibold">Selected Sequence:</h2>
                             {selectedSequence && (
@@ -163,7 +162,7 @@ function App() {
                                 </div>
                             </div>
                         )}
-                    </>
+                    </div>
                 )
             }
         </div>
