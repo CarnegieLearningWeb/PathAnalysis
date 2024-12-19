@@ -26,3 +26,4 @@ public/sample_data
 .env
 src/lib/local_sample_data
 .vercel
+bun.lockb
