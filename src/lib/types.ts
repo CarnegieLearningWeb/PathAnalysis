@@ -20,7 +20,8 @@ export type DataSet1 = {
     "Step Name": string | null;
     "Attempt At Step": number;
     "Is Last Attempt": boolean | null;
-    Outcome: "OK" | "BUG" | "INITIAL_HINT" | "HINT_LEVEL_CHANGE" | "ERROR";
+     Outcome: "OK" | "JIT" | "ERROR" | "INITIAL_HINT" | "HINT_LEVEL_CHANGE" | "FREEBIE_JIT"
+
     Selection: "Done Button" | null;
     Action: "Attempt" | "Done" | "Hint Request" | "Hint Level Change";
     Input: string | null;
