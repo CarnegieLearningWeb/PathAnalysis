@@ -1,15 +1,19 @@
 import './App.css';
-import { useContext, useEffect, useMemo, useState } from 'react';
-import DropZone from './components/DropZone';
+import { useContext, useMemo, useState } from 'react';
 import { Button } from './components/ui/button';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
 import FilterComponent from './components/FilterComponent.tsx';
 import SelfLoopSwitch from './components/selfLoopSwitch.tsx';
-import Slider from './components/slider.tsx';
+import Slider from '@/components/slider.tsx';
 import SequenceSelector from "@/components/SequenceSelector.tsx";
 import { Context, SequenceCount } from "@/Context.tsx";
-import { Separator } from "@/components/ui/separator"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+
 import Loading from './components/Loading.tsx';
 
 function App() {
@@ -21,8 +25,7 @@ function App() {
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisits, setMinVisits] = useState<number>(0);
-    const [menuVisible, setMenuVisible] = useState(false);
-    const { resetData, setGraphData, data, setData, loading, error, setError, top5Sequences, setSelectedSequence, setLoading, selectedSequence, csvData, setCSVData } = useContext(Context);
+    const { resetData, loading, error, setError, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
     const showControls = useMemo(() => {
         if (loading == false && csvData.length > 0) {
             return true;
@@ -46,7 +49,6 @@ function App() {
         setError(errorMessage);
     }
 
-    const toggleMenu = () => setMenuVisible(!menuVisible);
     /**
      * Toggles the self-loops inclusion in the graph by switching the state.
      */
@@ -71,7 +73,7 @@ function App() {
      *
      * @param {boolean} loading - Whether the data is currently loading/processing.
      */
- 
+
     // Rendering the components that allow user interaction and display the graph
     return (
         <div className='p-3'>
@@ -88,8 +90,8 @@ function App() {
                     </div>
                 </div>
             </header>
-            {!showControls && <Upload onDataProcessed={handleDataProcessed}  />}
-            
+            {!showControls && <Upload onDataProcessed={handleDataProcessed} />}
+
             {loading && <Loading />}
             {/* Display Error Message */}
             {error && (
@@ -103,8 +105,8 @@ function App() {
 
             {
                 showControls && (
-                    <div className="p-5 m-2">
-                        
+                    <div className="p-5 m-2 flex flex-col gap-3">
+
                         <div className="selected-sequence-bar flex justify-between bg-gray-200 p-4 mb-4">
                             <h2 className="text-lg font-semibold">Selected Sequence:</h2>
                             {selectedSequence && (
@@ -114,37 +116,47 @@ function App() {
                             )}
                         </div>
                         {/* Properties Button */}
-                        <button
-                            className="flex-auto top-10 left-10 bg-blue-500 text-white z-30 rounded-md p-4 mb-4"
-                            onClick={toggleMenu}
-                        >
-                            {menuVisible ? "Hide Properties" : "Show Properties"}
-                        </button>
+                        <Popover>
+                            <PopoverTrigger className="w-fit bg-slate-500 p-3 rounded-lg text-white">Properties</PopoverTrigger>
+                            <PopoverContent className="w-96 bg-white rounded-lg shadow-lg p-6 border border-gray-200 mx-10">
+                                <div className="flex flex-col space-y-6">
+                                    {/* Filter Section */}
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+                                        <FilterComponent onFilterChange={setFilter} />
+                                    </div>
 
-                        {/* Properties Menu */}
+                                    {/* Sequence Section */}
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-semibold text-gray-900">Sequences</h3>
+                                        <SequenceSelector
+                                            onSequenceSelect={handleSelectSequence}
+                                            sequences={top5Sequences || []}
+                                            selectedSequence={selectedSequence}
+                                        />
+                                    </div>
 
-                        {menuVisible && (
-                            <div className="absolute top-50 left-4 p-4 bg-gray-200 z-30 shadow-lg w-85 rounded-lg">
-                                <h3 className="text-md font-semibold mb-4">Properties Menu</h3>
-                                <FilterComponent onFilterChange={setFilter} />
-                                {/*{selectedSequence && (*/}
-                                {/*    <h2>{selectedSequence.toString().split('->').join(' -> ')}</h2>*/}
-                                {/*)}*/}
-                                <SequenceSelector
-                                    onSequenceSelect={handleSelectSequence}
-                                    sequences={top5Sequences!}
-                                    selectedSequence={selectedSequence}
-                                />
-                                <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
-                                <Slider
-                                    step={5}
-                                    min={0}
-                                    max={5000}
-                                    value={minVisits}
-                                    onChange={handleSlider}
-                                />
-                            </div>
-                        )}
+                                    {/* Controls Section */}
+                                    <div className="space-y-4">
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium text-gray-700">Edge Visits</label>
+                                            <Slider
+                                                step={5}
+                                                min={0}
+                                                max={5000}
+                                                value={minVisits}
+                                                onChange={handleSlider}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+
 
                         {/* Graph and Data Display */}
                         {!loading && csvData && (

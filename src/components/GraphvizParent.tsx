@@ -1,6 +1,6 @@
 // React component code
-import React, {useContext, useEffect, useRef, useState} from 'react';
-import {graphviz} from 'd3-graphviz';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
     normalizeThicknesses,
@@ -11,7 +11,8 @@ import {
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import {Context} from "@/Context.tsx";
+import { Context } from "@/Context.tsx";
+import { Button } from './ui/button';
 
 interface GraphvizParentProps {
     csvData: string;
@@ -21,15 +22,15 @@ interface GraphvizParentProps {
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
-                                                           csvData,
-                                                           filter,
-                                                           selfLoops,
-                                                           minVisits,
-                                                       }) => {
+    csvData,
+    filter,
+    selfLoops,
+    minVisits,
+}) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
-    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences} = useContext(Context);
+    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -193,36 +194,21 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         <div className="graph-item flex flex-col items-center">
                             <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
                             <div ref={graphRefTop} className="w-auto h-auto"></div>
-                            <button
-                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
-                                onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')}
-                            >
-                                Export as PNG
-                            </button>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
                         </div>
                     )}
                     {dotString && (
                         <div className="graph-item flex flex-col items-center">
                             <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
                             <div ref={graphRefMain} className="w-auto h-auto"></div>
-                            <button
-                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
-                                onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')}
-                            >
-                                Export as PNG
-                            </button>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} />
                         </div>
                     )}
                     {filteredDotString && (
                         <div className="graph-item flex flex-col items-center">
                             <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
                             <div ref={graphRefFiltered} className="w-auto h-auto"></div>
-                            <button
-                                className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300"
-                                onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')}
-                            >
-                                Export as PNG
-                            </button>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
                         </div>
                     )}
                 </div>
@@ -232,3 +218,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 }
 
 export default GraphvizParent;
+
+
+interface ExportButtonProps {
+    onClick: () => void;
+    label?: string;
+}
+
+function ExportButton({ onClick, label = "Export Image" }: ExportButtonProps) {
+    return (
+        <Button
+            variant={'secondary'}
+            onClick={onClick}
+        >
+            {label}
+        </Button>
+    );
+};

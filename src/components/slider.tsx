@@ -22,8 +22,11 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange}) =>
     };
 
     return (
-        <div style={{width: '300px', margin: '40px auto', textAlign: 'left', display: 'flex', float: 'left',  }}>
-            <p style={{marginLeft: '10px'}}>Minimum # of Edge Visits to Display: {value}</p>
+        <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+            Minimum Edge Visits: {value}
+        </label>
+        <div className="flex items-center space-x-4">
             <input
                 type="range"
                 min={min}
@@ -31,19 +34,20 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange}) =>
                 step={step}
                 value={value}
                 onChange={handleSliderChange}
-                // style={{flex: 1}} // Use flex to make it responsive
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer 
+                    accent-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-
             <input
                 type="number"
                 min={min}
                 max={max}
                 value={value}
                 onChange={handleInputChange}
-                style={{width: '60px', marginLeft: '10px', border: 'black', outline: 'black'}} // Style the input box
+                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-md 
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-
         </div>
+    </div>
     );
 };
 

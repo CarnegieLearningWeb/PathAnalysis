@@ -16,18 +16,24 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
 }) => {
     // Display a message when no sequences are present
     if (sequences == null || sequences.length === 0) {
-        return <div>No sequences available</div>;
+        return <div className="text-sm">No sequences available</div>;
     }
 
     return (
-        <div>
+        <div className="space-y-2">
             <select
-                value={selectedSequence?.join(',') || ' '} // Set the selected value from the state or an empty string
-                onChange={(e) => onSequenceSelect(e.target.value.split(','))} // Handle sequence selection
+                className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={selectedSequence?.join(',') || ' '}
+                onChange={(e) => onSequenceSelect(e.target.value.split(','))}
             >
+                <option value=" " disabled>Select a sequence...</option>
                 {sequences.map((seq: SequenceCount) => (
-                    <option key={seq.sequence!.join(',')} value={seq.sequence!.join(',')}>
-                        (Color nodes by path taken {seq.count} times)
+                    <option
+                        key={seq.sequence!.join(',')}
+                        value={seq.sequence!.join(',')}
+                        className="py-1"
+                    >
+                        Path taken {seq.count} times
                     </option>
                 ))}
             </select>

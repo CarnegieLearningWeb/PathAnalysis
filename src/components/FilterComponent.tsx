@@ -1,23 +1,32 @@
 import React from 'react';
-
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 interface FilterComponentProps {
     onFilterChange: (filter: string) => void;
 }
-
 const FilterComponent: React.FC<FilterComponentProps> = ({ onFilterChange }) => {
-    const handleFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-        onFilterChange(event.target.value);
-    };
-
     return (
-        <div>
-            <label htmlFor="statusFilter">Filter by Completion Status:</label>
-            <select id="statusFilter" onChange={handleFilterChange}>
-                <option value="">All</option>
-                <option value="GRADUATED">Graduated</option>
-                <option value="PROMOTED">Promoted</option>
-            </select>
-        </div>
+        <div className="space-y-2">
+        <Select onValueChange={(value) => onFilterChange(value)}>
+            <SelectTrigger>
+                <SelectValue placeholder="Filter by Status" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectGroup>
+                    <SelectItem value="ALL STATUSES">All Statuses</SelectItem>
+                    <SelectItem value="GRADUATED">Graduated</SelectItem>
+                    <SelectItem value="PROMOTED">Promoted</SelectItem>
+                </SelectGroup>
+            </SelectContent>
+        </Select>
+    </div>
     );
 };
 
