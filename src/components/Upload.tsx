@@ -1,14 +1,15 @@
 import React, { useContext } from 'react';
 import { Context } from "@/Context.tsx";
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
-// Define the props for the Upload component
 interface UploadProps {
     onDataProcessed: (csvData: string) => void; // Callback function to handle processed CSV data
     onLoadingChange: (loading: boolean) => void; // Callback function to manage loading state
 }
 
 // Functional component for file upload
-const Upload: React.FC<UploadProps> = ({ onDataProcessed, onLoadingChange }) => {
+function Upload({ onDataProcessed, onLoadingChange }: UploadProps) {
     // Access loading state and setter from Context
     const { loading, setLoading } = useContext(Context);
 
@@ -49,8 +50,9 @@ const Upload: React.FC<UploadProps> = ({ onDataProcessed, onLoadingChange }) => 
     };
 
     return (
-        <div className="upload">
-            <input type="file" accept=".csv, .tsv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
+        <div className="container flex flex-col gap-3 ">
+            <Label htmlFor='upload'>Upload CSV</Label>
+            <Input className='' id='upload' type="file" accept=".csv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
         </div>
     );
 };
