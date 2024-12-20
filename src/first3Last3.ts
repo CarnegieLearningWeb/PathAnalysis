@@ -1,6 +1,6 @@
-import Papa from 'papaparse';
-
-interface CSVRow {
+// import Papa from 'papaparse';
+//
+export interface CSVRow {
     'Session Id': string;
     'Time': string;
     'Step Name': string;

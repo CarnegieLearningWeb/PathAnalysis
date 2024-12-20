@@ -10,7 +10,7 @@ interface UploadProps {
 // Functional component for file upload
 function Upload({ onDataProcessed }: UploadProps) {
     // Access loading state and setter from Context
-    const { loading, setLoading } = useContext(Context);
+    const { setLoading } = useContext(Context);
 
     // Handle file upload event
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
