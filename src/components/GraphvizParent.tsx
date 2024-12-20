@@ -1,5 +1,5 @@
 // React component code
-import React, {useContext, useEffect, useRef, useState} from 'react';
+import {FC, RefObject, useContext, useEffect, useRef, useState} from 'react';
 import {graphviz} from 'd3-graphviz';
 import {
     generateDotString,
@@ -21,12 +21,7 @@ interface GraphvizParentProps {
     minVisits: number;
 }
 
-const GraphvizParent: React.FC<GraphvizParentProps> = ({
-                                                           csvData,
-                                                           filter,
-                                                           selfLoops,
-                                                           minVisits,
-                                                       }) => {
+const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, minVisits}) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
@@ -145,14 +140,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 .on('end', () => {
                     const svgElement = ref.current?.querySelector('svg');
                     if (svgElement) {
-                        exportGraphAsPNG(svgElement, filename);
+                        exportGraphAsPNG(ref, filename);
                     }
                 });
         }
     };
 
     // Export a graph as high-quality PNG
-    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
+    const exportGraphAsPNG = (graphRef: RefObject<HTMLDivElement>, filename: string) => {
         if (!graphRef.current) return;
 
         const svgElement = graphRef.current.querySelector('svg');
@@ -213,8 +208,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     useEffect(() => {
         renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
     }, [filteredDotString]);
-
-
 
 
     return (
