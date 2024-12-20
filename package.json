@@ -55,7 +55,7 @@
     "tailwindcss-animate": "^1.0.7",
     "timsort": "^0.3.0",
     "update-browserslist-db": "^1.1.1",
-    "vercel": "^34.1.8",
+    "vercel": "^39.2.2",
     "vite-bundle-visualizer": "^1.1.0"
   },
   "devDependencies": {
@@ -68,7 +68,7 @@
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
     "autoprefixer": "^10.4.19",
-    "eslint": "^8.57.0",
+    "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "postcss": "^8.4.38",
