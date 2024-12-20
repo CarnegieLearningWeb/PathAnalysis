@@ -1,0 +1,47 @@
+/* src/Switch.css */
+.switch-container {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.switch {
+  width: 50px;
+  height: 25px;
+  border-radius: 25px;
+  background-color: grey;
+  position: sticky;
+  left: 0px;
+  top: 0px;
+  transition: background-color 0.2s;
+}
+
+.true {
+  background-color: #80d580;
+}
+
+.false {
+  background-color: #b20da7;
+}
+
+.switch-handle {
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background-color: white;
+  position: relative;
+  top: 1px;
+  left: 1px;
+  transition: left 0.1s;
+}
+
+.true .switch-handle {
+  left: 26px;
+}
+
+.switch-display{    /*Not working*/
+  display: none;
+}
+
+.switch.disabled{   /*Not working*/
+  visibility: hidden;
+}
