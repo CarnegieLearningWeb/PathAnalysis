@@ -1,14 +1,11 @@
-import {GlobalDataType} from "./types";
+import { GlobalDataType } from "./types";
 
 
-export function filterPromGrad(data: GlobalDataType[], promOrGrad: "GRADUATED" | "PROMOTED" | null| string): GlobalDataType[] {
-    // If no data has been imported into DropZone, do nothing
-    // if (data == null) {
-    // }
-    if (promOrGrad !== null) {
-        return data.filter(item => item["CF (Workspace Progress Status)"] === promOrGrad);
-    } else {
-        // Return the original data if promOrGrad is null
+export function filterPromGrad(data: GlobalDataType[], promOrGrad: "GRADUATED" | "PROMOTED" | "ALL" | null): GlobalDataType[] {
+    // Return all data if promOrGrad is null or "ALL"
+    if (promOrGrad === "ALL" || promOrGrad === null) {
         return data;
     }
+    // Only filter for GRADUATED or PROMOTED
+    return data.filter(item => item["CF (Workspace Progress Status)"] === promOrGrad);
 }
