@@ -159,8 +159,8 @@ function App() {
                         {/* Graph and Data Display */}
                         {!loading && csvData && (
                             <div>
-                                <div className="relative w-full h-[800px] border border-gray-300 bg-white overflow-auto">
-                                    <div className="w-max h-max mx-auto">
+                                <div className="relative w-full h-[700px] border border-gray-300 bg-white overflow-fit">
+                                    <div className="w-max h-max mx-auto ">
                                         {/* GraphvizParent component generates and displays the graph based on the CSV data */}
                                         <GraphvizParent
                                             csvData={csvData}

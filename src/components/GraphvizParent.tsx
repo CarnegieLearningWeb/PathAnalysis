@@ -1,6 +1,6 @@
 // React component code
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { graphviz } from 'd3-graphviz';
+import React, {useContext, useEffect, useRef, useState} from 'react';
+import {graphviz} from 'd3-graphviz';
 import {
     generateDotString,
     normalizeThicknesses,
@@ -11,8 +11,8 @@ import {
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import { Context } from "@/Context.tsx";
-import { Button } from './ui/button';
+import {Context} from "@/Context.tsx";
+import {Button} from './ui/button';
 
 interface GraphvizParentProps {
     csvData: string;
@@ -22,15 +22,15 @@ interface GraphvizParentProps {
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
-    csvData,
-    filter,
-    selfLoops,
-    minVisits,
-}) => {
+                                                           csvData,
+                                                           filter,
+                                                           selfLoops,
+                                                           minVisits,
+                                                       }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
-    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences} = useContext(Context);
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -127,88 +127,124 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
 
     // Render Graphviz graphs using d3-graphviz
-    const renderGraph = (dot: string | null, ref: React.RefObject<HTMLDivElement>) => {
+    const renderGraph = (
+        dot: string | null,
+        ref: React.RefObject<HTMLDivElement>,
+        filename: string,
+        numberOfGraphs: number
+    ) => {
         if (dot && ref.current) {
+            // Dynamically adjust width based on the number of graphs
+            const width = numberOfGraphs === 3 ? 325 : 425; // Adjust the width for 3 graphs or 2 graphs
+            const height = 530; // Fixed height (or adjust dynamically if needed)
+
             graphviz(ref.current)
-                .width(800)
-                .height(600)
-                .renderDot(dot);
+                .width(width)
+                .height(height)
+                .renderDot(dot)
+                .on('end', () => {
+                    const svgElement = ref.current?.querySelector('svg');
+                    if (svgElement) {
+                        exportGraphAsPNG(svgElement, filename);
+                    }
+                });
         }
     };
 
     // Export a graph as high-quality PNG
-    const exportGraphAsPNG = (
-        ref: React.RefObject<HTMLDivElement>,
-        fileName: string,
-        scale: number = 2, // Scale for higher quality
-        margin: number = 20 // Smaller margin in pixels
-    ) => {
-        if (ref.current) {
-            const svgElement = ref.current.querySelector('svg');
-            if (svgElement) {
-                const svgData = new XMLSerializer().serializeToString(svgElement);
+    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
+        if (!graphRef.current) return;
 
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                const img = new Image();
+        const svgElement = graphRef.current.querySelector('svg');
+        if (!svgElement) return;
 
-                img.onload = () => {
-                    const graphWidth = img.width * scale;
-                    const graphHeight = img.height * scale;
+        // Get SVG dimensions
+        const width = svgElement.viewBox.baseVal.width || 425;
+        const height = svgElement.viewBox.baseVal.height || 600;
 
-                    // Set canvas size with smaller margins
-                    canvas.width = graphWidth + margin * 2;
-                    canvas.height = graphHeight + margin * 2;
+        // Clone the SVG to avoid style inheritance issues
+        const clonedSvg = svgElement.cloneNode(true);
 
-                    // Fill background (optional)
-                    context!.fillStyle = 'white';
-                    context!.fillRect(0, 0, canvas.width, canvas.height);
+        // Create a high-resolution canvas
+        const scaleFactor = 5; // Adjust for higher quality (e.g., 2x or 3x)
+        const canvas = document.createElement('canvas');
+        canvas.width = (width * scaleFactor) * 1.25;
+        canvas.height = (height * scaleFactor) * 1.5;
+        const ctx = canvas.getContext('2d');
 
-                    // Draw the graph centered within the canvas
-                    const xOffset = (canvas.width - graphWidth) / 2;
-                    const yOffset = (canvas.height - graphHeight) / 2;
-                    context!.drawImage(img, xOffset, yOffset, graphWidth, graphHeight);
+        if (!ctx) return;
 
-                    // Export to PNG
-                    const pngData = canvas.toDataURL('image/png');
-                    const link = document.createElement('a');
-                    link.href = pngData;
-                    link.download = `${fileName}.png`;
-                    link.click();
-                };
+        // Serialize the SVG
+        const svgData = new XMLSerializer().serializeToString(clonedSvg);
 
-                img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
-            }
-        }
+        // Convert SVG to an image
+        const img = new Image();
+        img.onload = () => {
+            // Scale the canvas content for higher resolution
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(scaleFactor, scaleFactor);
+
+            ctx.drawImage(img, 0, 0);
+
+            // Export as PNG
+            const link = document.createElement('a');
+            link.download = `${filename}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+
+        img.onerror = (err) => {
+            console.error('Failed to load SVG for export:', err);
+        };
+
+        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
     };
 
-    useEffect(() => renderGraph(dotString, graphRefMain), [dotString]);
-    useEffect(() => renderGraph(filteredDotString, graphRefFiltered), [filteredDotString]);
-    useEffect(() => renderGraph(topDotString, graphRefTop), [topDotString]);
+    const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
+
+    useEffect(() => {
+        renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
+    }, [topDotString]);
+
+    useEffect(() => {
+        renderGraph(topDotString, graphRefTop, 'selected_sequence', numberOfGraphs);
+    }, [dotString]);
+
+    useEffect(() => {
+        renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
+    }, [filteredDotString]);
+
+
+
 
     return (
-        <div className="graphviz-container flex flex-col gap-8 w-full items-center">
+        <div className="graphviz-container flex-col w-[500px] items-center">
             <ErrorBoundary>
-                <div className="graphs flex justify-center gap-8 w-full">
+                <div className="graphs flex justify-center w-[500px] h-[650px]"> {/*Not sure what this does*/}
                     {topDotString && (
-                        <div className="graph-item flex flex-col items-center">
+                        <div
+                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
-                            <div ref={graphRefTop} className="w-auto h-auto"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
+                            <div ref={graphRefTop}
+                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')}/>
                         </div>
                     )}
                     {dotString && (
-                        <div className="graph-item flex flex-col items-center">
+                        <div
+                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
-                            <div ref={graphRefMain} className="w-auto h-auto"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} />
-                        </div>
+                            <div ref={graphRefMain}
+                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')}/></div>
                     )}
                     {filteredDotString && (
-                        <div className="graph-item flex flex-col items-center">
+                        <div
+                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
-                            <div ref={graphRefFiltered} className="w-auto h-auto"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
+                            <div ref={graphRefFiltered}
+                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')}/>
                         </div>
                     )}
                 </div>
@@ -225,7 +261,7 @@ interface ExportButtonProps {
     label?: string;
 }
 
-function ExportButton({ onClick, label = "Export Image" }: ExportButtonProps) {
+function ExportButton({onClick, label = "Export Image"}: ExportButtonProps) {
     return (
         <Button
             variant={'secondary'}

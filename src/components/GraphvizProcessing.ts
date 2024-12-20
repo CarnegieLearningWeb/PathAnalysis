@@ -304,7 +304,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
 
-    let dotString = 'digraph G {\ngraph [size="8,6!", dpi=72];\n';
+    let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
     let totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
     let steps = selectedSequence
 
