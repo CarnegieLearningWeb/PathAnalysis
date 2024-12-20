@@ -4,9 +4,9 @@ import {ParseResult} from '@/lib/types';
 import {parseData} from '@/lib/utils';
 import {Label} from "@/components/ui/label"
 import {RadioGroup, RadioGroupItem} from "@/components/ui/radio-group"
-
+type TODO = any;
 interface DropZoneProps {
-    afterDrop: (data:string) => void,
+    afterDrop: (data:TODO) => void,
     onLoadingChange: (loading: boolean) => void,
     onError: (error: string) => void,
 }

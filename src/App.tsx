@@ -25,12 +25,10 @@ function App() {
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisits, setMinVisits] = useState<number>(0);
-    const { resetData, loading, error, setError, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
+    const { resetData, loading, error, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
     const showControls = useMemo(() => {
-        if (loading == false && csvData.length > 0) {
-            return true;
-        }
-        return false;
+        return !loading && csvData.length > 0;
+
     }, [loading, csvData]);
 
 
@@ -44,10 +42,10 @@ function App() {
         }
 
     };
-
-    const handleError = (errorMessage: string) => {
-        setError(errorMessage);
-    }
+    // TODO: Implement error handling
+    // const handleError = (errorMessage: string) => {
+    //     setError(errorMessage);
+    // }
 
     /**
      * Toggles the self-loops inclusion in the graph by switching the state.
