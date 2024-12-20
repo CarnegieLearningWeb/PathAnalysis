@@ -55,7 +55,7 @@
     "tailwindcss-animate": "^1.0.7",
     "timsort": "^0.3.0",
     "update-browserslist-db": "^1.1.1",
-    "vercel": "^34.1.8",
+    "vercel": "^34.4.0",
     "vite-bundle-visualizer": "^1.1.0"
   },
   "devDependencies": {
