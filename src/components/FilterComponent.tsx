@@ -20,7 +20,7 @@ const FilterComponent: React.FC<FilterComponentProps> = ({ onFilterChange }) => 
             </SelectTrigger>
             <SelectContent>
                 <SelectGroup>
-                    <SelectItem value="ALL STATUSES">All Statuses</SelectItem>
+                    <SelectItem value="ALL">All Statuses</SelectItem>
                     <SelectItem value="GRADUATED">Graduated</SelectItem>
                     <SelectItem value="PROMOTED">Promoted</SelectItem>
                 </SelectGroup>
