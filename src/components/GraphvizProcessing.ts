@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import {SequenceCount} from "@/Context";
+// import {autoType} from "d3";
 
 interface CSVRow {
     'Session Id': string;
@@ -20,7 +21,8 @@ interface CSVRow {
 export const loadAndSortData = (csvData: string): CSVRow[] => {
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
-        skipEmptyLines: true
+        skipEmptyLines: true,
+        delimiter: ',',
     }).data;
 
     const transformedData = parsedData.map(row => ({
