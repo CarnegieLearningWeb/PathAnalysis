@@ -1,5 +1,5 @@
 // React component code
-import {FC, RefObject, useContext, useEffect, useRef, useState} from 'react';
+import React, {RefObject, useContext, useEffect, useRef, useState} from 'react';
 import {graphviz} from 'd3-graphviz';
 import {
     generateDotString,
@@ -21,7 +21,12 @@ interface GraphvizParentProps {
     minVisits: number;
 }
 
-const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, minVisits}) => {
+const GraphvizParent: React.FC<GraphvizParentProps> = ({
+                                                           csvData,
+                                                           filter,
+                                                           selfLoops,
+                                                           minVisits,
+                                                       }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
@@ -120,34 +125,8 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
             setFilteredDotString(null);
         }
     }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
-
-    // Render Graphviz graphs using d3-graphviz
-    const renderGraph = (
-        dot: string | null,
-        ref: React.RefObject<HTMLDivElement>,
-        filename: string,
-        numberOfGraphs: number
-    ) => {
-        if (dot && ref.current) {
-            // Dynamically adjust width based on the number of graphs
-            const width = numberOfGraphs === 3 ? 325 : 425; // Adjust the width for 3 graphs or 2 graphs
-            const height = 530; // Fixed height (or adjust dynamically if needed)
-
-            graphviz(ref.current)
-                .width(width)
-                .height(height)
-                .renderDot(dot)
-                .on('end', () => {
-                    const svgElement = ref.current?.querySelector('svg');
-                    if (svgElement) {
-                        exportGraphAsPNG(ref, filename);
-                    }
-                });
-        }
-    };
-
-    // Export a graph as high-quality PNG
-    const exportGraphAsPNG = (graphRef: RefObject<HTMLDivElement>, filename: string) => {
+// Export a graph as high-quality PNG
+    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
         if (!graphRef.current) return;
 
         const svgElement = graphRef.current.querySelector('svg');
@@ -197,17 +176,43 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
 
     const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
 
+    // Render Graphviz graphs using d3-graphviz
+    const renderGraph = (
+        dot: string | null,
+        ref: React.RefObject<HTMLDivElement>,
+        filename: string,
+        numberOfGraphs: number
+    ) => {
+        if (dot && ref.current) {
+            // Dynamically adjust width based on the number of graphs
+            const width = numberOfGraphs === 3 ? 325 : 425; // Adjust the width for 3 graphs or 2 graphs
+            const height = 530; // Fixed height (or adjust dynamically if needed)
+
+            graphviz(ref.current)
+                .width(width)
+                .height(height)
+                .renderDot(dot)
+                .on('end', () => {
+                    const svgElement:RefObject<HTMLDivElement>|SVGSVGElement|null|undefined= ref.current?.querySelector('svg');
+                    if (svgElement) {
+                        exportGraphAsPNG(svgElement as unknown as RefObject<HTMLDivElement>, filename);
+                    }
+                });
+        }
+    };
+
+
     useEffect(() => {
         renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
-    }, [topDotString]);
+    }, [filteredDotString]);
 
     useEffect(() => {
         renderGraph(topDotString, graphRefTop, 'selected_sequence', numberOfGraphs);
-    }, [dotString]);
+    }, [topDotString]);
 
     useEffect(() => {
         renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
-    }, [filteredDotString]);
+    }, [dotString]);
 
 
     return (
@@ -263,4 +268,4 @@ function ExportButton({onClick, label = "Export Image"}: ExportButtonProps) {
             {label}
         </Button>
     );
-};
+}
