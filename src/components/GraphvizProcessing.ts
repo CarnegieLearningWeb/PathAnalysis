@@ -22,7 +22,7 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
         skipEmptyLines: true,
-        delimiter: ',',
+        delimiter: " ",
     }).data;
 
     const transformedData = parsedData.map(row => ({
