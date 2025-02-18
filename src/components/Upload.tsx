@@ -47,7 +47,7 @@ function Upload({ onDataProcessed }: UploadProps) {
     return (
         <div className="container flex flex-col gap-3 ">
             <Label htmlFor='upload'>Upload CSV</Label>
-            <Input className='' id='upload' type="file" accept=".csv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
+            <Input className='' id='upload' type="file" accept=".csv, .tsv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
         </div>
     );
 };

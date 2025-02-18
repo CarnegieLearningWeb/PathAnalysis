@@ -193,7 +193,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 .height(height)
                 .renderDot(dot)
                 .on('end', () => {
-                    const svgElement:RefObject<HTMLDivElement>|SVGSVGElement|null|undefined= ref.current?.querySelector('svg');
+                    const svgElement: RefObject<HTMLDivElement> | SVGSVGElement | null | undefined = ref.current?.querySelector('svg');
                     if (svgElement) {
                         exportGraphAsPNG(svgElement as unknown as RefObject<HTMLDivElement>, filename);
                     }
