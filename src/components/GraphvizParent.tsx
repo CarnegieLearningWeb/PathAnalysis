@@ -125,6 +125,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             setFilteredDotString(null);
         }
     }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
+
     // Export a graph as high-quality PNG
     const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
         if (!graphRef.current) return;
@@ -217,8 +218,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
         }
     }, [filteredDotString, numberOfGraphs]);
-
-
 
 
     return (
