@@ -27,7 +27,7 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
     const transformedData = parsedData.map(row => ({
         'Session Id': row['Session Id'],
         'Time': row['Time'],
-        'Step Name': row['Step Name'], //|| 'DoneButton',
+        'Step Name': row['Step Name'],// || 'DoneButton',
         'Outcome': row['Outcome'],
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
         'Problem Name': row['Problem Name'],
@@ -53,7 +53,7 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
     return sortedData.reduce((acc, row) => {
         const sessionId = row['Session Id'];
         if (!acc[sessionId]) acc[sessionId] = [];
-
+            // console.log(acc['stepName'], sessionId)
         const stepName = row['Step Name'];
         if (selfLoops || acc[sessionId].length === 0 || acc[sessionId][acc[sessionId].length - 1] !== stepName) {
             acc[sessionId].push(stepName);
