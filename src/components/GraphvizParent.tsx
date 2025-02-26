@@ -1,5 +1,5 @@
 // React component code
-import React, { FC, RefObject, useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
@@ -184,6 +184,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         filename: string,
         numberOfGraphs: number
     ) => {
+        // TODO: remove filename from props
+        console.log("Filename: ", filename);
         if (dot && ref.current) {
             // Dynamically adjust width based on the number of graphs
             const width = numberOfGraphs === 3 ? 325 : 425;
