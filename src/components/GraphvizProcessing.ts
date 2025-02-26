@@ -1,8 +1,10 @@
 import Papa from 'papaparse';
 import {SequenceCount} from "@/Context";
 
+// import {autoType} from "d3";
+
 interface CSVRow {
-    'Session Id': string;
+    'Session Id'?: string;
     'Time': string;
     'Step Name': string;
     'Outcome': string;
@@ -20,7 +22,7 @@ interface CSVRow {
 export const loadAndSortData = (csvData: string): CSVRow[] => {
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
-        skipEmptyLines: true
+        skipEmptyLines: true,
     }).data;
 
     const transformedData = parsedData.map(row => ({
@@ -32,12 +34,15 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         'Problem Name': row['Problem Name'],
         'Anon Student Id': row['Anon Student Id']
     }));
-
+    console.log(transformedData)
     return transformedData.sort((a, b) => {
-        if (a['Session Id'] === b['Session Id']) {
+    if (a['Anon Student Id'] === b['Anon Student Id']) {
+        if (a['Problem Name'] === b['Problem Name']) {
             return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
         }
-        return a['Session Id'].localeCompare(b['Session Id']);
+        return a['Problem Name'].localeCompare(b['Problem Name']);
+    }
+    return a['Anon Student Id'].localeCompare(b['Anon Student Id']);
     });
 };
 
@@ -48,33 +53,62 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
  * @param selfLoops - A boolean to include self-loops.
  * @returns A dictionary mapping session IDs to sequences of step names.
  */
-export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
+// export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
+//     return sortedData.reduce((acc, row) => {
+//         const sessionId = row['Session Id'];
+//         if (!acc[sessionId]) acc[sessionId] = [];
+//         // console.log(acc['stepName'], sessionId)
+//         const stepName = row['Step Name'];
+//         if (selfLoops || acc[sessionId].length === 0 || acc[sessionId][acc[sessionId].length - 1] !== stepName) {
+//             acc[sessionId].push(stepName);
+//         }
+//
+//         return acc;
+//     }, {} as { [key: string]: string[] });
+// };
+export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] }}  => {
     return sortedData.reduce((acc, row) => {
-        const sessionId = row['Session Id'];
-        if (!acc[sessionId]) acc[sessionId] = [];
+        const studentId:string = row['Anon Student Id'];
+        const problemName:string = row['Problem Name'];
 
+        if (!acc[studentId]) acc[studentId] = {}; // Initialize student entry if not present
+        if (!acc[studentId][problemName]) acc[studentId][problemName] = []; // Initialize problem entry if not present
+
+        // console.log(acc['stepName'], sessionId)
         const stepName = row['Step Name'];
-
-        if (selfLoops || acc[sessionId].length === 0 || acc[sessionId][acc[sessionId].length - 1] !== stepName) {
-            acc[sessionId].push(stepName);
+        if (selfLoops || acc[studentId][problemName].length === 0 || acc[studentId][problemName][acc[studentId][problemName].length - 1] !== stepName) {
+            acc[studentId][problemName].push(stepName);
         }
 
         return acc;
-    }, {} as { [key: string]: string[] });
+    }, {} as { [key: string]: { [key: string]: string[] } });
 };
-
 /**
  * Creates outcome sequences from sorted data.
  * @param sortedData - The sorted CSV rows.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
+// export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
+//     return sortedData.reduce((acc, row) => {
+//         const sessionId = row['Session Id'];
+//
+//         if (!acc[sessionId]) acc[sessionId] = [];
+//         acc[sessionId].push(row['Outcome']);
+//         return acc;
+//     }, {} as { [key: string]: string[] });
+// };
+export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
-        const sessionId = row['Session Id'];
-        if (!acc[sessionId]) acc[sessionId] = [];
-        acc[sessionId].push(row['Outcome']);
+        const studentId = row['Anon Student Id'];
+        const problemName = row['Problem Name'];
+
+        if (!acc[studentId]) acc[studentId] = {}; // Initialize student entry if not present
+        if (!acc[studentId][problemName]) acc[studentId][problemName] = []; // Initialize problem entry if not present
+
+        acc[studentId][problemName].push(row['Outcome']); // Store outcome sequence under student & problem
+
         return acc;
-    }, {} as { [key: string]: string[] });
+    }, {} as { [key: string]: { [key: string]: string[] } });
 };
 
 /**
@@ -83,37 +117,36 @@ export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: s
  * @param topN - The number of top sequences to return (default is 5).
  * @returns An array of the top sequences and their counts.
  */
-export function getTopSequences(stepSequences: { [key: string]: string[] }, topN: number = 5) {
-    // Create a frequency map to count how many times each unique sequence (list) occurs
+export function getTopSequences(stepSequences: { [key: string]: { [key: string]: string[] } }, topN: number = 5) {
     const sequenceCounts: { [sequence: string]: number } = {};
 
-    // Iterate over the values (which are lists) of the stepSequences dictionary
-    Object.values(stepSequences).forEach((sequence) => {
-        const sequenceKey = JSON.stringify(sequence); // Convert the list to a string key
+    // Iterate through the outer object
+    Object.values(stepSequences).forEach((nestedObj) => {
+        // Iterate through the inner object to access each sequence (which is an array)
+        Object.values(nestedObj).forEach((sequence) => {
+            const sequenceKey = JSON.stringify(sequence); // Convert sequence array to a string key
 
-        // Count occurrences of each unique sequence
-        if (sequenceCounts[sequenceKey]) {
-            sequenceCounts[sequenceKey]++;
-        } else {
-            sequenceCounts[sequenceKey] = 1;
-        }
+            // Count occurrences of each unique sequence
+            sequenceCounts[sequenceKey] = (sequenceCounts[sequenceKey] || 0) + 1;
+        });
     });
 
-    // Filter sequences of length 5 or greater then sort the sequences based on their counts in descending order and take the top N
+    // Filter sequences of length 5 or greater, then sort and take top N
     const sortedSequences = Object.entries(sequenceCounts)
         .filter(([sequence]) => JSON.parse(sequence).length >= 5)
         .sort(([, countA], [, countB]) => countB - countA)
         .slice(0, topN);
 
-    // Convert to the desired format: { sequence: [step1, step2, step3], count }
+    // Convert back to array format
     const topSequences = sortedSequences.map(([sequenceKey, count]) => ({
         sequence: JSON.parse(sequenceKey), // Convert the string back to an array
         count,
     }));
 
-    console.log("Processing topSequences: ", topSequences); // Log the top sequences for debugging
-    return topSequences; // Return the array of top sequences
+    console.log("Processing topSequences: ", topSequences);
+    return topSequences;
 }
+
 
 interface EdgeCounts {
     edgeCounts: { [key: string]: number };
@@ -130,8 +163,8 @@ interface EdgeCounts {
  * @returns Various edge-related counts and statistics.
  */
 export const countEdges = (
-    stepSequences: { [key: string]: string[] },
-    outcomeSequences: { [key: string]: string[] }
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    outcomeSequences: { [key: string]: { [key: string]: string[] } }
 ): {
     totalNodeEdges: { [p: string]: number };
     edgeOutcomeCounts: { [p: string]: { [p: string]: number } };
@@ -147,34 +180,52 @@ export const countEdges = (
     const edgeCounts: { [key: string]: number } = {};
     const top5Sequences = getTopSequences(stepSequences, 5);
 
-    Object.keys(stepSequences).forEach((sessionId) => {
-        const steps = stepSequences[sessionId];
-        const outcomes = outcomeSequences[sessionId];
+    // Iterate over first-level keys (e.g., student ID, problem, etc.)
+    Object.keys(stepSequences).forEach((studentId) => {
+        const innerStepSequences = stepSequences[studentId]; // { [key: string]: string[] }
+        const innerOutcomeSequences = outcomeSequences[studentId] || {}; // Handle missing outcome sequences
 
-        if (steps.length < 2) return;
+        // Iterate over second-level keys (actual step sequences)
+        Object.keys(innerStepSequences).forEach((problemName) => {
+            const steps = innerStepSequences[problemName]; // string[]
+            const outcomes = innerOutcomeSequences[problemName] || []; // string[] (fallback to empty array)
 
-        for (let i = 0; i < steps.length - 1; i++) {
-            const currentStep = steps[i];
-            const nextStep = steps[i + 1];
-            const outcome = outcomes[i + 1];
+            if (steps.length < 2) return; // Ignore sequences with < 2 steps
 
-            const edgeKey = `${currentStep}->${nextStep}`;
-            edgeCounts[edgeKey] = (edgeCounts[edgeKey] || 0) + 1;
-            edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
-            edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
-            totalNodeEdges[currentStep] = (totalNodeEdges[currentStep] || 0) + 1;
+            for (let i = 0; i < steps.length - 1; i++) {
+                const currentStep = steps[i];
+                const nextStep = steps[i + 1];
+                const outcome = outcomes[i + 1];
 
-            if (edgeCounts[edgeKey] > maxEdgeCount) maxEdgeCount = edgeCounts[edgeKey];
-        }
+                const edgeKey = `${currentStep}->${nextStep}`;
+                edgeCounts[edgeKey] = (edgeCounts[edgeKey] || 0) + 1;
+                edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
+                edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
+                totalNodeEdges[currentStep] = (totalNodeEdges[currentStep] || 0) + 1;
+
+                if (edgeCounts[edgeKey] > maxEdgeCount) {
+                    maxEdgeCount = edgeCounts[edgeKey];
+                }
+            }
+        });
     });
 
+    // Compute ratioEdges based on totalNodeEdges
     Object.keys(edgeCounts).forEach((edge) => {
         const [start] = edge.split('->');
-        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 0);
+        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 1); // Avoid division by zero
     });
 
-    return {edgeCounts, totalNodeEdges, ratioEdges, edgeOutcomeCounts, maxEdgeCount, topSequences: top5Sequences};
+    return {
+        edgeCounts,
+        totalNodeEdges,
+        ratioEdges,
+        edgeOutcomeCounts,
+        maxEdgeCount,
+        topSequences: top5Sequences
+    };
 };
+
 
 /**
  * Normalizes edge thicknesses based on their ratios for better visual representation.
@@ -287,6 +338,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  * @param min_visits - Minimum number of visits an edge must have to be included in the graph.
  * @param selectedSequence - The selected sequence of steps used to color the nodes.
  *
+ * @param justTopSequence
  * @returns A string in Graphviz DOT format that represents the graph.
  */export function generateDotString(
     normalizedThicknesses: { [key: string]: number },

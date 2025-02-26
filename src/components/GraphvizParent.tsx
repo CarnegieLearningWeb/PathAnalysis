@@ -1,6 +1,6 @@
 // React component code
-import {FC, RefObject, useContext, useEffect, useRef, useState} from 'react';
-import {graphviz} from 'd3-graphviz';
+import React, { FC, RefObject, useContext, useEffect, useRef, useState } from 'react';
+import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
     normalizeThicknesses,
@@ -11,8 +11,8 @@ import {
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
-import {Context} from "@/Context.tsx";
-import {Button} from './ui/button';
+import { Context } from "@/Context.tsx";
+import { Button } from './ui/button';
 
 interface GraphvizParentProps {
     csvData: string;
@@ -21,11 +21,16 @@ interface GraphvizParentProps {
     minVisits: number;
 }
 
-const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, minVisits}) => {
+const GraphvizParent: React.FC<GraphvizParentProps> = ({
+    csvData,
+    filter,
+    selfLoops,
+    minVisits,
+}) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
-    const {selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences} = useContext(Context);
+    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -121,33 +126,8 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
         }
     }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
 
-    // Render Graphviz graphs using d3-graphviz
-    const renderGraph = (
-        dot: string | null,
-        ref: React.RefObject<HTMLDivElement>,
-        filename: string,
-        numberOfGraphs: number
-    ) => {
-        if (dot && ref.current) {
-            // Dynamically adjust width based on the number of graphs
-            const width = numberOfGraphs === 3 ? 325 : 425; // Adjust the width for 3 graphs or 2 graphs
-            const height = 530; // Fixed height (or adjust dynamically if needed)
-
-            graphviz(ref.current)
-                .width(width)
-                .height(height)
-                .renderDot(dot)
-                .on('end', () => {
-                    const svgElement = ref.current?.querySelector('svg');
-                    if (svgElement) {
-                        exportGraphAsPNG(ref, filename);
-                    }
-                });
-        }
-    };
-
     // Export a graph as high-quality PNG
-    const exportGraphAsPNG = (graphRef: RefObject<HTMLDivElement>, filename: string) => {
+    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
         if (!graphRef.current) return;
 
         const svgElement = graphRef.current.querySelector('svg');
@@ -197,17 +177,47 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
 
     const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
 
-    useEffect(() => {
-        renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
-    }, [topDotString]);
+    // Render Graphviz graphs using d3-graphviz
+    const renderGraph = (
+        dot: string | null,
+        ref: React.RefObject<HTMLDivElement>,
+        filename: string,
+        numberOfGraphs: number
+    ) => {
+        if (dot && ref.current) {
+            // Dynamically adjust width based on the number of graphs
+            const width = numberOfGraphs === 3 ? 325 : 425;
+            const height = 530;
+
+            try {
+                graphviz(ref.current)
+                    .width(width)
+                    .height(height)
+                    .renderDot(dot)
+            } catch (error) {
+                console.error("Error rendering graph:", error);
+            }
+        }
+    };
+
 
     useEffect(() => {
-        renderGraph(topDotString, graphRefTop, 'selected_sequence', numberOfGraphs);
-    }, [dotString]);
+        if (topDotString && graphRefTop.current) {
+            renderGraph(topDotString, graphRefTop, 'selected_sequence', numberOfGraphs);
+        }
+    }, [topDotString, numberOfGraphs]);
 
     useEffect(() => {
-        renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
-    }, [filteredDotString]);
+        if (dotString && graphRefMain.current) {
+            renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
+        }
+    }, [dotString, numberOfGraphs]);
+
+    useEffect(() => {
+        if (filteredDotString && graphRefFiltered.current) {
+            renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
+        }
+    }, [filteredDotString, numberOfGraphs]);
 
 
     return (
@@ -219,8 +229,8 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
                             className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
                             <div ref={graphRefTop}
-                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')}/>
+                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
                         </div>
                     )}
                     {dotString && (
@@ -228,16 +238,16 @@ const GraphvizParent: FC<GraphvizParentProps> = ({csvData, filter, selfLoops, mi
                             className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
                             <div ref={graphRefMain}
-                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')}/></div>
+                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} /></div>
                     )}
                     {filteredDotString && (
                         <div
                             className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
                             <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
                             <div ref={graphRefFiltered}
-                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')}/>
+                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
                         </div>
                     )}
                 </div>
@@ -254,7 +264,7 @@ interface ExportButtonProps {
     label?: string;
 }
 
-function ExportButton({onClick, label = "Export Image"}: ExportButtonProps) {
+function ExportButton({ onClick, label = "Export Image" }: ExportButtonProps) {
     return (
         <Button
             variant={'secondary'}
@@ -263,4 +273,4 @@ function ExportButton({onClick, label = "Export Image"}: ExportButtonProps) {
             {label}
         </Button>
     );
-};
+}

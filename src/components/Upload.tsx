@@ -27,6 +27,12 @@ function Upload({ onDataProcessed }: UploadProps) {
             // Define what happens when the file is successfully read
             reader.onload = (e) => {
                 const csvData = e.target?.result as string; // Cast the result to a string
+                // Basic validation to ensure the data is not empty or malformed
+                if (!csvData || csvData.trim() === '') {
+                    console.error('Empty or invalid CSV data');
+                    setLoading(false);
+                    return;
+                }
                 onDataProcessed(csvData); // Process the CSV data
 
                 // Set loading state to false when the file is processed
@@ -35,6 +41,7 @@ function Upload({ onDataProcessed }: UploadProps) {
 
             // Define what happens in case of an error while reading the file
             reader.onerror = () => {
+                console.error('Error reading file');
                 // Set loading state to false in case of an error
                 setLoading(false);
             };
@@ -47,7 +54,7 @@ function Upload({ onDataProcessed }: UploadProps) {
     return (
         <div className="container flex flex-col gap-3 ">
             <Label htmlFor='upload'>Upload CSV</Label>
-            <Input className='' id='upload' type="file" accept=".csv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
+            <Input className='' id='upload' type="file" accept=".csv, .tsv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
         </div>
     );
 };
