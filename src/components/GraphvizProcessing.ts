@@ -22,19 +22,18 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
     const parsedData = Papa.parse<CSVRow>(csvData, {
         header: true,
         skipEmptyLines: true,
-        delimiter: " ",
     }).data;
 
     const transformedData = parsedData.map(row => ({
         'Session Id': row['Session Id'],
         'Time': row['Time'],
-        'Step Name': row['Step Name'] || 'DoneButton',
+        'Step Name': row['Step Name'], //|| 'DoneButton',
         'Outcome': row['Outcome'],
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
         'Problem Name': row['Problem Name'],
         'Anon Student Id': row['Anon Student Id']
     }));
-
+    console.log(transformedData)
     return transformedData.sort((a, b) => {
         if (a['Session Id'] === b['Session Id']) {
             return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
@@ -56,7 +55,6 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
         if (!acc[sessionId]) acc[sessionId] = [];
 
         const stepName = row['Step Name'];
-
         if (selfLoops || acc[sessionId].length === 0 || acc[sessionId][acc[sessionId].length - 1] !== stepName) {
             acc[sessionId].push(stepName);
         }
@@ -289,6 +287,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  * @param min_visits - Minimum number of visits an edge must have to be included in the graph.
  * @param selectedSequence - The selected sequence of steps used to color the nodes.
  *
+ * @param justTopSequence
  * @returns A string in Graphviz DOT format that represents the graph.
  */export function generateDotString(
     normalizedThicknesses: { [key: string]: number },
