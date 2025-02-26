@@ -1,5 +1,5 @@
 // React component code
-import React, { RefObject, useContext, useEffect, useRef, useState } from 'react';
+import React, { FC, RefObject, useContext, useEffect, useRef, useState } from 'react';
 import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
