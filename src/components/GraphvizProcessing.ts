@@ -403,7 +403,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
                     const tooltip = `${currentStep} to ${nextStep}\n`
                         + `- Edge Count: \n\t\t ${edgeCount}\n`
                         + `- Total Count for ${currentStep}: \n\t\t${totalCount}\n`
-                        + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                        + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of paths from ${currentStep} go to ${nextStep}\n`
                         + `- Outcomes: \n\t\t ${outcomesStr}\n`
                         + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
 

@@ -42,6 +42,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const graphRefMain = useRef<HTMLDivElement>(null);
     const graphRefFiltered = useRef<HTMLDivElement>(null);
     const graphRefTop = useRef<HTMLDivElement>(null);
+    const graphRefF3 = useRef<HTMLDivElement>(null);
+    const graphRefL3 = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (csvData) {
@@ -249,7 +251,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
     };
 
-    const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
+    const numberOfGraphs = [topDotString, dotString, filteredDotString, first3DotString, last3DotString].filter(Boolean).length;
 
     // Render Graphviz graphs using d3-graphviz
     const renderGraph = (
@@ -295,25 +297,39 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         }
     }, [filteredDotString, numberOfGraphs]);
 
+    useEffect(() => {
+        if (f3L3 && graphRefF3.current) {
+            renderGraph(first3DotString, graphRefF3, 'first3_graph', numberOfGraphs);
+        }
+    }, [first3DotString, numberOfGraphs]);
+
+    useEffect(() => {
+        if (f3L3 && graphRefL3.current) {
+            renderGraph(last3DotString, graphRefL3, 'last3_graph', numberOfGraphs);
+        }
+    }, [first3DotString, numberOfGraphs]);
 
     return (
         <div className="graphviz-container flex-col w-[500px] items-center">
             <ErrorBoundary>
                 <div className="graphs flex justify-center w-[500px] h-[650px]"> {/*Not sure what this does*/}
-
-                    <caption className="graph-caption">First 3</caption>
                     {first3DotString && (
-                        <Graphviz
-                            dot={first3DotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
+                        <div
+                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
+                            <h2 className="text-lg font-semibold text-center mb-2">First 3 Problems</h2>
+                            <div ref={graphRefF3}
+                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefF3, 'first3_sequence')}/>
+                        </div>
                     )}
-                    <caption className="graph-caption">Last 3</caption>
                     {last3DotString && (
-                        <Graphviz
-                            dot={last3DotString}
-                            options={{useWorker: false, height: 800, width: 600}}
-                        />
+                        <div
+                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
+                            <h2 className="text-lg font-semibold text-center mb-2">Last 3 Problems</h2>
+                            <div ref={graphRefL3}
+                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefL3, 'last3_sequence')}/>
+                        </div>
                     )}
                     {topDotString && (
                         <div
