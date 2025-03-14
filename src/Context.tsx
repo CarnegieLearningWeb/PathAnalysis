@@ -11,7 +11,7 @@ interface ContextInterface {
 
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
-    f3l3: boolean;
+    f3L3: boolean;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
@@ -104,11 +104,13 @@ export const Provider = ({children}: ProviderProps) => {
                 setError,
                 setLoading,
                 setData,
+                f3L3,
                 setGraphData,
                 setTop5Sequences,
                 setSelectedSequence,
                 setCSVData,
                 resetData,
+                setF3L3
             }}
         >
             {children}
