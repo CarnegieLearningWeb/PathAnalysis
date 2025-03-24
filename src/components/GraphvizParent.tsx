@@ -19,6 +19,7 @@ interface GraphvizParentProps {
     filter: string | null;
     selfLoops: boolean;
     minVisits: number;
+    onMaxEdgeCountChange: (count: number) => void;
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
@@ -26,6 +27,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     filter,
     selfLoops,
     minVisits,
+    onMaxEdgeCountChange
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
@@ -51,6 +53,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 maxEdgeCount,
                 topSequences
             } = countEdges(stepSequences, outcomeSequences);
+
+            // Update the maxEdgeCount in the parent component
+            onMaxEdgeCountChange(maxEdgeCount);
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
                 setTop5Sequences(topSequences);
@@ -89,7 +94,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 )
             );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange]);
 
     useEffect(() => {
         if (filter) {

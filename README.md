@@ -16,7 +16,6 @@ React + TypeScript + Vite + SWC (with Rust compiler)
 The application accepts the following file formats:
 - CSV (Comma Separated Values)
 - TSV (Tab Separated Values)
-- JSON
 
 ### Required Fields
 Your data file must include the following fields:

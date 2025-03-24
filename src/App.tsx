@@ -24,28 +24,19 @@ function App() {
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
-    const [minVisits, setMinVisits] = useState<number>(0);
+    const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
     const { resetData, loading, error, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
+    const [maxEdgeCount, setMaxEdgeCount] = useState<number>(100); // Default value
+
     const showControls = useMemo(() => {
         return !loading && csvData.length > 0;
-
     }, [loading, csvData]);
 
-
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
-        console.log("SS: ", top5Sequences, selectedSequence);
-
         if (top5Sequences) {
-            // Update the selected sequence in the context
             setSelectedSequence(selectedSequence);
-            console.log(`Selected sequence: ${selectedSequence}`);
         }
-
     };
-    // TODO: Implement error handling
-    // const handleError = (errorMessage: string) => {
-    //     setError(errorMessage);
-    // }
 
     /**
      * Toggles the self-loops inclusion in the graph by switching the state.
@@ -57,7 +48,9 @@ function App() {
      *
      * @param {number} value - The new value for minimum visits.
      */
-    const handleSlider = (value: number) => setMinVisits(value);
+    const handleSlider = (value: number) => {
+        setMinVisitsPercentage(value);
+    };
 
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
@@ -65,6 +58,9 @@ function App() {
      * @param {string} uploadedCsvData - The CSV data from the uploaded file.
      */
     const handleDataProcessed = (uploadedCsvData: string) => setCSVData(uploadedCsvData);
+
+    // Calculate actual min visits from percentage
+    const minVisits = Math.round((minVisitsPercentage / 100) * maxEdgeCount);
 
     /**
      * Updates the loading state when the file upload or processing begins or ends.
@@ -143,11 +139,12 @@ function App() {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-gray-700">Edge Visits</label>
                                             <Slider
-                                                step={5}
+                                                step={1}
                                                 min={0}
-                                                max={5000}
-                                                value={minVisits}
+                                                max={100}
+                                                value={minVisitsPercentage}
                                                 onChange={handleSlider}
+                                                maxEdgeCount={maxEdgeCount}
                                             />
                                         </div>
                                     </div>
@@ -167,6 +164,7 @@ function App() {
                                             filter={filter}
                                             selfLoops={selfLoops}
                                             minVisits={minVisits}
+                                            onMaxEdgeCountChange={setMaxEdgeCount}
                                         />
                                     </div>
                                 </div>

@@ -170,7 +170,7 @@ export const countEdges = (
     edgeOutcomeCounts: { [p: string]: { [p: string]: number } };
     maxEdgeCount: number;
     ratioEdges: { [p: string]: number };
-    edgeCounts: { [p: string]: number };
+    edgeCounts: { [key: string]: number };
     topSequences: SequenceCount[];
 } => {
     const totalNodeEdges: { [key: string]: number } = {};
@@ -178,19 +178,20 @@ export const countEdges = (
     let maxEdgeCount = 0;
     const ratioEdges: { [key: string]: number } = {};
     const edgeCounts: { [key: string]: number } = {};
+    const studentEdgeCounts: { [key: string]: Set<string> } = {}; // Track unique students per edge
     const top5Sequences = getTopSequences(stepSequences, 5);
 
-    // Iterate over first-level keys (e.g., student ID, problem, etc.)
+    // Iterate over first-level keys (student IDs)
     Object.keys(stepSequences).forEach((studentId) => {
-        const innerStepSequences = stepSequences[studentId]; // { [key: string]: string[] }
-        const innerOutcomeSequences = outcomeSequences[studentId] || {}; // Handle missing outcome sequences
+        const innerStepSequences = stepSequences[studentId];
+        const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-        // Iterate over second-level keys (actual step sequences)
+        // Iterate over second-level keys (problem names)
         Object.keys(innerStepSequences).forEach((problemName) => {
-            const steps = innerStepSequences[problemName]; // string[]
-            const outcomes = innerOutcomeSequences[problemName] || []; // string[] (fallback to empty array)
+            const steps = innerStepSequences[problemName];
+            const outcomes = innerOutcomeSequences[problemName] || [];
 
-            if (steps.length < 2) return; // Ignore sequences with < 2 steps
+            if (steps.length < 2) return;
 
             for (let i = 0; i < steps.length - 1; i++) {
                 const currentStep = steps[i];
@@ -198,7 +199,18 @@ export const countEdges = (
                 const outcome = outcomes[i + 1];
 
                 const edgeKey = `${currentStep}->${nextStep}`;
-                edgeCounts[edgeKey] = (edgeCounts[edgeKey] || 0) + 1;
+                
+                // Initialize the Set for this edge if it doesn't exist
+                if (!studentEdgeCounts[edgeKey]) {
+                    studentEdgeCounts[edgeKey] = new Set();
+                }
+                
+                // Add this student to the Set for this edge
+                studentEdgeCounts[edgeKey].add(studentId);
+                
+                // Update edge counts based on unique students
+                edgeCounts[edgeKey] = studentEdgeCounts[edgeKey].size;
+                
                 edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
                 edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
                 totalNodeEdges[currentStep] = (totalNodeEdges[currentStep] || 0) + 1;
@@ -213,7 +225,7 @@ export const countEdges = (
     // Compute ratioEdges based on totalNodeEdges
     Object.keys(edgeCounts).forEach((edge) => {
         const [start] = edge.split('->');
-        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 1); // Avoid division by zero
+        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 1);
     });
 
     return {
@@ -377,8 +389,8 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
 
             if (edgeCount > min_visits) {
                 const tooltip = `${currentStep} to ${nextStep}\n`
-                    + `- Edge Count: \n\t\t ${edgeCount}\n`
-                    + `- Total Count for ${currentStep}: \n\t\t${totalCount}\n`
+                    + `- Unique Students: \n\t\t ${edgeCount}\n`
+                    + `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n`
                     + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                     + `- Outcomes: \n\t\t ${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t ')}\n`
                     + `- Color Codes: \n\t\t Hex: ${color}`;
@@ -411,8 +423,8 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
 
                 if (edgeCount > min_visits) {
                     const tooltip = `${currentStep} to ${nextStep}\n`
-                        + `- Edge Count: \n\t\t ${edgeCount}\n`
-                        + `- Total Count for ${currentStep}: \n\t\t${totalCount}\n`
+                        + `- Unique Students: \n\t\t ${edgeCount}\n`
+                        + `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n`
                         + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                         + `- Outcomes: \n\t\t ${outcomesStr}\n`
                         + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
