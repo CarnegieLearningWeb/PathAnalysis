@@ -28,7 +28,7 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange, max
     return (
         <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-            Minimum Edge Visits: {value}% ({actualStudents} students)
+            Minimum Students: {actualStudents} ({value.toFixed(2)}% of {maxEdgeCount})
         </label>
         <div className="flex items-center space-x-4">
             <input

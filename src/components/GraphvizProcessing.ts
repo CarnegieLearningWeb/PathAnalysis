@@ -487,3 +487,42 @@ export function generateDotString(
     dotString += '}';
     return dotString;
 }
+
+/**
+ * Calculates the minimum number of students on any edge in the selected sequence.
+ * This is the smallest number of unique students that traverse any edge in the sequence.
+ * @param edgeCounts - Dictionary mapping edge keys to the number of unique students
+ * @param selectedSequence - The selected sequence of steps
+ * @returns The minimum number of students on any edge in the sequence
+ */
+export function calculateMaxMinEdgeCount(
+    edgeCounts: { [key: string]: number },
+    selectedSequence: string[]
+): number {
+    if (!selectedSequence || selectedSequence.length < 2) {
+        console.log("No valid sequence provided");
+        return 0;
+    }
+
+    let minStudentCount = Infinity;
+    console.log("Edge counts:", edgeCounts);
+    console.log("Selected sequence:", selectedSequence);
+
+    // Check each edge in the sequence
+    for (let i = 0; i < selectedSequence.length - 1; i++) {
+        const currentStep = selectedSequence[i];
+        const nextStep = selectedSequence[i + 1];
+        const edgeKey = `${currentStep}->${nextStep}`;
+        
+        // Get the number of unique students on this edge
+        const studentCount = edgeCounts[edgeKey] || 0;
+        console.log(`Edge ${edgeKey}: ${studentCount} students`);
+        
+        if (studentCount < minStudentCount) {
+            minStudentCount = studentCount;
+        }
+    }
+
+    console.log("Final min student count:", minStudentCount);
+    return minStudentCount === Infinity ? 0 : minStudentCount;
+}

@@ -7,7 +7,8 @@ import {
     countEdges,
     createStepSequences,
     createOutcomeSequences,
-    loadAndSortData
+    loadAndSortData,
+    calculateMaxMinEdgeCount
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
@@ -20,6 +21,7 @@ interface GraphvizParentProps {
     selfLoops: boolean;
     minVisits: number;
     onMaxEdgeCountChange: (count: number) => void;
+    onMaxMinEdgeCountChange: (count: number) => void;
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
@@ -27,7 +29,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     filter,
     selfLoops,
     minVisits,
-    onMaxEdgeCountChange
+    onMaxEdgeCountChange,
+    onMaxMinEdgeCountChange
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
@@ -58,11 +61,18 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             // Update the maxEdgeCount in the parent component
             onMaxEdgeCountChange(maxEdgeCount);
+            
+            // Calculate and update the maximum minimum-edge count
+            const sequenceToUse = selectedSequence || topSequences[0]?.sequence;
+            if (sequenceToUse) {
+                const maxMinEdgeCount = calculateMaxMinEdgeCount(edgeCounts, sequenceToUse);
+                onMaxMinEdgeCountChange(maxMinEdgeCount);
+            }
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
                 setTop5Sequences(topSequences);
                 if (topSequences && selectedSequence === undefined) {
-                    setSelectedSequence(topSequences![0].sequence);
+                    setSelectedSequence(topSequences[0].sequence);
                 }
             }
 
@@ -77,7 +87,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     totalNodeEdges,
                     1,
                     minVisits,
-                    selectedSequence,
+                    selectedSequence || topSequences[0].sequence,
                     false,
                     totalVisits,
                     repeatVisits
@@ -93,14 +103,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     totalNodeEdges,
                     1,
                     minVisits,
-                    selectedSequence,
+                    selectedSequence || topSequences[0].sequence,
                     true,
                     totalVisits,
                     repeatVisits
                 )
             );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange]);
 
     useEffect(() => {
         if (filter) {
