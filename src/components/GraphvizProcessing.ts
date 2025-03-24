@@ -365,7 +365,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  * @param edgeCounts - A dictionary tracking the total number of transitions between steps (edges).
  * @param totalNodeEdges - A dictionary of total transitions starting from a specific node.
  * @param threshold - Minimum thickness value to include an edge in the visualization.
- * @param min_visits - Minimum number of visits an edge must have to be included in the graph.
+ * @param minVisits - Minimum number of visits an edge must have to be included in the graph.
  * @param selectedSequence - The selected sequence of steps used to color the nodes.
  *
  * @param justTopSequence
@@ -378,7 +378,7 @@ export function generateDotString(
     edgeCounts: EdgeCounts['edgeCounts'],
     totalNodeEdges: EdgeCounts['totalNodeEdges'],
     threshold: number,
-    min_visits: number,
+    minVisits: number,
     selectedSequence: SequenceCount["sequence"],
     justTopSequence: boolean,
     totalVisits: { [key: string]: number },
@@ -404,37 +404,42 @@ export function generateDotString(
             const totalCount = totalNodeEdges[currentStep] || 0;
             const color = calculateColor(rank, totalSteps);
             const edgeColor = calculateEdgeColors(outcomes);
-            const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
+            const nodeTooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
-            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
+            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
 
-            if (edgeCount > min_visits) {
-                let tooltip = `${currentStep} to ${nextStep}\n`
-                    + `- Unique Students: \n\t\t ${edgeCount}\n`
-                    + `- Total Edge Visits: \n\t\t ${visits}\n`
-                    + `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n`
-                    + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                    + `- Outcomes: \n\t\t ${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t ')}\n`
-                    + `- Color Codes: \n\t\t Hex: ${color}`;
+            if (edgeCount > minVisits) {
+                let tooltip = `${currentStep} to ${nextStep}\n\n`
+                    + `Student Statistics:\n`
+                    + `- Total Students at ${currentStep}: \n\t\t${totalCount}\n`
+                    + `- Unique Students on this path: \n\t\t ${edgeCount}\n`
+                    + `- Total Edge Visits: \n\t\t ${visits}\n`;
 
                 // Add repeat visit information for all edges
                 if (repeatVisits[edgeKey]) {
                     const repeatCounts = Object.values(repeatVisits[edgeKey]);
                     const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
                     const maxRepeats = Math.max(...repeatCounts);
-                    tooltip += `\n- Repeat Visits:\n\t\t ${studentsWithRepeats} students visited this edge multiple times\n\t\t Maximum visits by a student: ${maxRepeats}`;
+                    tooltip += `- Students who repeated this path: \n\t\t ${studentsWithRepeats}\n`
+                        + `- Maximum visits by a student: \n\t\t ${maxRepeats}\n`;
                 }
+
+                tooltip += `\nPath Statistics:\n`
+                    + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                    + `- Outcomes: \n\t\t ${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t ')}\n`
+                    +`\nVisual Properties:\n`
+                    + `- Color: \n\t\t Hex: ${color}\n`;
 
                 dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
             }
         }
     } else {
         for (let rank = 0; rank < totalSteps; rank++) {
-            const step = steps[rank];
+            const currentStep = steps[rank];
             const color = calculateColor(rank, totalSteps);
-            const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
+            const nodeTooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
-            dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
+            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
         }
         
         for (const edge of Object.keys(normalizedThicknesses)) {
@@ -450,25 +455,31 @@ export function generateDotString(
                     .map(([outcome, count]) => `${outcome}: ${count}`)
                     .join('\n\t\t ');
 
-                if (edgeCount > min_visits) {
-                    let tooltip = `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n\n`
-                        + `${currentStep} to ${nextStep}\n`
-                        + `- Unique Students on edge (each student only counted once): \n\t\t ${edgeCount}\n`
-                        + `- Edge taken ${visits} times\n`
-                        + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                        + `- Outcomes: \n\t\t ${outcomesStr}\n`
-                        + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
-
-                    // Add repeat visit information for all edges
-                    if (repeatVisits[edge]) {
-                        const repeatCounts = Object.values(repeatVisits[edge]);
-                        const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
-                        const maxRepeats = Math.max(...repeatCounts);
-                        tooltip += `\n- Repeat Visits:\n\t\t ${studentsWithRepeats} students visited this edge multiple times\n\t\t Maximum visits by a student: ${maxRepeats}`;
+                    if (edgeCount > minVisits) {
+                        let tooltip = `${currentStep} to ${nextStep}\n\n`
+                            + `Student Statistics:\n`
+                            + `- Total Students at ${currentStep}: \n\t\t${totalCount || 0}\n`
+                            + `- Unique Students on this path: \n\t\t ${edgeCount}\n`
+                            + `- Total Edge Visits: \n\t\t ${visits}\n`;
+    
+                        // Add repeat visit information for all edges
+                        if (repeatVisits[edge]) {
+                            const repeatCounts = Object.values(repeatVisits[edge]);
+                            const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
+                            const maxRepeats = Math.max(...repeatCounts);
+                            tooltip += `- Students who repeated this path: \n\t\t ${studentsWithRepeats}\n`
+                                + `- Maximum visits by a student: \n\t\t ${maxRepeats}\n`;
+                        }
+    
+                        tooltip += `\nPath Statistics:\n`
+                            + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                            + `- Outcomes: \n\t\t ${outcomesStr}\n`
+                            + `\nVisual Properties:\n`
+                            + `- Color: \n\t\t Hex: ${color}\n`
+                            + `\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
+    
+                        dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
                     }
-
-                    dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
-                }
             }
         }
     }

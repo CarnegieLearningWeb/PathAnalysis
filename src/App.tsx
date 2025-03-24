@@ -24,7 +24,7 @@ function App() {
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
-    const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
+    const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(10);
     const { resetData, loading, error, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
     const [maxEdgeCount, setMaxEdgeCount] = useState<number>(100); // Default value
 
