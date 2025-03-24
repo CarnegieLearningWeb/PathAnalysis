@@ -216,7 +216,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [dotString, numberOfGraphs]);
 
     useEffect(() => {
-        if (filteredDotString && graphRefFiltered.current) {
+        if (filter && filteredDotString && graphRefFiltered.current) {
             renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
         }
     }, [filteredDotString, numberOfGraphs]);

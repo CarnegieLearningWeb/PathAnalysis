@@ -11,6 +11,28 @@ React + TypeScript + Vite + SWC (with Rust compiler)
 3. You will need a local .env file with secret variables. Reach out to Ethan for these.
 4. Run ```bun run dev``` to start the development server.
 
+## File Format Requirements
+
+The application accepts the following file formats:
+- CSV (Comma Separated Values)
+- TSV (Tab Separated Values)
+- JSON
+
+### Required Fields
+Your data file must include the following fields:
+- `Time`: Can be either a string or number
+- `Step Name`: String
+- `Outcome`: String
+- `CF (Workspace Progress Status)`: String
+- `Problem Name`: String
+- `Anon Student Id`: String
+
+### Example Format
+```csv
+Time,Step Name,Outcome,CF (Workspace Progress Status),Problem Name,Anon Student Id
+2024-01-01 10:00:00,Step 1,OK,GRADUATED,Problem 1,student123
+2024-01-01 10:01:00,Step 2,ERROR,NOT_COMPLETED,Problem 1,student123
+```
 
 ## Expanding the ESLint configuration
 

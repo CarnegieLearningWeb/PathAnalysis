@@ -347,7 +347,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
     edgeOutcomeCounts: EdgeCounts['edgeOutcomeCounts'],
     edgeCounts: EdgeCounts['edgeCounts'],
     totalNodeEdges: EdgeCounts['totalNodeEdges'],
-    threshold: number,
+    threshold: number,              //Make a percentage to be more intuitive
     min_visits: number,
     selectedSequence: SequenceCount["sequence"],
     justTopSequence: boolean
