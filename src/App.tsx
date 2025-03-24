@@ -140,7 +140,7 @@ function App() {
                                     {/* Filter Section */}
                                     <div className="space-y-2">
                                         <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                                        <FilterComponent onFilterChange={setFilter} />
+                                        <FilterComponent onFilterChange={setFilter} currentFilter={filter} />
                                     </div>
 
                                     {/* Sequence Section */}
@@ -194,7 +194,7 @@ function App() {
                                                 </div>
                                             </div>
                                             <p className="text-xs text-gray-500">
-                                                Maximum threshold before any node becomes disconnected: {maxMinEdgeCount} students
+                                                Maximum threshold before any node becomes disconnected: {maxMinEdgeCount-1} students
                                             </p>
                                         </div>
                                     </div>

@@ -15,6 +15,8 @@ import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
 
+const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
+
 interface GraphvizParentProps {
     csvData: string;
     filter: string | null;
@@ -66,7 +68,18 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             const sequenceToUse = selectedSequence || topSequences[0]?.sequence;
             if (sequenceToUse) {
                 const maxMinEdgeCount = calculateMaxMinEdgeCount(edgeCounts, sequenceToUse);
-                onMaxMinEdgeCountChange(maxMinEdgeCount);
+                
+                // If filter is active and not 'ALL', compare with filtered graph's minimum edge count
+                if (filter && filter !== 'ALL') {
+                    const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
+                    const filteredStepSequences = createStepSequences(filteredData, selfLoops);
+                    const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+                    const { edgeCounts: filteredEdgeCounts } = countEdges(filteredStepSequences, filteredOutcomeSequences);
+                    const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredEdgeCounts, sequenceToUse);
+                    onMaxMinEdgeCountChange(Math.min(maxMinEdgeCount, filteredMinEdgeCount));
+                } else {
+                    onMaxMinEdgeCountChange(maxMinEdgeCount);
+                }
             }
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
@@ -110,10 +123,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 )
             );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, filter]);
 
+    // Add back the useEffect for filtered graph display
     useEffect(() => {
-        if (filter) {
+        if (filter && filter !== 'ALL') {
             const sortedData = loadAndSortData(csvData);
             const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
             const filteredStepSequences = createStepSequences(filteredData, selfLoops);
@@ -241,10 +255,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [dotString, numberOfGraphs]);
 
     useEffect(() => {
-        if (filter && filteredDotString && graphRefFiltered.current) {
+        if (filter && filter !== 'ALL' && filteredDotString && graphRefFiltered.current) {
             renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
+        } else if (filter === 'ALL' || !filter) {
+            setFilteredDotString(null);
         }
-    }, [filteredDotString, numberOfGraphs]);
+    }, [filteredDotString, numberOfGraphs, filter]);
 
 
     return (
@@ -268,10 +284,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
                             <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} /></div>
                     )}
-                    {filteredDotString && (
+                    {filter && filter !== 'ALL' && filteredDotString && (
                         <div
                             className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
-                            <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph</h2>
+                            <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph: {titleCase(filter)}</h2>
                             <div ref={graphRefFiltered}
                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
                             <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
