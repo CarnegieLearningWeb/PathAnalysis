@@ -169,24 +169,26 @@ export const countEdges = (
     totalNodeEdges: { [p: string]: number };
     edgeOutcomeCounts: { [p: string]: { [p: string]: number } };
     maxEdgeCount: number;
-    ratioEdges: { [p: string]: number };
+    ratioEdges: { [key: string]: number };
     edgeCounts: { [key: string]: number };
+    totalVisits: { [key: string]: number };
+    repeatVisits: { [key: string]: { [studentId: string]: number } };
     topSequences: SequenceCount[];
 } => {
-    const totalNodeEdges: { [key: string]: number } = {};
+    const totalNodeEdges: { [key: string]: Set<string> } = {};
     const edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } } = {};
     let maxEdgeCount = 0;
     const ratioEdges: { [key: string]: number } = {};
     const edgeCounts: { [key: string]: number } = {};
-    const studentEdgeCounts: { [key: string]: Set<string> } = {}; // Track unique students per edge
+    const totalVisits: { [key: string]: number } = {};
+    const studentEdgeCounts: { [key: string]: Set<string> } = {};
+    const repeatVisits: { [key: string]: { [studentId: string]: number } } = {};
     const top5Sequences = getTopSequences(stepSequences, 5);
 
-    // Iterate over first-level keys (student IDs)
     Object.keys(stepSequences).forEach((studentId) => {
         const innerStepSequences = stepSequences[studentId];
         const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-        // Iterate over second-level keys (problem names)
         Object.keys(innerStepSequences).forEach((problemName) => {
             const steps = innerStepSequences[problemName];
             const outcomes = innerOutcomeSequences[problemName] || [];
@@ -200,20 +202,30 @@ export const countEdges = (
 
                 const edgeKey = `${currentStep}->${nextStep}`;
                 
-                // Initialize the Set for this edge if it doesn't exist
                 if (!studentEdgeCounts[edgeKey]) {
                     studentEdgeCounts[edgeKey] = new Set();
                 }
+                if (!totalNodeEdges[currentStep]) {
+                    totalNodeEdges[currentStep] = new Set();
+                }
+                if (!totalVisits[edgeKey]) {
+                    totalVisits[edgeKey] = 0;
+                }
+                if (!repeatVisits[edgeKey]) {
+                    repeatVisits[edgeKey] = {};
+                }
                 
-                // Add this student to the Set for this edge
                 studentEdgeCounts[edgeKey].add(studentId);
+                totalNodeEdges[currentStep].add(studentId);
+                totalVisits[edgeKey]++;
                 
-                // Update edge counts based on unique students
+                // Track repeat visits for all edges
+                repeatVisits[edgeKey][studentId] = (repeatVisits[edgeKey][studentId] || 0) + 1;
+                
                 edgeCounts[edgeKey] = studentEdgeCounts[edgeKey].size;
                 
                 edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
                 edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
-                totalNodeEdges[currentStep] = (totalNodeEdges[currentStep] || 0) + 1;
 
                 if (edgeCounts[edgeKey] > maxEdgeCount) {
                     maxEdgeCount = edgeCounts[edgeKey];
@@ -222,18 +234,24 @@ export const countEdges = (
         });
     });
 
-    // Compute ratioEdges based on totalNodeEdges
+    const totalNodeEdgesCounts: { [key: string]: number } = {};
+    Object.keys(totalNodeEdges).forEach(node => {
+        totalNodeEdgesCounts[node] = totalNodeEdges[node].size;
+    });
+
     Object.keys(edgeCounts).forEach((edge) => {
         const [start] = edge.split('->');
-        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdges[start] || 1);
+        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdgesCounts[start] || 1);
     });
 
     return {
         edgeCounts,
-        totalNodeEdges,
+        totalNodeEdges: totalNodeEdgesCounts,
         ratioEdges,
         edgeOutcomeCounts,
         maxEdgeCount,
+        totalVisits,
+        repeatVisits,
         topSequences: top5Sequences
     };
 };
@@ -352,69 +370,80 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  *
  * @param justTopSequence
  * @returns A string in Graphviz DOT format that represents the graph.
- */export function generateDotString(
+ */
+export function generateDotString(
     normalizedThicknesses: { [key: string]: number },
-    // mostCommonSequence: string[],
     ratioEdges: { [key: string]: number },
     edgeOutcomeCounts: EdgeCounts['edgeOutcomeCounts'],
     edgeCounts: EdgeCounts['edgeCounts'],
     totalNodeEdges: EdgeCounts['totalNodeEdges'],
-    threshold: number,              //Make a percentage to be more intuitive
+    threshold: number,
     min_visits: number,
     selectedSequence: SequenceCount["sequence"],
-    justTopSequence: boolean
+    justTopSequence: boolean,
+    totalVisits: { [key: string]: number },
+    repeatVisits: { [key: string]: { [studentId: string]: number } }
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
 
     let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
-    let totalSteps = selectedSequence.length//stepsInSelectedSequence.length;
-    let steps = selectedSequence
+    let totalSteps = selectedSequence.length;
+    let steps = selectedSequence;
 
     if (justTopSequence) {
         for (let rank = 0; rank < totalSteps; rank++) {
             const currentStep = steps[rank];
             const nextStep = steps[rank + 1];
             const edgeKey = `${currentStep}->${nextStep}`;
-            const thickness = normalizedThicknesses[edgeKey] || 1; // Default thickness if not present
+            const thickness = normalizedThicknesses[edgeKey] || 1;
             const outcomes = edgeOutcomeCounts[edgeKey] || {};
             const edgeCount = edgeCounts[edgeKey] || 0;
+            const visits = totalVisits[edgeKey] || 0;
             const totalCount = totalNodeEdges[currentStep] || 0;
-            const color = calculateColor(rank, totalSteps)
+            const color = calculateColor(rank, totalSteps);
             const edgeColor = calculateEdgeColors(outcomes);
             const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 
             dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
 
             if (edgeCount > min_visits) {
-                const tooltip = `${currentStep} to ${nextStep}\n`
+                let tooltip = `${currentStep} to ${nextStep}\n`
                     + `- Unique Students: \n\t\t ${edgeCount}\n`
+                    + `- Total Edge Visits: \n\t\t ${visits}\n`
                     + `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n`
                     + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                     + `- Outcomes: \n\t\t ${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t ')}\n`
                     + `- Color Codes: \n\t\t Hex: ${color}`;
 
+                // Add repeat visit information for all edges
+                if (repeatVisits[edgeKey]) {
+                    const repeatCounts = Object.values(repeatVisits[edgeKey]);
+                    const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
+                    const maxRepeats = Math.max(...repeatCounts);
+                    tooltip += `\n- Repeat Visits:\n\t\t ${studentsWithRepeats} students visited this edge multiple times\n\t\t Maximum visits by a student: ${maxRepeats}`;
+                }
+
                 dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
             }
         }
     } else {
-        console.log(totalSteps, steps)
         for (let rank = 0; rank < totalSteps; rank++) {
             const step = steps[rank];
             const color = calculateColor(rank, totalSteps);
-            console.log(step, color)
             const node_tooltip = `Rank:\n\t\t ${rank + 1}\nColor:\n\t\t ${color}`;
 
             dotString += `    "${step}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${node_tooltip}"];\n`;
         }
-        // Create edge definitions in the DOT string based on normalized thickness and thresholds
+        
         for (const edge of Object.keys(normalizedThicknesses)) {
             if (normalizedThicknesses[edge] >= threshold) {
                 const [currentStep, nextStep] = edge.split('->');
                 const thickness = normalizedThicknesses[edge];
                 const outcomes = edgeOutcomeCounts[edge] || {};
                 const edgeCount = edgeCounts[edge] || 0;
+                const visits = totalVisits[edge] || 0;
                 const totalCount = totalNodeEdges[currentStep] || 0;
                 const color = calculateEdgeColors(outcomes);
                 const outcomesStr = Object.entries(outcomes)
@@ -422,19 +451,27 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
                     .join('\n\t\t ');
 
                 if (edgeCount > min_visits) {
-                    const tooltip = `${currentStep} to ${nextStep}\n`
-                        + `- Unique Students: \n\t\t ${edgeCount}\n`
-                        + `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n`
+                    let tooltip = `- Total Students at ${currentStep}: \n\t\t${totalNodeEdges[currentStep] || 0}\n\n`
+                        + `${currentStep} to ${nextStep}\n`
+                        + `- Unique Students on edge (each student only counted once): \n\t\t ${edgeCount}\n`
+                        + `- Edge taken ${visits} times\n`
                         + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                         + `- Outcomes: \n\t\t ${outcomesStr}\n`
                         + `- Color Codes: \n\t\t Hex: ${color}\n\t\t RGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
+
+                    // Add repeat visit information for all edges
+                    if (repeatVisits[edge]) {
+                        const repeatCounts = Object.values(repeatVisits[edge]);
+                        const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
+                        const maxRepeats = Math.max(...repeatCounts);
+                        tooltip += `\n- Repeat Visits:\n\t\t ${studentsWithRepeats} students visited this edge multiple times\n\t\t Maximum visits by a student: ${maxRepeats}`;
+                    }
 
                     dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
                 }
             }
         }
     }
-
 
     dotString += '}';
     return dotString;

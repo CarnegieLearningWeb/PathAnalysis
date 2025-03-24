@@ -51,6 +51,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 ratioEdges,
                 edgeOutcomeCounts,
                 maxEdgeCount,
+                totalVisits,
+                repeatVisits,
                 topSequences
             } = countEdges(stepSequences, outcomeSequences);
 
@@ -76,7 +78,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     1,
                     minVisits,
                     selectedSequence,
-                    false
+                    false,
+                    totalVisits,
+                    repeatVisits
                 )
             );
 
@@ -90,7 +94,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     1,
                     minVisits,
                     selectedSequence,
-                    true
+                    true,
+                    totalVisits,
+                    repeatVisits
                 )
             );
         }
@@ -109,6 +115,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 ratioEdges: filteredRatioEdges,
                 edgeOutcomeCounts: filteredEdgeOutcomeCounts,
                 maxEdgeCount: filteredMaxEdgeCount,
+                totalVisits: filteredTotalVisits,
+                repeatVisits: filteredRepeatVisits,
             } = countEdges(filteredStepSequences, filteredOutcomeSequences);
 
             const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
@@ -123,7 +131,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     1,
                     minVisits,
                     selectedSequence,
-                    false
+                    false,
+                    filteredTotalVisits,
+                    filteredRepeatVisits
                 )
             );
         } else {
