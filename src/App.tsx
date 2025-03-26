@@ -1,5 +1,5 @@
 import './App.css';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useMemo, useState, useEffect } from 'react';
 import { Button } from './components/ui/button';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
@@ -13,6 +13,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
 
 import Loading from './components/Loading.tsx';
 
@@ -24,28 +25,28 @@ function App() {
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     // State to manage the minimum number of visits for displaying edges in the graph
-    const [minVisits, setMinVisits] = useState<number>(0);
+    const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
     const { resetData, loading, error, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
+    const [maxEdgeCount, setMaxEdgeCount] = useState<number>(100); // Default value
+    const [maxMinEdgeCount, setMaxMinEdgeCount] = useState<number>(0);
+
+    // Update minVisitsPercentage when maxMinEdgeCount changes
+    useEffect(() => {
+        if (maxMinEdgeCount > 0) {
+            const percentage = ((maxMinEdgeCount - 1) / maxEdgeCount) * 100;
+            setMinVisitsPercentage(Math.max(0, Math.min(100, percentage)));
+        }
+    }, [maxMinEdgeCount, maxEdgeCount]);
+
     const showControls = useMemo(() => {
         return !loading && csvData.length > 0;
-
     }, [loading, csvData]);
 
-
     const handleSelectSequence = (selectedSequence: SequenceCount["sequence"]) => {
-        console.log("SS: ", top5Sequences, selectedSequence);
-
         if (top5Sequences) {
-            // Update the selected sequence in the context
             setSelectedSequence(selectedSequence);
-            console.log(`Selected sequence: ${selectedSequence}`);
         }
-
     };
-    // TODO: Implement error handling
-    // const handleError = (errorMessage: string) => {
-    //     setError(errorMessage);
-    // }
 
     /**
      * Toggles the self-loops inclusion in the graph by switching the state.
@@ -57,7 +58,9 @@ function App() {
      *
      * @param {number} value - The new value for minimum visits.
      */
-    const handleSlider = (value: number) => setMinVisits(value);
+    const handleSlider = (value: number) => {
+        setMinVisitsPercentage(value);
+    };
 
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
@@ -65,6 +68,22 @@ function App() {
      * @param {string} uploadedCsvData - The CSV data from the uploaded file.
      */
     const handleDataProcessed = (uploadedCsvData: string) => setCSVData(uploadedCsvData);
+
+    // Calculate actual min visits from percentage
+    const minVisits = Math.round((minVisitsPercentage / 100) * maxEdgeCount);
+
+    /**
+     * Updates the minimum visits percentage when the input value changes.
+     *
+     * @param {string} value - The new value from the input.
+     */
+    const handleInputChange = (value: string) => {
+        const numValue = parseInt(value);
+        if (!isNaN(numValue)) {
+            const percentage = Math.min(100, Math.max(0, (numValue / maxEdgeCount) * 100));
+            setMinVisitsPercentage(percentage);
+        }
+    };
 
     /**
      * Updates the loading state when the file upload or processing begins or ends.
@@ -121,7 +140,7 @@ function App() {
                                     {/* Filter Section */}
                                     <div className="space-y-2">
                                         <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                                        <FilterComponent onFilterChange={setFilter} />
+                                        <FilterComponent onFilterChange={setFilter} currentFilter={filter} />
                                     </div>
 
                                     {/* Sequence Section */}
@@ -141,14 +160,42 @@ function App() {
                                         </div>
 
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">Edge Visits</label>
-                                            <Slider
-                                                step={5}
-                                                min={0}
-                                                max={5000}
-                                                value={minVisits}
-                                                onChange={handleSlider}
-                                            />
+                                            <label className="text-sm font-medium text-gray-700">Minimum Students</label>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <div className="flex justify-between mb-1">
+                                                        {/* <span className="text-sm text-gray-500">Percentage</span>
+                                                        <span className="text-sm text-gray-500">{minVisitsPercentage}%</span> */}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Slider
+                                                            step={1}
+                                                            min={0}
+                                                            max={100}
+                                                            value={minVisitsPercentage}
+                                                            onChange={handleSlider}
+                                                            maxEdgeCount={maxEdgeCount}
+                                                        />
+                                                        <span className="text-sm text-gray-500">%</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="flex justify-between mb-1">
+                                                        <span className="text-sm text-gray-500">Students</span>
+                                                    </div>
+                                                    <Input
+                                                        type="number"
+                                                        value={minVisits}
+                                                        onChange={(e) => handleInputChange(e.target.value)}
+                                                        className="w-full"
+                                                        min={0}
+                                                        max={maxEdgeCount}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                Maximum threshold before any node becomes disconnected: {maxMinEdgeCount-1} students
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -167,6 +214,8 @@ function App() {
                                             filter={filter}
                                             selfLoops={selfLoops}
                                             minVisits={minVisits}
+                                            onMaxEdgeCountChange={setMaxEdgeCount}
+                                            onMaxMinEdgeCountChange={setMaxMinEdgeCount}
                                         />
                                     </div>
                                 </div>
