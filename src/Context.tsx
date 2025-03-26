@@ -64,7 +64,7 @@ export const Provider = ({children}: ProviderProps) => {
     const [csvData, setCSVData] = useState<string>(initialState.csvData)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
-    const [f3L3, setF3L3] = useState<boolean | null>(initialState.f3L3)
+    const [f3L3, setF3L3] = useState<boolean>(initialState.f3L3)
    // const queryClient = useQueryClient();
 
     // const { data: uploadedData } = useQuery<GlobalDataType[]>({
