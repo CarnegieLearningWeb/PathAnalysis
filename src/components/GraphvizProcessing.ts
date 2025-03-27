@@ -428,7 +428,7 @@ export function generateDotString(
                     + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                     + `- Outcomes: \n\t\t${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
                     +`\nVisual Properties:\n`
-                    + `- Color: \n\t\tHex: ${color}\n`;
+                    + `- Edge Color: \n\t\tHex: ${edgeColor}\n`;
 
                 dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
             }
@@ -440,8 +440,8 @@ export function generateDotString(
             const nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
             dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
-        }
         
+        }
         for (const edge of Object.keys(normalizedThicknesses)) {
             if (normalizedThicknesses[edge] >= threshold) {
                 const [currentStep, nextStep] = edge.split('->');
@@ -450,7 +450,7 @@ export function generateDotString(
                 const edgeCount = edgeCounts[edge] || 0;
                 const visits = totalVisits[edge] || 0;
                 const totalCount = totalNodeEdges[currentStep] || 0;
-                const color = calculateEdgeColors(outcomes);
+                const edgeColor = calculateEdgeColors(outcomes);
                 const outcomesStr = Object.entries(outcomes)
                     .map(([outcome, count]) => `${outcome}: ${count}`)
                     .join('\n\t\t');
@@ -475,10 +475,10 @@ export function generateDotString(
                             + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
                             + `- Outcomes: \n\t\t${outcomesStr}\n`
                             + `\nVisual Properties:\n`
-                            + `- Color: \n\t\tHex: ${color}\n`
-                            + `\t\tRGB: ${[parseInt(color.substring(1, 3), 16), parseInt(color.substring(3, 5), 16), parseInt(color.substring(5, 7), 16)]}`;
+                            + `- Edge Color: \n\t\tHex: ${edgeColor}\n`
+                            + `\t\tRGB: ${[parseInt(edgeColor.substring(1, 3), 16), parseInt(edgeColor.substring(3, 5), 16), parseInt(edgeColor.substring(5, 7), 16)]}`;
     
-                        dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${color}", tooltip="${tooltip}"];\n`;
+                        dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
                     }
             }
         }

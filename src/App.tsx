@@ -219,6 +219,67 @@ function App() {
                                         />
                                     </div>
                                 </div>
+                                {/* Legend component */}
+                                <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-white">
+                                    <h3 className="text-lg font-semibold mb-2">Graph Legend</h3>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <h4 className="font-medium mb-2">Node Colors</h4>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-white border border-gray-300 mr-2"></div>
+                                                    <span>Start of Sequence</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-[#00A6FF] mr-2"></div>
+                                                    <span>End of Sequence</span>
+                                                </div>
+                                                <div className="text-sm text-gray-600">Nodes in between are colored with a gradient from white to light blue based on their position</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium mb-2">Edge Colors</h4>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-red-500 mr-2"></div>
+                                                    <span>ERROR</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-green-500 mr-2"></div>
+                                                    <span>OK</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-blue-500 mr-2"></div>
+                                                    <span>INITIAL_HINT/HINT_LEVEL_CHANGE</span>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
+                                                    <span>JIT/FREEBIE_JIT</span>
+                                                </div>
+                                                <Popover>
+                                                    <PopoverTrigger>
+                                                        <div className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
+                                                            How are edge colors calculated?
+                                                        </div>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-80">
+                                                        <div className="space-y-2">
+                                                            <h4 className="font-medium">Edge Color Calculation</h4>
+                                                            <p className="text-sm">
+                                                                When an edge has multiple outcomes, its color is calculated as a weighted average:
+                                                            </p>
+                                                            <ul className="text-sm list-disc pl-4 space-y-1">
+                                                                <li>Each outcome's color is weighted by its frequency</li>
+                                                                <li>For example, if an edge has 70% OK (green) and 30% ERROR (red), the resulting color will be a blend of these colors</li>
+                                                                <li>The final color includes 90% opacity to show overlapping edges</li>
+                                                            </ul>
+                                                        </div>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
