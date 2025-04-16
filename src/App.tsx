@@ -264,54 +264,110 @@ function App() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <h4 className="font-medium mb-2">Edge Colors</h4>
-                                            <div className="space-y-2">
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-red-500 mr-2"></div>
-                                                    <span>ERROR</span>
+                                        {errorMode ? (
+                                            <div>
+                                                <h4 className="font-medium mb-2">Edge Colors (Error Mode)</h4>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
+                                                        <span>ERROR</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
+                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
+                                                        <span>JIT / FREEBIE_JIT</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-black mr-2"></div>
+                                                        <span>Only OK → Black</span>
+                                                    </div>
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <div
+                                                                className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
+                                                                How are edge colors calculated?
+                                                            </div>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-80">
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">Edge Color Calculation (Error
+                                                                    Mode)</h4>
+                                                                <p className="text-sm">
+                                                                    When in error-focused mode, only non-OK outcomes
+                                                                    contribute to the color:
+                                                                </p>
+                                                                <ul className="text-sm list-disc pl-4 space-y-1">
+                                                                    <li>Only ERROR, hints, and JIT are included in the
+                                                                        blend
+                                                                    </li>
+                                                                    <li>OK is ignored unless it's the only outcome — then
+                                                                        the edge is black
+                                                                    </li>
+                                                                    <li>Final color includes 90% opacity</li>
+                                                                </ul>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
                                                 </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-green-500 mr-2"></div>
-                                                    <span>OK</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-blue-500 mr-2"></div>
-                                                    <span>INITIAL_HINT/HINT_LEVEL_CHANGE</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
-                                                    <span>JIT/FREEBIE_JIT</span>
-                                                </div>
-                                                <Popover>
-                                                    <PopoverTrigger>
-                                                        <div
-                                                            className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
-                                                            How are edge colors calculated?
-                                                        </div>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-80">
-                                                        <div className="space-y-2">
-                                                            <h4 className="font-medium">Edge Color Calculation</h4>
-                                                            <p className="text-sm">
-                                                                When an edge has multiple outcomes, its color is calculated
-                                                                as a weighted average:
-                                                            </p>
-                                                            <ul className="text-sm list-disc pl-4 space-y-1">
-                                                                <li>Each outcome's color is weighted by its frequency</li>
-                                                                <li>For example, if an edge has 70% OK (green) and 30% ERROR
-                                                                    (red), the resulting color will be a blend of these
-                                                                    colors
-                                                                </li>
-                                                                <li>The final color includes 90% opacity to show overlapping
-                                                                    edges
-                                                                </li>
-                                                            </ul>
-                                                        </div>
-                                                    </PopoverContent>
-                                                </Popover>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            <div>
+                                                <h4 className="font-medium mb-2">Edge Colors</h4>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
+                                                        <span>ERROR</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-green-500 mr-2"></div>
+                                                        <span>OK</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
+                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
+                                                        <span>JIT / FREEBIE_JIT</span>
+                                                    </div>
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <div
+                                                                className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
+                                                                How are edge colors calculated?
+                                                            </div>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-80">
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">Edge Color Calculation</h4>
+                                                                <p className="text-sm">
+                                                                    When an edge has multiple outcomes, its color is
+                                                                    calculated
+                                                                    as a weighted average:
+                                                                </p>
+                                                                <ul className="text-sm list-disc pl-4 space-y-1">
+                                                                    <li>Each outcome's color is weighted by its frequency
+                                                                    </li>
+                                                                    <li>For example, if an edge has 70% OK (green) and 30%
+                                                                        ERROR
+                                                                        (red), the resulting color will be a blend of these
+                                                                        colors
+                                                                    </li>
+                                                                    <li>The final color includes 90% opacity to show
+                                                                        overlapping
+                                                                        edges
+                                                                    </li>
+                                                                </ul>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                            </div>
+                                        )}
+
                                     </div>
                                 </div>
                             </div>

@@ -53,7 +53,7 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
  * @param selfLoops - A boolean to include self-loops.
  * @returns A dictionary mapping session IDs to sequences of step names.
  */
-export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: string[] } => {
+export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
         const studentId: string = row['Anon Student Id'];
         const problemName: string = row['Problem Name'];
@@ -75,7 +75,7 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
  * @param sortedData - The sorted CSV rows.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: string[] } => {
+export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
         const studentId = row['Anon Student Id'];
         const problemName = row['Problem Name'];
@@ -305,14 +305,50 @@ export function calculateColor(rank: number, totalSteps: number): string {
  * @param errorMode
  * @returns A color representing the most frequent outcome.
  */
+// function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean): string {
+//     const colorMap: { [key: string]: string } = errorMode ? {
+//         'ERROR': '#ff0000',        // Red
+//         // 'OK': '#ffffff',           // Black
+//         'INITIAL_HINT': '#0000ff', // Blue
+//         'HINT_LEVEL_CHANGE': '#0000ff',
+//         'JIT': '#ffff00',          // Yellow
+//         'FREEBIE_JIT': '#ffff00'
+//     } : {
+//         'ERROR': '#ff0000',
+//         'OK': '#00ff00',           // Green
+//         'INITIAL_HINT': '#0000ff',
+//         'HINT_LEVEL_CHANGE': '#0000ff',
+//         'JIT': '#ffff00',
+//         'FREEBIE_JIT': '#ffff00'
+//     };
+//
+//     if (Object.keys(outcomes).length === 0) {
+//         return '#00000000'; // Transparent black
+//     }
+//
+//     const totalCount = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
+//     let weightedR = 0, weightedG = 0, weightedB = 0;
+//
+//     Object.entries(outcomes).forEach(([outcome, count]) => {
+//         const color = colorMap[outcome] || '#000000'; // Default to black if outcome is not found
+//         const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)); // Extract RGB values
+//         const weight = count / totalCount;
+//         weightedR += r * weight;
+//         weightedG += g * weight;
+//         weightedB += b * weight;
+//     });
+//
+//     // Convert RGB values to hex and add alpha transparency
+//     return `#${Math.round(weightedR).toString(16).padStart(2, '0')}${Math.round(weightedG).toString(16).padStart(2, '0')}${Math.round(weightedB).toString(16).padStart(2, '0')}90`;
+// }
 function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean): string {
     const colorMap: { [key: string]: string } = errorMode ? {
         'ERROR': '#ff0000',        // Red
-        // 'OK': '#000000',           // Black
         'INITIAL_HINT': '#0000ff', // Blue
         'HINT_LEVEL_CHANGE': '#0000ff',
         'JIT': '#ffff00',          // Yellow
         'FREEBIE_JIT': '#ffff00'
+        // 'OK' intentionally excluded
     } : {
         'ERROR': '#ff0000',
         'OK': '#00ff00',           // Green
@@ -323,23 +359,41 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode:
     };
 
     if (Object.keys(outcomes).length === 0) {
-        return '#00000000'; // Transparent black
+        return '#00000000'; // Transparent
     }
 
-    const totalCount = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
     let weightedR = 0, weightedG = 0, weightedB = 0;
+    let totalCount = 0;
+    let contributingOutcomes = 0;
 
     Object.entries(outcomes).forEach(([outcome, count]) => {
-        const color = colorMap[outcome] || '#000000'; // Default to black if outcome is not found
-        const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)); // Extract RGB values
-        const weight = count / totalCount;
-        weightedR += r * weight;
-        weightedG += g * weight;
-        weightedB += b * weight;
+        if (errorMode && outcome === 'OK') return; // Skip OK in errorMode
+
+        const color = colorMap[outcome];
+        if (!color) return; // Skip if not in colorMap
+
+        const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+        weightedR += r * count;
+        weightedG += g * count;
+        weightedB += b * count;
+        totalCount += count;
+        contributingOutcomes++;
     });
 
-    // Convert RGB values to hex and add alpha transparency
-    return `#${Math.round(weightedR).toString(16).padStart(2, '0')}${Math.round(weightedG).toString(16).padStart(2, '0')}${Math.round(weightedB).toString(16).padStart(2, '0')}90`;
+    // If nothing contributed but 'OK' was present (and we're in errorMode), return black
+    if (contributingOutcomes === 0 && errorMode && outcomes['OK']) {
+        return '#00000090'; // Black with alpha
+    }
+
+    if (totalCount === 0) {
+        return '#00000000'; // Fully transparent fallback
+    }
+
+    const rHex = Math.round(weightedR / totalCount).toString(16).padStart(2, '0');
+    const gHex = Math.round(weightedG / totalCount).toString(16).padStart(2, '0');
+    const bHex = Math.round(weightedB / totalCount).toString(16).padStart(2, '0');
+
+    return `#${rHex}${gHex}${bHex}90`; // Final color
 }
 
 /**
