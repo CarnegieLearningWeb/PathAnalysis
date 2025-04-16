@@ -11,19 +11,29 @@ interface ContextInterface {
 
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
+    f3L3: boolean;
     selectedSequence: string[] | undefined; // string[] or SequenceCount[].sequence?
     setLoading: (loading: boolean) => void;
     setData: (data: GlobalDataType[] | null) => void;
+    setF3L3: (f3L3: boolean) => void;
     setGraphData: (graphData: GraphData | null) => void;
     setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
     setSelectedSequence: (selectedSequence: string[] | undefined) => void;
-
     setCSVData: (csvData: string) => void;
 
     resetData: () => void;
 
 }
-
+export interface CSVRow {
+    'Session Id'?: string;
+    'Time': string;
+    'Step Name': string;
+    'Outcome': string;
+    'CF (Workspace Progress Status)': string;
+    'Problem Name': string;
+    'Anon Student Id': string;
+    'first or last'?: string;
+}
 export interface SequenceCount {
     sequence: string[] | undefined;
     count: number;//| null;
@@ -37,6 +47,7 @@ const initialState = {
     top5Sequences: null,
     selectedSequence: undefined,
     csvData:'',
+    f3L3: false,
 }
 
 interface ProviderProps {
@@ -51,9 +62,10 @@ export const Provider = ({children}: ProviderProps) => {
     const [error, setError] = useState<string | null>(null)
 
     const [csvData, setCSVData] = useState<string>(initialState.csvData)
-
-
-    // const queryClient = useQueryClient();
+    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
+    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
+    const [f3L3, setF3L3] = useState<boolean>(initialState.f3L3)
+   // const queryClient = useQueryClient();
 
     // const { data: uploadedData } = useQuery<GlobalDataType[]>({
     //     queryKey: ['uploadedData'],
@@ -67,9 +79,6 @@ export const Provider = ({children}: ProviderProps) => {
     //         queryClient.setQueryData(['uploadedData'], data);
     //     },
     // });
-
-    const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
-    const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
 
     const resetData = () => {
         setData(null)
@@ -95,11 +104,13 @@ export const Provider = ({children}: ProviderProps) => {
                 setError,
                 setLoading,
                 setData,
+                f3L3,
                 setGraphData,
                 setTop5Sequences,
                 setSelectedSequence,
                 setCSVData,
                 resetData,
+                setF3L3
             }}
         >
             {children}

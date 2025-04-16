@@ -10,7 +10,7 @@ const Switch: React.FC<SwitchProps> = ({ isOn, handleToggle }) => {
   return (
     <div className="flex items-center justify-between space-x-4">
       <label className="text-sm font-medium text-gray-700">
-        Include Self Loops
+        {/*Include Self Loops*/}
       </label>
       <button
         type="button"
