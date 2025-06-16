@@ -1,5 +1,5 @@
 // React component code
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
@@ -8,7 +8,9 @@ import {
     createStepSequences,
     createOutcomeSequences,
     loadAndSortData,
-    calculateMaxMinEdgeCount
+    calculateMaxMinEdgeCount,
+    analyzeEquationAnswerTransitions,
+    formatEquationAnswerStats
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
@@ -46,14 +48,33 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const graphRefFiltered = useRef<HTMLDivElement>(null);
     const graphRefTop = useRef<HTMLDivElement>(null);
 
+    // Memoized data processing for main graph
+    const mainGraphData = useMemo(() => {
+        if (!csvData) return null;
+        
+        const sortedData = loadAndSortData(csvData);
+        const stepSequences = createStepSequences(sortedData, selfLoops);
+        const outcomeSequences = createOutcomeSequences(sortedData);
+        
+        // Add equation answer analysis
+        const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
+        console.log(formatEquationAnswerStats(equationStats));
+        
+        const results = countEdges(stepSequences, outcomeSequences);
+        
+        return {
+            sortedData,
+            stepSequences,
+            outcomeSequences,
+            ...results
+        };
+    }, [csvData, selfLoops]);
+    
+    // Main graph calculation - removed filter from dependencies
     useEffect(() => {
-        if (csvData) {
-            const sortedData = loadAndSortData(csvData);
-            const stepSequences = createStepSequences(sortedData, selfLoops);
-            const outcomeSequences = createOutcomeSequences(sortedData);
-
+        if (mainGraphData) {
             const {
-                edgeCounts,
+                edgeCounts: newEdgeCounts,
                 totalNodeEdges,
                 ratioEdges,
                 edgeOutcomeCounts,
@@ -61,7 +82,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 totalVisits,
                 repeatVisits,
                 topSequences
-            } = countEdges(stepSequences, outcomeSequences);
+            } = mainGraphData;
+
+            // Note: edgeCounts are now used directly from mainGraphData
 
             // Update the maxEdgeCount in the parent component
             onMaxEdgeCountChange(maxEdgeCount);
@@ -69,19 +92,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // Calculate and update the maximum minimum-edge count
             const sequenceToUse = selectedSequence || topSequences[0]?.sequence;
             if (sequenceToUse) {
-                const maxMinEdgeCount = calculateMaxMinEdgeCount(edgeCounts, sequenceToUse);
-
-                // If filter is active and not 'ALL', compare with filtered graph's minimum edge count
-                if (filter && filter !== 'ALL') {
-                    const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-                    const filteredStepSequences = createStepSequences(filteredData, selfLoops);
-                    const filteredOutcomeSequences = createOutcomeSequences(filteredData);
-                    const { edgeCounts: filteredEdgeCounts } = countEdges(filteredStepSequences, filteredOutcomeSequences);
-                    const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredEdgeCounts, sequenceToUse);
-                    onMaxMinEdgeCountChange(Math.min(maxMinEdgeCount, filteredMinEdgeCount));
-                } else {
-                    onMaxMinEdgeCountChange(maxMinEdgeCount);
-                }
+                const maxMinEdgeCount = calculateMaxMinEdgeCount(newEdgeCounts, sequenceToUse);
+                onMaxMinEdgeCountChange(maxMinEdgeCount);
             }
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
@@ -91,31 +103,32 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
 
-            const normalizedThicknesses = normalizeThicknesses(edgeCounts, maxEdgeCount, 10);
+            const normalizedThicknesses = normalizeThicknesses(newEdgeCounts, maxEdgeCount, 10);
 
-            setDotString(
-                generateDotString(
-                    normalizedThicknesses,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    edgeCounts,
-                    totalNodeEdges,
-                    1,
-                    minVisits,
-                    selectedSequence || topSequences[0].sequence,
-                    false,
-                    totalVisits,
-                    repeatVisits,
-                    errorMode
-                )
+            const dotString = generateDotString(
+                normalizedThicknesses,
+                ratioEdges,
+                edgeOutcomeCounts,
+                newEdgeCounts,
+                totalNodeEdges,
+                1,
+                minVisits,
+                sequenceToUse,
+                false,
+                totalVisits,
+                repeatVisits,
+                errorMode,
+                mainGraphData.firstAttemptOutcomes
             );
+
+            setDotString(dotString);
 
             setTopDotString(
                 generateDotString(
                     normalizedThicknesses,
                     ratioEdges,
                     edgeOutcomeCounts,
-                    edgeCounts,
+                    newEdgeCounts,
                     totalNodeEdges,
                     1,
                     minVisits,
@@ -123,20 +136,41 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     true,
                     totalVisits,
                     repeatVisits,
-                    errorMode
+                    errorMode,
+                    mainGraphData.firstAttemptOutcomes
                 )
             );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, filter, errorMode]);
+    }, [mainGraphData, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, errorMode]);
 
-    // Add back the useEffect for filtered graph display
+    // Memoized filtered graph data
+    const filteredGraphData = useMemo(() => {
+        if (!filter || filter === 'ALL' || !mainGraphData) return null;
+        
+        const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
+        const filteredStepSequences = createStepSequences(filteredData, selfLoops);
+        const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+        
+        const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
+        
+        return {
+            filteredData,
+            filteredStepSequences,
+            filteredOutcomeSequences,
+            edgeCounts: results.edgeCounts,
+            totalNodeEdges: results.totalNodeEdges,
+            ratioEdges: results.ratioEdges,
+            edgeOutcomeCounts: results.edgeOutcomeCounts,
+            maxEdgeCount: results.maxEdgeCount,
+            totalVisits: results.totalVisits,
+            repeatVisits: results.repeatVisits,
+            firstAttemptOutcomes: results.firstAttemptOutcomes
+        };
+    }, [filter, mainGraphData, selfLoops]);
+
+    // Filtered graph calculation - only runs when filter changes
     useEffect(() => {
-        if (filter && filter !== 'ALL') {
-            const sortedData = loadAndSortData(csvData);
-            const filteredData = sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            const filteredStepSequences = createStepSequences(filteredData, selfLoops);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
-
+        if (filteredGraphData) {
             const {
                 edgeCounts: filteredEdgeCounts,
                 totalNodeEdges: filteredTotalNodeEdges,
@@ -144,31 +178,47 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 edgeOutcomeCounts: filteredEdgeOutcomeCounts,
                 maxEdgeCount: filteredMaxEdgeCount,
                 totalVisits: filteredTotalVisits,
-                repeatVisits: filteredRepeatVisits,
-            } = countEdges(filteredStepSequences, filteredOutcomeSequences);
+                repeatVisits: filteredRepeatVisits
+            } = filteredGraphData;
 
-            const filteredNormalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
+            // Calculate max min edge count for filtered data
+            const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
+            if (sequenceToUse) {
+                const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredEdgeCounts, sequenceToUse);
+                onMaxMinEdgeCountChange(filteredMinEdgeCount);
+            }
 
-            setFilteredDotString(
-                generateDotString(
-                    filteredNormalizedThicknesses,
-                    filteredRatioEdges,
-                    filteredEdgeOutcomeCounts,
-                    filteredEdgeCounts,
-                    filteredTotalNodeEdges,
-                    1,
-                    minVisits,
-                    selectedSequence,
-                    false,
-                    filteredTotalVisits,
-                    filteredRepeatVisits,
-                    errorMode
-                )
+            const normalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
+
+            const filteredDotString = generateDotString(
+                normalizedThicknesses,
+                filteredRatioEdges,
+                filteredEdgeOutcomeCounts,
+                filteredEdgeCounts,
+                filteredTotalNodeEdges,
+                1,
+                minVisits,
+                sequenceToUse,
+                false,
+                filteredTotalVisits,
+                filteredRepeatVisits,
+                errorMode,
+                filteredGraphData.firstAttemptOutcomes
             );
+
+            setFilteredDotString(filteredDotString);
         } else {
             setFilteredDotString(null);
+            // Reset max min edge count to the main graph's value
+            if (mainGraphData) {
+                const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
+                if (sequenceToUse) {
+                    const maxMinEdgeCount = calculateMaxMinEdgeCount(mainGraphData.edgeCounts, sequenceToUse);
+                    onMaxMinEdgeCountChange(maxMinEdgeCount);
+                }
+            }
         }
-    }, [csvData, filter, selfLoops, minVisits, selectedSequence, errorMode]);
+    }, [filteredGraphData, minVisits, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange]);
 
     // Export a graph as high-quality PNG
     const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {

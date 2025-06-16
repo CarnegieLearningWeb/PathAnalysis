@@ -34,11 +34,20 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         'Problem Name': row['Problem Name'],
         'Anon Student Id': row['Anon Student Id']
     }));
-    console.log(transformedData)
+    
+    // Cache Date objects to avoid repeated parsing during sort
+    const dateCache = new Map<string, number>();
+    const getTimestamp = (timeStr: string): number => {
+        if (!dateCache.has(timeStr)) {
+            dateCache.set(timeStr, new Date(timeStr).getTime());
+        }
+        return dateCache.get(timeStr)!;
+    };
+    
     return transformedData.sort((a, b) => {
         if (a['Anon Student Id'] === b['Anon Student Id']) {
             if (a['Problem Name'] === b['Problem Name']) {
-                return new Date(a['Time']).getTime() - new Date(b['Time']).getTime();
+                return getTimestamp(a['Time']) - getTimestamp(b['Time']);
             }
             return a['Problem Name'].localeCompare(b['Problem Name']);
         }
@@ -61,7 +70,6 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
         if (!acc[studentId]) acc[studentId] = {}; // Initialize student entry if not present
         if (!acc[studentId][problemName]) acc[studentId][problemName] = []; // Initialize problem entry if not present
 
-        // console.log(acc['stepName'], sessionId)
         const stepName = row['Step Name'];
         if (selfLoops || acc[studentId][problemName].length === 0 || acc[studentId][problemName][acc[studentId][problemName].length - 1] !== stepName) {
             acc[studentId][problemName].push(stepName);
@@ -152,85 +160,146 @@ export const countEdges = (
     totalVisits: { [key: string]: number };
     repeatVisits: { [key: string]: { [studentId: string]: number } };
     topSequences: SequenceCount[];
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
 } => {
-    const totalNodeEdges: { [key: string]: Set<string> } = {};
-    const edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } } = {};
+    // Use Maps for better performance with frequent operations
+    const totalNodeEdges = new Map<string, Set<string>>();
+    const edgeOutcomeCounts = new Map<string, Map<string, number>>();
     let maxEdgeCount = 0;
-    const ratioEdges: { [key: string]: number } = {};
-    const edgeCounts: { [key: string]: number } = {};
-    const totalVisits: { [key: string]: number } = {};
-    const studentEdgeCounts: { [key: string]: Set<string> } = {};
-    const repeatVisits: { [key: string]: { [studentId: string]: number } } = {};
+    const edgeCounts = new Map<string, number>();
+    const totalVisits = new Map<string, number>();
+    const studentEdgeCounts = new Map<string, Set<string>>();
+    const repeatVisits = new Map<string, Map<string, number>>();
+    const firstAttemptOutcomes = new Map<string, Map<string, number>>();
     const top5Sequences = getTopSequences(stepSequences, 5);
 
-    Object.keys(stepSequences).forEach((studentId) => {
-        const innerStepSequences = stepSequences[studentId];
+    // Pre-calculate all student-problem combinations to avoid repeated lookups
+    const allCombinations: Array<{
+        studentId: string;
+        problemName: string;
+        steps: string[];
+        outcomes: string[];
+    }> = [];
+
+    for (const [studentId, innerStepSequences] of Object.entries(stepSequences)) {
         const innerOutcomeSequences = outcomeSequences[studentId] || {};
-
-        Object.keys(innerStepSequences).forEach((problemName) => {
-            const steps = innerStepSequences[problemName];
-            const outcomes = innerOutcomeSequences[problemName] || [];
-
-            if (steps.length < 2) return;
-
-            for (let i = 0; i < steps.length - 1; i++) {
-                const currentStep = steps[i];
-                const nextStep = steps[i + 1];
-                const outcome = outcomes[i + 1];
-
-                const edgeKey = `${currentStep}->${nextStep}`;
-
-                if (!studentEdgeCounts[edgeKey]) {
-                    studentEdgeCounts[edgeKey] = new Set();
-                }
-                if (!totalNodeEdges[currentStep]) {
-                    totalNodeEdges[currentStep] = new Set();
-                }
-                if (!totalVisits[edgeKey]) {
-                    totalVisits[edgeKey] = 0;
-                }
-                if (!repeatVisits[edgeKey]) {
-                    repeatVisits[edgeKey] = {};
-                }
-
-                studentEdgeCounts[edgeKey].add(studentId);
-                totalNodeEdges[currentStep].add(studentId);
-                totalVisits[edgeKey]++;
-
-                // Track repeat visits for all edges
-                repeatVisits[edgeKey][studentId] = (repeatVisits[edgeKey][studentId] || 0) + 1;
-
-                edgeCounts[edgeKey] = studentEdgeCounts[edgeKey].size;
-
-                edgeOutcomeCounts[edgeKey] = edgeOutcomeCounts[edgeKey] || {};
-                edgeOutcomeCounts[edgeKey][outcome] = (edgeOutcomeCounts[edgeKey][outcome] || 0) + 1;
-
-                if (edgeCounts[edgeKey] > maxEdgeCount) {
-                    maxEdgeCount = edgeCounts[edgeKey];
-                }
+        
+        for (const [problemName, steps] of Object.entries(innerStepSequences)) {
+            if (steps.length >= 2) {
+                allCombinations.push({
+                    studentId,
+                    problemName,
+                    steps,
+                    outcomes: innerOutcomeSequences[problemName] || []
+                });
             }
+        }
+    }
+
+    // Single pass through all combinations
+    for (const { studentId, steps, outcomes } of allCombinations) {
+        for (let i = 0; i < steps.length - 1; i++) {
+            const currentStep = steps[i];
+            const nextStep = steps[i + 1];
+            const outcome = outcomes[i + 1];
+            const edgeKey = `${currentStep}->${nextStep}`;
+
+            // Initialize collections if needed
+            if (!studentEdgeCounts.has(edgeKey)) {
+                studentEdgeCounts.set(edgeKey, new Set());
+                totalVisits.set(edgeKey, 0);
+                repeatVisits.set(edgeKey, new Map());
+                edgeOutcomeCounts.set(edgeKey, new Map());
+            }
+            if (!totalNodeEdges.has(currentStep)) {
+                totalNodeEdges.set(currentStep, new Set());
+            }
+
+            // Add student to edge and node tracking
+            studentEdgeCounts.get(edgeKey)!.add(studentId);
+            totalNodeEdges.get(currentStep)!.add(studentId);
+            
+            // Increment counters
+            totalVisits.set(edgeKey, totalVisits.get(edgeKey)! + 1);
+            
+            // Track repeat visits
+            const edgeRepeatVisits = repeatVisits.get(edgeKey)!;
+            const currentRepeatCount = (edgeRepeatVisits.get(studentId) || 0) + 1;
+            edgeRepeatVisits.set(studentId, currentRepeatCount);
+
+            // Track first attempt outcomes
+            if (currentRepeatCount === 1) {
+                if (!firstAttemptOutcomes.has(edgeKey)) {
+                    firstAttemptOutcomes.set(edgeKey, new Map());
+                }
+                const firstAttemptMap = firstAttemptOutcomes.get(edgeKey)!;
+                firstAttemptMap.set(outcome, (firstAttemptMap.get(outcome) || 0) + 1);
+            }
+
+            // Update edge count and max
+            const currentEdgeCount = studentEdgeCounts.get(edgeKey)!.size;
+            edgeCounts.set(edgeKey, currentEdgeCount);
+            maxEdgeCount = Math.max(maxEdgeCount, currentEdgeCount);
+
+            // Track outcomes
+            const outcomeMap = edgeOutcomeCounts.get(edgeKey)!;
+            outcomeMap.set(outcome, (outcomeMap.get(outcome) || 0) + 1);
+        }
+    }
+
+    // Convert Maps back to objects for compatibility
+    const totalNodeEdgesCounts: { [key: string]: number } = {};
+    totalNodeEdges.forEach((students, node) => {
+        totalNodeEdgesCounts[node] = students.size;
+    });
+
+    const edgeCountsObj: { [key: string]: number } = {};
+    const ratioEdgesObj: { [key: string]: number } = {};
+    edgeCounts.forEach((count, edge) => {
+        edgeCountsObj[edge] = count;
+        const [start] = edge.split('->');
+        ratioEdgesObj[edge] = count / (totalNodeEdgesCounts[start] || 1);
+    });
+
+    const totalVisitsObj: { [key: string]: number } = {};
+    totalVisits.forEach((count, edge) => {
+        totalVisitsObj[edge] = count;
+    });
+
+    const repeatVisitsObj: { [key: string]: { [studentId: string]: number } } = {};
+    repeatVisits.forEach((studentMap, edge) => {
+        repeatVisitsObj[edge] = {};
+        studentMap.forEach((count, studentId) => {
+            repeatVisitsObj[edge][studentId] = count;
         });
     });
 
-    const totalNodeEdgesCounts: { [key: string]: number } = {};
-    Object.keys(totalNodeEdges).forEach(node => {
-        totalNodeEdgesCounts[node] = totalNodeEdges[node].size;
+    const edgeOutcomeCountsObj: { [key: string]: { [outcome: string]: number } } = {};
+    edgeOutcomeCounts.forEach((outcomeMap, edge) => {
+        edgeOutcomeCountsObj[edge] = {};
+        outcomeMap.forEach((count, outcome) => {
+            edgeOutcomeCountsObj[edge][outcome] = count;
+        });
     });
 
-    Object.keys(edgeCounts).forEach((edge) => {
-        const [start] = edge.split('->');
-        ratioEdges[edge] = edgeCounts[edge] / (totalNodeEdgesCounts[start] || 1);
+    const firstAttemptOutcomesObj: { [key: string]: { [outcome: string]: number } } = {};
+    firstAttemptOutcomes.forEach((outcomeMap, edge) => {
+        firstAttemptOutcomesObj[edge] = {};
+        outcomeMap.forEach((count, outcome) => {
+            firstAttemptOutcomesObj[edge][outcome] = count;
+        });
     });
 
     return {
-        edgeCounts,
+        edgeCounts: edgeCountsObj,
         totalNodeEdges: totalNodeEdgesCounts,
-        ratioEdges,
-        edgeOutcomeCounts,
+        ratioEdges: ratioEdgesObj,
+        edgeOutcomeCounts: edgeOutcomeCountsObj,
         maxEdgeCount,
-        totalVisits,
-        repeatVisits,
-        topSequences: top5Sequences
+        totalVisits: totalVisitsObj,
+        repeatVisits: repeatVisitsObj,
+        topSequences: top5Sequences,
+        firstAttemptOutcomes: firstAttemptOutcomesObj
     };
 };
 
@@ -305,42 +374,6 @@ export function calculateColor(rank: number, totalSteps: number): string {
  * @param errorMode
  * @returns A color representing the most frequent outcome.
  */
-// function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean): string {
-//     const colorMap: { [key: string]: string } = errorMode ? {
-//         'ERROR': '#ff0000',        // Red
-//         // 'OK': '#ffffff',           // Black
-//         'INITIAL_HINT': '#0000ff', // Blue
-//         'HINT_LEVEL_CHANGE': '#0000ff',
-//         'JIT': '#ffff00',          // Yellow
-//         'FREEBIE_JIT': '#ffff00'
-//     } : {
-//         'ERROR': '#ff0000',
-//         'OK': '#00ff00',           // Green
-//         'INITIAL_HINT': '#0000ff',
-//         'HINT_LEVEL_CHANGE': '#0000ff',
-//         'JIT': '#ffff00',
-//         'FREEBIE_JIT': '#ffff00'
-//     };
-//
-//     if (Object.keys(outcomes).length === 0) {
-//         return '#00000000'; // Transparent black
-//     }
-//
-//     const totalCount = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
-//     let weightedR = 0, weightedG = 0, weightedB = 0;
-//
-//     Object.entries(outcomes).forEach(([outcome, count]) => {
-//         const color = colorMap[outcome] || '#000000'; // Default to black if outcome is not found
-//         const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)); // Extract RGB values
-//         const weight = count / totalCount;
-//         weightedR += r * weight;
-//         weightedG += g * weight;
-//         weightedB += b * weight;
-//     });
-//
-//     // Convert RGB values to hex and add alpha transparency
-//     return `#${Math.round(weightedR).toString(16).padStart(2, '0')}${Math.round(weightedG).toString(16).padStart(2, '0')}${Math.round(weightedB).toString(16).padStart(2, '0')}90`;
-// }
 function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean): string {
     const colorMap: { [key: string]: string } = errorMode ? {
         'ERROR': '#ff0000',        // Red
@@ -412,6 +445,7 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode:
  * @param totalVisits
  * @param repeatVisits
  * @param errorMode
+ * @param firstAttemptOutcomes
  * @returns A string in Graphviz DOT format that represents the graph.
  */
 export function generateDotString(
@@ -427,6 +461,7 @@ export function generateDotString(
     totalVisits: { [key: string]: number },
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     errorMode: boolean,
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } }
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -443,12 +478,14 @@ export function generateDotString(
             const edgeKey = `${currentStep}->${nextStep}`;
             const thickness = normalizedThicknesses[edgeKey] || 1;
             const outcomes = edgeOutcomeCounts[edgeKey] || {};
+            const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
             const edgeCount = edgeCounts[edgeKey] || 0;
             const visits = totalVisits[edgeKey] || 0;
             const totalCount = totalNodeEdges[currentStep] || 0;
             const color = calculateColor(rank, totalSteps);
             const edgeColor = calculateEdgeColors(outcomes, errorMode);
-            const nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
+            
+            let nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
             dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
 
@@ -470,7 +507,8 @@ export function generateDotString(
 
                 tooltip += `\nPath Statistics:\n`
                     + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                    + `- Outcomes: \n\t\t${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
+                    + `- All Outcomes: \n\t\t${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
+                    + `- First Attempt Outcomes: \n\t\t${Object.entries(firstAttempts).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
                     + `\nVisual Properties:\n`
                     + `- Edge Color: \n\t\tHex: ${edgeColor}\n`;
 
@@ -481,21 +519,25 @@ export function generateDotString(
         for (let rank = 0; rank < totalSteps; rank++) {
             const currentStep = steps[rank];
             const color = calculateColor(rank, totalSteps);
-            const nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
+            let nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
             dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
-
         }
-        for (const edge of Object.keys(normalizedThicknesses)) {
-            if (normalizedThicknesses[edge] >= threshold) {
-                const [currentStep, nextStep] = edge.split('->');
-                const thickness = normalizedThicknesses[edge];
-                const outcomes = edgeOutcomeCounts[edge] || {};
-                const edgeCount = edgeCounts[edge] || 0;
-                const visits = totalVisits[edge] || 0;
+
+        for (const edgeKey of Object.keys(normalizedThicknesses)) {
+            if (normalizedThicknesses[edgeKey] >= threshold) {
+                const [currentStep, nextStep] = edgeKey.split('->');
+                const thickness = normalizedThicknesses[edgeKey];
+                const outcomes = edgeOutcomeCounts[edgeKey] || {};
+                const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
+                const edgeCount = edgeCounts[edgeKey] || 0;
+                const visits = totalVisits[edgeKey] || 0;
                 const totalCount = totalNodeEdges[currentStep] || 0;
                 const edgeColor = calculateEdgeColors(outcomes, errorMode);
                 const outcomesStr = Object.entries(outcomes)
+                    .map(([outcome, count]) => `${outcome}: ${count}`)
+                    .join('\n\t\t');
+                const firstAttemptsStr = Object.entries(firstAttempts)
                     .map(([outcome, count]) => `${outcome}: ${count}`)
                     .join('\n\t\t');
 
@@ -507,8 +549,8 @@ export function generateDotString(
                         + `- Total Edge Visits: \n\t\t${visits}\n`;
 
                     // Add repeat visit information for all edges
-                    if (repeatVisits[edge]) {
-                        const repeatCounts = Object.values(repeatVisits[edge]);
+                    if (repeatVisits[edgeKey]) {
+                        const repeatCounts = Object.values(repeatVisits[edgeKey]);
                         const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
                         const maxRepeats = Math.max(...repeatCounts);
                         tooltip += `- Students who repeated this path: \n\t\t${studentsWithRepeats}\n`
@@ -516,8 +558,9 @@ export function generateDotString(
                     }
 
                     tooltip += `\nPath Statistics:\n`
-                        + `- Ratio: \n\t\t${((ratioEdges[edge] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                        + `- Outcomes: \n\t\t${outcomesStr}\n`
+                        + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
+                        + `- All Outcomes: \n\t\t${outcomesStr}\n`
+                        + `- First Attempt Outcomes: \n\t\t${firstAttemptsStr}\n`
                         + `\nVisual Properties:\n`
                         + `- Edge Color: \n\t\tHex: ${edgeColor}\n`
                         + `\t\tRGB: ${[parseInt(edgeColor.substring(1, 3), 16), parseInt(edgeColor.substring(3, 5), 16), parseInt(edgeColor.substring(5, 7), 16)]}`;
@@ -527,7 +570,6 @@ export function generateDotString(
             }
         }
     }
-
 
     dotString += '}';
     return dotString;
@@ -542,7 +584,8 @@ export function generateDotString(
  */
 export function calculateMaxMinEdgeCount(
     edgeCounts: { [key: string]: number },
-    selectedSequence: string[]
+    selectedSequence: string[],
+    filteredEdgeCounts?: { [key: string]: number }
 ): number {
     if (!selectedSequence || selectedSequence.length < 2) {
         console.log("No valid sequence provided");
@@ -551,6 +594,7 @@ export function calculateMaxMinEdgeCount(
 
     let minStudentCount = Infinity;
     console.log("Edge counts:", edgeCounts);
+    console.log("Filtered edge counts:", filteredEdgeCounts);
     console.log("Selected sequence:", selectedSequence);
 
     // Check each edge in the sequence
@@ -558,16 +602,114 @@ export function calculateMaxMinEdgeCount(
         const currentStep = selectedSequence[i];
         const nextStep = selectedSequence[i + 1];
         const edgeKey = `${currentStep}->${nextStep}`;
-
-        // Get the number of unique students on this edge
-        const studentCount = edgeCounts[edgeKey] || 0;
-        console.log(`Edge ${edgeKey}: ${studentCount} students`);
-
-        if (studentCount < minStudentCount) {
-            minStudentCount = studentCount;
-        }
+        
+        // Use filtered counts if available, otherwise fall back to main counts
+        const studentCount = filteredEdgeCounts ? 
+            (filteredEdgeCounts[edgeKey] || 0) : 
+            (edgeCounts[edgeKey] || 0);
+            
+        minStudentCount = Math.min(minStudentCount, studentCount);
     }
 
-    console.log("Final min student count:", minStudentCount);
-    return minStudentCount === Infinity ? 0 : minStudentCount;
+    return minStudentCount;
+}
+
+/**
+ * Analyzes transitions from Equation Answer to Final Answer based on Equation Answer outcomes.
+ * @param stepSequences - The step sequences.
+ * @param outcomeSequences - The outcome sequences.
+ * @returns Analysis of transitions and outcomes.
+ */
+export function analyzeEquationAnswerTransitions(
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    outcomeSequences: { [key: string]: { [key: string]: string[] } }
+): {
+    equationAnswerOutcomes: { [outcome: string]: number };
+    equationToFinalTransitions: { [outcome: string]: { [finalOutcome: string]: number } };
+} {
+    const equationAnswerOutcomes: { [outcome: string]: number } = {};
+    const equationToFinalTransitions: { [outcome: string]: { [finalOutcome: string]: number } } = {};
+
+    Object.keys(stepSequences).forEach((studentId) => {
+        const innerStepSequences = stepSequences[studentId];
+        const innerOutcomeSequences = outcomeSequences[studentId] || {};
+
+        Object.keys(innerStepSequences).forEach((problemName) => {
+            const steps = innerStepSequences[problemName];
+            const outcomes = innerOutcomeSequences[problemName] || [];
+
+            // Find Equation Answer and its outcome
+            for (let i = 0; i < steps.length; i++) {
+                if (steps[i].toLowerCase().includes('equationanswer')) {
+                    const equationOutcome = outcomes[i];
+                    equationAnswerOutcomes[equationOutcome] = (equationAnswerOutcomes[equationOutcome] || 0) + 1;
+
+                    // Look for next Final Answer
+                    for (let j = i + 1; j < steps.length; j++) {
+                        if (steps[j].toLowerCase().includes('finalanswer')) {
+                            const finalOutcome = outcomes[j];
+                            if (!equationToFinalTransitions[equationOutcome]) {
+                                equationToFinalTransitions[equationOutcome] = {};
+                            }
+                            equationToFinalTransitions[equationOutcome][finalOutcome] = 
+                                (equationToFinalTransitions[equationOutcome][finalOutcome] || 0) + 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    return {
+        equationAnswerOutcomes,
+        equationToFinalTransitions
+    };
+}
+
+/**
+ * Formats the equation answer transition analysis into a readable string.
+ * @param stats - The analysis results from analyzeEquationAnswerTransitions.
+ * @returns A formatted string showing the analysis results.
+ */
+export function formatEquationAnswerStats(stats: {
+    equationAnswerOutcomes: { [outcome: string]: number };
+    equationToFinalTransitions: { [outcome: string]: { [finalOutcome: string]: number } };
+}): string {
+    let output = "Final Answer Outcome Analysis Based on Equation Answer Outcomes:\n\n";
+
+    // Final Answer outcomes first
+    output += "Final Answer Outcomes:\n";
+    const finalAnswerOutcomes: { [outcome: string]: number } = {};
+    Object.values(stats.equationToFinalTransitions).forEach(transitions => {
+        Object.entries(transitions).forEach(([outcome, count]) => {
+            finalAnswerOutcomes[outcome] = (finalAnswerOutcomes[outcome] || 0) + count;
+        });
+    });
+    const totalFinalAnswers = Object.values(finalAnswerOutcomes).reduce((sum, count) => sum + count, 0);
+    Object.entries(finalAnswerOutcomes).forEach(([outcome, count]) => {
+        const percentage = ((count / totalFinalAnswers) * 100).toFixed(1);
+        output += `${outcome}: ${count} (${percentage}%)\n`;
+    });
+
+    // Equation Answer outcomes
+    // output += "\nEquation Answer First Attempt Outcomes:\n";
+    // const totalFirstAttempts = Object.values(stats.equationAnswerOutcomes).reduce((sum, count) => sum + count, 0);
+    // Object.entries(stats.equationAnswerOutcomes).forEach(([outcome, count]) => {
+    //     const percentage = ((count / totalFirstAttempts) * 100).toFixed(1);
+    //     output += `${outcome}: ${count} (${percentage}%)\n`;
+    // });
+
+    // Transitions based on Equation Answer outcome
+    output += "\Final Answer Outcomes based on Equation Answer outcome:\n";
+    Object.entries(stats.equationToFinalTransitions).forEach(([equationOutcome, finalOutcomes]) => {
+        output += `\nWhen Equation Answer was ${equationOutcome}:\n`;
+        const totalTransitions = Object.values(finalOutcomes).reduce((sum, count) => sum + count, 0);
+        Object.entries(finalOutcomes).forEach(([finalOutcome, count]) => {
+            const percentage = ((count / totalTransitions) * 100).toFixed(1);
+            output += `  → ${finalOutcome}: ${count} (${percentage}%)\n`;
+        });
+    });
+
+    return output;
 }

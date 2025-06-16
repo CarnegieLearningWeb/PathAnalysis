@@ -260,7 +260,13 @@ function App() {
                                                     <span>End of Sequence</span>
                                                 </div>
                                                 <div className="text-sm text-gray-600">Nodes in between are colored with a
-                                                    gradient from white to light blue based on their position
+                                                    gradient from white to light blue based on their position in the
+                                                    selected sequence.
+                                                </div>
+                                                <div className="text-sm text-gray-600">
+                                                    Note: If a white node (that is not the first node in the selected
+                                                    sequence) appears in a graph,
+                                                    that node is not in the selected sequence.
                                                 </div>
                                             </div>
                                         </div>
@@ -296,7 +302,7 @@ function App() {
                                                                 <h4 className="font-medium">Edge Color Calculation (Error
                                                                     Mode)</h4>
                                                                 <p className="text-sm">
-                                                                    When in error-focused mode, only non-OK outcomes
+                                                                    When in error-mode, only non-OK outcomes
                                                                     contribute to the color:
                                                                 </p>
                                                                 <ul className="text-sm list-disc pl-4 space-y-1">
@@ -354,7 +360,7 @@ function App() {
                                                                     <li>For example, if an edge has 70% OK (green) and 30%
                                                                         ERROR
                                                                         (red), the resulting color will be a blend of these
-                                                                        colors
+                                                                        colors (7 green:3 red)
                                                                     </li>
                                                                     <li>The final color includes 90% opacity to show
                                                                         overlapping
