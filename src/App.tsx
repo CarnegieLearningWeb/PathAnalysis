@@ -24,9 +24,20 @@ function App() {
     const [filter, setFilter] = useState<string>('');
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
+    const [errorMode, setErrorMode] = useState<boolean>(false);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
-    const { resetData, loading, error, top5Sequences, setSelectedSequence, selectedSequence, csvData, setCSVData } = useContext(Context);
+    const {
+        resetData,
+        loading,
+        error,
+        top5Sequences,
+        setSelectedSequence,
+        selectedSequence,
+        csvData,
+        setCSVData,
+        setFilename
+    } = useContext(Context);
     const [maxEdgeCount, setMaxEdgeCount] = useState<number>(100); // Default value
     const [maxMinEdgeCount, setMaxMinEdgeCount] = useState<number>(0);
 
@@ -54,6 +65,11 @@ function App() {
     const handleToggle = () => setSelfLoops(!selfLoops);
 
     /**
+     * Toggles the error mode in the graph by switching the state.
+     */
+    const handleToggleError = () => setErrorMode(!errorMode);
+
+    /**
      * Updates the minimum visits for edges in the graph when the slider is moved.
      *
      * @param {number} value - The new value for minimum visits.
@@ -66,8 +82,12 @@ function App() {
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
      *
      * @param {string} uploadedCsvData - The CSV data from the uploaded file.
+     * @param {string} filename - The filename of the uploaded file.
      */
-    const handleDataProcessed = (uploadedCsvData: string) => setCSVData(uploadedCsvData);
+    const handleDataProcessed = (uploadedCsvData: string, filename: string) => {
+        setCSVData(uploadedCsvData);
+        setFilename(filename);
+    };
 
     // Calculate actual min visits from percentage
     const minVisits = Math.round((minVisitsPercentage / 100) * maxEdgeCount);
@@ -159,6 +179,32 @@ function App() {
                                             <SelfLoopSwitch isOn={selfLoops} handleToggle={handleToggle} />
                                         </div>
 
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <div className="flex items-center justify-between space-x-4">
+                                                <label className="text-sm font-medium text-gray-700">Error Mode</label>
+                                                <button
+                                                    type="button"
+                                                    role="switch"
+                                                    aria-checked={errorMode}
+                                                    onClick={handleToggleError}
+                                                    className={`
+                                                        relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                                                        transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                                                        ${errorMode ? 'bg-blue-600' : 'bg-gray-200'}
+                                                    `}
+                                                >
+                                                    <span className="sr-only">Toggle error mode</span>
+                                                    <span
+                                                        className={`
+                                                            pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 
+                                                            transition duration-200 ease-in-out
+                                                            ${errorMode ? 'translate-x-5' : 'translate-x-0'}
+                                                        `}
+                                                    />
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-gray-700">Minimum Students</label>
                                             <div className="space-y-4">
@@ -216,6 +262,7 @@ function App() {
                                             minVisits={minVisits}
                                             onMaxEdgeCountChange={setMaxEdgeCount}
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
+                                            errorMode={errorMode}
                                         />
                                     </div>
                                 </div>
@@ -237,47 +284,91 @@ function App() {
                                                 <div className="text-sm text-gray-600">Nodes in between are colored with a gradient from white to light blue based on their position</div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <h4 className="font-medium mb-2">Edge Colors</h4>
-                                            <div className="space-y-2">
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-red-500 mr-2"></div>
-                                                    <span>ERROR</span>
+{errorMode ? (
+                                            <div>
+                                                <h4 className="font-medium mb-2">Edge Colors (Error Mode)</h4>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
+                                                        <span>ERROR</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
+                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
+                                                        <span>JIT / FREEBIE_JIT</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-black mr-2"></div>
+                                                        <span>Only OK → Black</span>
+                                                    </div>
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <div className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
+                                                                How are edge colors calculated?
+                                                            </div>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-80">
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">Edge Color Calculation (Error Mode)</h4>
+                                                                <p className="text-sm">
+                                                                    When in error-mode, only non-OK outcomes contribute to the color:
+                                                                </p>
+                                                                <ul className="text-sm list-disc pl-4 space-y-1">
+                                                                    <li>Only ERROR, hints, and JIT are included in the blend</li>
+                                                                    <li>OK is ignored unless it's the only outcome — then the edge is black</li>
+                                                                    <li>Final color includes 90% opacity</li>
+                                                                </ul>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
                                                 </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-green-500 mr-2"></div>
-                                                    <span>OK</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-blue-500 mr-2"></div>
-                                                    <span>INITIAL_HINT/HINT_LEVEL_CHANGE</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
-                                                    <span>JIT/FREEBIE_JIT</span>
-                                                </div>
-                                                <Popover>
-                                                    <PopoverTrigger>
-                                                        <div className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
-                                                            How are edge colors calculated?
-                                                        </div>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-80">
-                                                        <div className="space-y-2">
-                                                            <h4 className="font-medium">Edge Color Calculation</h4>
-                                                            <p className="text-sm">
-                                                                When an edge has multiple outcomes, its color is calculated as a weighted average:
-                                                            </p>
-                                                            <ul className="text-sm list-disc pl-4 space-y-1">
-                                                                <li>Each outcome's color is weighted by its frequency</li>
-                                                                <li>For example, if an edge has 70% OK (green) and 30% ERROR (red), the resulting color will be a blend of these colors</li>
-                                                                <li>The final color includes 90% opacity to show overlapping edges</li>
-                                                            </ul>
-                                                        </div>
-                                                    </PopoverContent>
-                                                </Popover>
                                             </div>
-                                        </div>
+                                        ) : (
+                                            <div>
+                                                <h4 className="font-medium mb-2">Edge Colors</h4>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
+                                                        <span>ERROR</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-green-500 mr-2"></div>
+                                                        <span>OK</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
+                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
+                                                        <span>JIT / FREEBIE_JIT</span>
+                                                    </div>
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <div className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
+                                                                How are edge colors calculated?
+                                                            </div>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-80">
+                                                            <div className="space-y-2">
+                                                                <h4 className="font-medium">Edge Color Calculation</h4>
+                                                                <p className="text-sm">
+                                                                    When an edge has multiple outcomes, its color is calculated as a weighted average:
+                                                                </p>
+                                                                <ul className="text-sm list-disc pl-4 space-y-1">
+                                                                    <li>Each outcome's color is weighted by its frequency</li>
+                                                                    <li>For example, if an edge has 70% OK (green) and 30% ERROR (red), the resulting color will be a blend of these colors (7 green:3 red)</li>
+                                                                    <li>The final color includes 90% opacity to show overlapping edges</li>
+                                                                </ul>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

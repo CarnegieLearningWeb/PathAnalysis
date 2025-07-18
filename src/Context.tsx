@@ -8,6 +8,7 @@ interface ContextInterface {
     graphData: GraphData | null;
 
     csvData: string;
+    filename: string;
 
     loading: boolean;
     top5Sequences: SequenceCount[] | null;
@@ -20,6 +21,7 @@ interface ContextInterface {
     setTop5Sequences: (top5Sequences: SequenceCount[] | null) => void;
     setSelectedSequence: (selectedSequence: string[] | undefined) => void;
     setCSVData: (csvData: string) => void;
+    setFilename: (filename: string) => void;
 
     resetData: () => void;
 
@@ -47,6 +49,7 @@ const initialState = {
     top5Sequences: null,
     selectedSequence: undefined,
     csvData:'',
+    filename: '',
     f3L3: false,
 }
 
@@ -62,6 +65,7 @@ export const Provider = ({children}: ProviderProps) => {
     const [error, setError] = useState<string | null>(null)
 
     const [csvData, setCSVData] = useState<string>(initialState.csvData)
+    const [filename, setFilename] = useState<string>(initialState.filename)
     const [top5Sequences, setTop5Sequences] = useState<SequenceCount[] | null>(initialState.top5Sequences)
     const [selectedSequence, setSelectedSequence] = useState<SequenceCount["sequence"] | undefined>(initialState.selectedSequence);
     const [f3L3, setF3L3] = useState<boolean | null>(initialState.f3L3)
@@ -83,6 +87,7 @@ export const Provider = ({children}: ProviderProps) => {
     const resetData = () => {
         setData(null)
         setCSVData('')
+        setFilename('')
         setError(null)
         setGraphData(null)
         setTop5Sequences(null)
@@ -101,6 +106,7 @@ export const Provider = ({children}: ProviderProps) => {
                 selectedSequence,
                 error,
                 csvData,
+                filename,
                 setError,
                 setLoading,
                 setData,
@@ -109,6 +115,7 @@ export const Provider = ({children}: ProviderProps) => {
                 setTop5Sequences,
                 setSelectedSequence,
                 setCSVData,
+                setFilename,
                 resetData,
                 setF3L3
             }}

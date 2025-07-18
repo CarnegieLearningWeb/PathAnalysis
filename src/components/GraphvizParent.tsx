@@ -17,6 +17,43 @@ import { Button } from './ui/button';
 
 const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 
+const getSelectedSequenceRank = (selectedSequence: string[] | undefined, top5Sequences: SequenceCount[] | null): string => {
+    if (!selectedSequence || !top5Sequences) {
+        console.log('Missing selectedSequence or top5Sequences:', { selectedSequence, top5Sequences });
+        return '';
+    }
+    
+    const selectedSeqString = JSON.stringify(selectedSequence);
+    const index = top5Sequences.findIndex(seq => JSON.stringify(seq.sequence) === selectedSeqString);
+    
+    console.log('Sequence ranking debug:', { selectedSeqString, index, top5SequencesLength: top5Sequences.length });
+    
+    const rankNames = ['mostCommonPath', 'secondMostCommonPath', 'thirdMostCommonPath', 'fourthMostCommonPath', 'fifthMostCommonPath'];
+    return index !== -1 ? rankNames[index] : 'unknownPath';
+};
+
+const generateExportFilename = (graphType: string, filename: string, selectedSequence?: string[] | undefined, top5Sequences?: SequenceCount[] | null, filter?: string | null, errorMode?: boolean) => {
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    const errorSuffix = errorMode ? 'ErrorMode' : '';
+    const filterSuffix = filter && filter !== 'ALL' ? `Filtered${filter.charAt(0).toUpperCase() + filter.slice(1).toLowerCase()}` : '';
+    const baseFilename = filename.replace(/\.[^/.]+$/, ''); // Remove file extension
+    
+    let graphTypeCamel = '';
+    if (graphType === 'selected-sequence') {
+        const sequenceRank = getSelectedSequenceRank(selectedSequence, top5Sequences);
+        console.log('Export filename debug:', { graphType, sequenceRank, selectedSequence, top5Sequences });
+        graphTypeCamel = sequenceRank || 'selectedSequence';
+    } else if (graphType === 'all-students') {
+        graphTypeCamel = 'allStudents';
+    } else if (graphType === 'filtered-graph') {
+        graphTypeCamel = 'filteredGraph';
+    }
+    
+    const finalFilename = `${baseFilename}${graphTypeCamel}${filterSuffix}${errorSuffix}${timestamp}`;
+    console.log('Final export filename:', finalFilename);
+    return finalFilename;
+};
+
 interface GraphvizParentProps {
     csvData: string;
     filter: string | null;
@@ -24,6 +61,7 @@ interface GraphvizParentProps {
     minVisits: number;
     onMaxEdgeCountChange: (count: number) => void;
     onMaxMinEdgeCountChange: (count: number) => void;
+    errorMode: boolean;
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
@@ -32,12 +70,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     selfLoops,
     minVisits,
     onMaxEdgeCountChange,
-    onMaxMinEdgeCountChange
+    onMaxMinEdgeCountChange,
+    errorMode
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
-    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+    const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences, filename } = useContext(Context);
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -103,7 +142,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     selectedSequence || topSequences[0].sequence,
                     false,
                     totalVisits,
-                    repeatVisits
+                    repeatVisits,
+                    errorMode
                 )
             );
 
@@ -119,11 +159,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     selectedSequence || topSequences[0].sequence,
                     true,
                     totalVisits,
-                    repeatVisits
+                    repeatVisits,
+                    errorMode
                 )
             );
         }
-    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, filter]);
+    }, [csvData, selfLoops, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, filter, errorMode]);
 
     // Add back the useEffect for filtered graph display
     useEffect(() => {
@@ -157,13 +198,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     selectedSequence,
                     false,
                     filteredTotalVisits,
-                    filteredRepeatVisits
+                    filteredRepeatVisits,
+                    errorMode
                 )
             );
         } else {
             setFilteredDotString(null);
         }
-    }, [csvData, filter, selfLoops, minVisits, selectedSequence]);
+    }, [csvData, filter, selfLoops, minVisits, selectedSequence, errorMode]);
 
     // Export a graph as high-quality PNG
     const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
@@ -273,7 +315,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
                             <div ref={graphRefTop}
                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, generateExportFilename('selected-sequence', filename, selectedSequence, top5Sequences, null, errorMode))} />
                         </div>
                     )}
                     {dotString && (
@@ -282,7 +324,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
                             <div ref={graphRefMain}
                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} /></div>
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, generateExportFilename('all-students', filename, undefined, undefined, null, errorMode))} /></div>
                     )}
                     {filter && filter !== 'ALL' && filteredDotString && (
                         <div
@@ -290,7 +332,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph: {titleCase(filter)}</h2>
                             <div ref={graphRefFiltered}
                                 className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
+                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, generateExportFilename('filtered-graph', filename, undefined, undefined, filter, errorMode))} />
                         </div>
                     )}
                 </div>

@@ -324,9 +324,10 @@ export function calculateColor(rank: number, totalSteps: number): string {
 /**
  * Calculates the color of an edge based on the most frequent outcome.
  * @param outcomes - A dictionary of outcomes and their counts.
+ * @param errorMode - If true, only non-OK outcomes contribute to the color.
  * @returns A color representing the most frequent outcome.
  */
-function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
+function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean = false): string {
     const colorMap: { [key: string]: string } = {
         'ERROR': '#ff0000',  // Red
         'OK': '#00ff00',     // Green
@@ -340,10 +341,27 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
         return '#00000000'; // Transparent black
     }
 
-    const totalCount = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
+    let filteredOutcomes = outcomes;
+    
+    if (errorMode) {
+        // In error mode, filter out OK outcomes
+        filteredOutcomes = Object.entries(outcomes)
+            .filter(([outcome]) => outcome !== 'OK')
+            .reduce((acc, [outcome, count]) => {
+                acc[outcome] = count;
+                return acc;
+            }, {} as { [outcome: string]: number });
+        
+        // If only OK outcomes exist, return black
+        if (Object.keys(filteredOutcomes).length === 0) {
+            return '#00000090'; // Black with alpha
+        }
+    }
+
+    const totalCount = Object.values(filteredOutcomes).reduce((sum, count) => sum + count, 0);
     let weightedR = 0, weightedG = 0, weightedB = 0;
 
-    Object.entries(outcomes).forEach(([outcome, count]) => {
+    Object.entries(filteredOutcomes).forEach(([outcome, count]) => {
         const color = colorMap[outcome] || '#000000'; // Default to black if outcome is not found
         const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16)); // Extract RGB values
         const weight = count / totalCount;
@@ -367,8 +385,10 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }): string {
  * @param threshold - Minimum thickness value to include an edge in the visualization.
  * @param minVisits - Minimum number of visits an edge must have to be included in the graph.
  * @param selectedSequence - The selected sequence of steps used to color the nodes.
- *
- * @param justTopSequence
+ * @param justTopSequence - Whether to show only the top sequence or all edges.
+ * @param totalVisits - A dictionary tracking the total number of visits for each edge.
+ * @param repeatVisits - A dictionary tracking repeat visits by students for each edge.
+ * @param errorMode - If true, only non-OK outcomes contribute to edge colors.
  * @returns A string in Graphviz DOT format that represents the graph.
  */
 export function generateDotString(
@@ -382,7 +402,8 @@ export function generateDotString(
     selectedSequence: SequenceCount["sequence"],
     justTopSequence: boolean,
     totalVisits: { [key: string]: number },
-    repeatVisits: { [key: string]: { [studentId: string]: number } }
+    repeatVisits: { [key: string]: { [studentId: string]: number } },
+    errorMode: boolean
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -403,7 +424,7 @@ export function generateDotString(
             const visits = totalVisits[edgeKey] || 0;
             const totalCount = totalNodeEdges[currentStep] || 0;
             const color = calculateColor(rank, totalSteps);
-            const edgeColor = calculateEdgeColors(outcomes);
+            const edgeColor = calculateEdgeColors(outcomes, errorMode);
             const nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
 
             dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
@@ -450,7 +471,7 @@ export function generateDotString(
                 const edgeCount = edgeCounts[edge] || 0;
                 const visits = totalVisits[edge] || 0;
                 const totalCount = totalNodeEdges[currentStep] || 0;
-                const edgeColor = calculateEdgeColors(outcomes);
+                const edgeColor = calculateEdgeColors(outcomes, errorMode);
                 const outcomesStr = Object.entries(outcomes)
                     .map(([outcome, count]) => `${outcome}: ${count}`)
                     .join('\n\t\t');

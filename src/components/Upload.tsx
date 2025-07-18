@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 
 interface UploadProps {
-    onDataProcessed: (csvData: string) => void; // Callback function to handle processed CSV data
+    onDataProcessed: (csvData: string, filename: string) => void; // Callback function to handle processed CSV data
 }
 
 // Functional component for file upload
@@ -33,7 +33,7 @@ function Upload({ onDataProcessed }: UploadProps) {
                     setLoading(false);
                     return;
                 }
-                onDataProcessed(csvData); // Process the CSV data
+                onDataProcessed(csvData, file.name); // Process the CSV data with filename
 
                 // Set loading state to false when the file is processed
                 setLoading(false);
