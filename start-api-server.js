@@ -1,3 +1,8 @@
+#!/usr/bin/env node
+
+// Simple Node.js script to start the Express API server
+// This runs separately from the Vite dev server
+
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,14 +13,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
 // Enable CORS for API calls
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from dist directory
-app.use(express.static(path.join(__dirname, 'dist')));
 
 // Data directory path (one level up from PathAnalysis)
 const dataDirectory = path.resolve(__dirname, '../Data');
@@ -102,16 +104,12 @@ app.get('/api/data-files/:filename/content', (req, res) => {
   }
 });
 
-// Catch all handler for React app
-app.get('*', (_req, res) => {
-  res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-});
-
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-  console.log(`Data directory: ${dataDirectory}`);
-  console.log(`API endpoints:`);
-  console.log(`  - GET /api/data-files (list CSV files)`);
-  console.log(`  - GET /api/data-files/:filename (download CSV)`);
-  console.log(`  - GET /api/data-files/:filename/content (get CSV content)`);
+  console.log(`🚀 Path Analysis Tool API Server running on port ${port}`);
+  console.log(`📁 Data directory: ${dataDirectory}`);
+  console.log(`🔗 Available endpoints:`);
+  console.log(`   - GET /api/data-files (list CSV files)`);
+  console.log(`   - GET /api/data-files/:filename (download CSV)`);
+  console.log(`   - GET /api/data-files/:filename/content (get CSV content)`);
+  console.log(`\n💡 Start Vite dev server with: npm run dev`);
 });

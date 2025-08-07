@@ -1,4 +1,4 @@
-import Papa from 'papaparse';
+import * as Papa from 'papaparse';
 import {SequenceCount} from "@/Context";
 
 // import {autoType} from "d3";
