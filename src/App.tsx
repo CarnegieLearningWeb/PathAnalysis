@@ -16,6 +16,7 @@ import {Input} from "@/components/ui/input"
 
 import Loading from './components/Loading.tsx';
 import Switch from "./components/switch.tsx";
+import { useSearchParams } from 'react-router-dom';
 
 function App() {
     // State to hold the uploaded CSV data as a string
@@ -39,6 +40,9 @@ function App() {
     } = useContext(Context);
     const [maxEdgeCount, setMaxEdgeCount] = useState<number>(100); // Default value
     const [maxMinEdgeCount, setMaxMinEdgeCount] = useState<number>(0);
+    
+    // URL parameter handling
+    const [searchParams] = useSearchParams();
 
     // Update minVisitsPercentage when maxMinEdgeCount changes
     useEffect(() => {
@@ -47,6 +51,40 @@ function App() {
             setMinVisitsPercentage(Math.max(0, Math.min(100, percentage)));
         }
     }, [maxMinEdgeCount, maxEdgeCount]);
+
+    // Handle URL parameter CSV loading
+    useEffect(() => {
+        const csvUrl = searchParams.get('csv');
+        const csvDataParam = searchParams.get('data');
+        
+        // Only load from URL if no CSV data is currently loaded
+        if (csvData.length === 0) {
+            if (csvUrl) {
+                // Fetch CSV from URL
+                fetch(csvUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.text();
+                    })
+                    .then(data => {
+                        handleDataProcessed(data);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching CSV from URL:', error);
+                    });
+            } else if (csvDataParam) {
+                // Use CSV data directly from URL parameter
+                try {
+                    const decodedData = decodeURIComponent(csvDataParam);
+                    handleDataProcessed(decodedData);
+                } catch (error) {
+                    console.error('Error decoding CSV data from URL:', error);
+                }
+            }
+        }
+    }, [searchParams]);
 
     const showControls = useMemo(() => {
         return !loading && csvData.length > 0;
@@ -230,8 +268,8 @@ function App() {
                         {/* Graph and Data Display */}
                         {!loading && csvData && (
                             <div>
-                                <div className="relative w-full h-[700px] border border-gray-300 bg-white overflow-fit">
-                                    <div className="w-max h-max mx-auto ">
+                                <div className="relative w-full border border-gray-300 bg-white overflow-auto">
+                                    <div className="flex justify-center w-full min-h-full">
                                         {/* GraphvizParent component generates and displays the graph based on the CSV data */}
                                         <GraphvizParent
                                             csvData={csvData}

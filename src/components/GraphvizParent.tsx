@@ -17,6 +17,17 @@ import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
 
+// History item interface
+interface HistoryItem {
+    id: string;
+    type: 'node' | 'edge';
+    timestamp: Date;
+    title: string;
+    content: string;
+    graphType: string;
+    expanded: boolean;
+}
+
 const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 
 interface GraphvizParentProps {
@@ -42,6 +53,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
     const [topDotString, setTopDotString] = useState<string | null>(null);
     const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+
+    // History state management
+    const [activeTab, setActiveTab] = useState<'graphs' | 'history'>('graphs');
+    const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+    
+    // Track recent clicks to prevent duplicates
+    const recentClicks = useRef<Set<string>>(new Set());
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -220,6 +238,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         }
     }, [filteredGraphData, minVisits, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange]);
 
+    // Cleanup all event listeners when component unmounts
+    useEffect(() => {
+        return () => {
+            // Clean up all event listeners for all graphs
+            eventListenersRef.current.forEach((_, filename) => {
+                cleanupEventListeners(filename);
+            });
+        };
+    }, []);
+
     // Export a graph as high-quality PNG
     const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
         if (!graphRef.current) return;
@@ -271,25 +299,779 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
     const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
 
-    // Render Graphviz graphs using d3-graphviz
+    // Helper functions for history management
+    const formatTime = (date: Date): string => {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    };
+
+    const formatContent = (content: string): string => {
+        return content.replace(/\\n/g, '\n');
+    };
+
+    const toggleHistoryItem = (itemId: string) => {
+        setHistoryItems(prev => prev.map(item => 
+            item.id === itemId ? { ...item, expanded: !item.expanded } : item
+        ));
+    };
+
+    // Helper function to parse edge names that may contain arrows in step names
+    const parseEdgeName = (edgeName: string): [string, string] => {
+        const lastArrowIndex = edgeName.lastIndexOf('->');
+        if (lastArrowIndex === -1) {
+            return [edgeName, ''];
+        }
+        
+        const currentStep = edgeName.substring(0, lastArrowIndex);
+        const nextStep = edgeName.substring(lastArrowIndex + 2);
+        
+        return [currentStep, nextStep];
+    };
+
+    // Helper function to calculate progress status statistics for students at a node
+    const calculateNodeProgressStats = (nodeName: string): { graduated: number; promoted: number; other: number; total: number } => {
+        if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0 };
+        
+        const { stepSequences, sortedData } = mainGraphData;
+        const studentsAtNode = new Set<string>();
+        
+        // Find all students who visited this node
+        // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
+        if (stepSequences && Object.keys(stepSequences).length > 0) {
+            Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
+                // studentProblems is { [problemName]: string[] }
+                if (studentProblems && typeof studentProblems === 'object') {
+                    Object.values(studentProblems).forEach((problemSequence: string[]) => {
+                        if (Array.isArray(problemSequence) && problemSequence.includes(nodeName)) {
+                            studentsAtNode.add(studentId);
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Count progress status for students who visited this node
+        let graduatedCount = 0;
+        let promotedCount = 0;
+        let otherCount = 0;
+        
+        if (sortedData && sortedData.length > 0) {
+            // Create a map of all students and their progress status
+            const studentProgressMap = new Map<string, string>();
+            sortedData.forEach((row: any) => {
+                const studentId = row['Anon Student Id'];
+                const progressStatus = row['CF (Workspace Progress Status)'];
+                if (studentId && progressStatus) {
+                    studentProgressMap.set(studentId, progressStatus);
+                }
+            });
+            
+            studentsAtNode.forEach(studentId => {
+                const progressStatus = studentProgressMap.get(studentId);
+                
+                if (progressStatus === 'GRADUATED') {
+                    graduatedCount++;
+                } else if (progressStatus === 'PROMOTED') {
+                    promotedCount++;
+                } else if (progressStatus) {
+                    otherCount++;
+                }
+            });
+        }
+        
+        return {
+            graduated: graduatedCount,
+            promoted: promotedCount,
+            other: otherCount,
+            total: studentsAtNode.size
+        };
+    };
+
+    // Generate node tooltip content
+    const generateNodeTooltip = (nodeName: string, graphType: string): string => {
+        if (!mainGraphData) return `Node: ${nodeName}`;
+        
+        const { stepSequences, edgeCounts, edgeOutcomeCounts } = mainGraphData;
+        
+        // Find all edges involving this node
+        const incomingEdges = Object.keys(edgeCounts).filter(edge => edge.endsWith(`->${nodeName}`));
+        const outgoingEdges = Object.keys(edgeCounts).filter(edge => edge.startsWith(`${nodeName}->`));
+        
+        // Calculate statistics
+        let totalVisitors = 0;
+        let totalNodeVisits = 0;
+        
+        if (stepSequences && Object.keys(stepSequences).length > 0) {
+            const visitCounts: { [studentId: string]: number } = {};
+            Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
+                // studentProblems is { [problemName]: string[] }
+                if (studentProblems && typeof studentProblems === 'object') {
+                    let studentNodeVisits = 0;
+                    Object.values(studentProblems).forEach((problemSequence: string[]) => {
+                        if (Array.isArray(problemSequence)) {
+                            const nodeVisits = problemSequence.filter(step => step === nodeName).length;
+                            studentNodeVisits += nodeVisits;
+                        }
+                    });
+                    
+                    if (studentNodeVisits > 0) {
+                        visitCounts[studentId] = studentNodeVisits;
+                        totalNodeVisits += studentNodeVisits;
+                    }
+                }
+            });
+            totalVisitors = Object.keys(visitCounts).length;
+        }
+        
+        const avgVisitsPerStudent = totalVisitors > 0 ? (totalNodeVisits / totalVisitors).toFixed(1) : '0';
+        const studentsWithRepeats = Math.max(0, totalNodeVisits - totalVisitors);
+        const singleVisits = Math.max(0, totalVisitors - studentsWithRepeats);
+        const multipleVisits = studentsWithRepeats;
+        
+        // Count unique edges that meet the minimum visits threshold
+        const filteredIncomingEdges = incomingEdges.filter(edge => (edgeCounts[edge] || 0) >= minVisits);
+        const filteredOutgoingEdges = outgoingEdges.filter(edge => (edgeCounts[edge] || 0) >= minVisits);
+        
+        const incomingNodes = filteredIncomingEdges.map(edge => edge.split('->')[0]).sort();
+        const outgoingNodes = filteredOutgoingEdges.map(edge => edge.split('->')[1]).sort();
+        
+        // Calculate progress status statistics
+        const progressStats = calculateNodeProgressStats(nodeName);
+        const graduatedPercentage = progressStats.total > 0 ? ((progressStats.graduated / progressStats.total) * 100).toFixed(1) : '0';
+        const promotedPercentage = progressStats.total > 0 ? ((progressStats.promoted / progressStats.total) * 100).toFixed(1) : '0';
+        
+        // Calculate outcome statistics for this node (from outgoing edges)
+        const nodeOutcomes: { [outcome: string]: number } = {};
+        outgoingEdges.forEach(edge => {
+            const outcomes = edgeOutcomeCounts[edge] || {};
+            Object.entries(outcomes).forEach(([outcome, count]) => {
+                nodeOutcomes[outcome] = (nodeOutcomes[outcome] || 0) + count;
+            });
+        });
+        
+        const totalOutcomes = Object.values(nodeOutcomes).reduce((sum, count) => sum + count, 0);
+        const outcomeSummary = Object.entries(nodeOutcomes)
+            .sort(([,a], [,b]) => b - a)
+            .map(([outcome, count]) => {
+                const percentage = totalOutcomes > 0 ? ((count / totalOutcomes) * 100).toFixed(1) : '0';
+                return `${outcome}: ${count} (${percentage}%)`;
+            })
+            .slice(0, 5) // Show top 5 outcomes
+            .join('\n      ');
+        
+        return `Node Information (${graphType}):\n`
+            + `    • Step Name: ${nodeName}\n\n`
+            + `Student Activity:\n`
+            + `    • Total Students Visited: ${totalVisitors}\n`
+            + `    • Total Visits (including repeats): ${totalNodeVisits}\n`
+            + `    • Students with single visit: ${singleVisits}\n`
+            + `    • Students with multiple visits: ${multipleVisits}\n`
+            + `    • Average visits per student: ${avgVisitsPerStudent}\n\n`
+            + `Student Progress Status:\n`
+            + `    • Graduated: ${progressStats.graduated} (${graduatedPercentage}%)\n`
+            + `    • Promoted: ${progressStats.promoted} (${promotedPercentage}%)\n`
+            + `    • Other: ${progressStats.other}\n`
+            + `    • Total students tracked: ${progressStats.total}\n\n`
+            + `Learning Outcomes from this Step:\n`
+            + `    • Top Outcomes:\n`
+            + `      ${outcomeSummary || 'No outcome data available'}\n`
+            + `    • Total recorded outcomes: ${totalOutcomes}\n\n`
+            + `Graph Connectivity:\n`
+            + `    • Incoming paths: ${filteredIncomingEdges.length} (above threshold)\n`
+            + `    • Outgoing paths: ${filteredOutgoingEdges.length} (above threshold)\n`
+            + `    • Total incoming: ${incomingEdges.length}\n`
+            + `    • Total outgoing: ${outgoingEdges.length}\n`
+            + `    • Nodes that precede:\n`
+            + `      ${incomingNodes.length > 0 ? incomingNodes.join('\n      ') : 'None'}\n`
+            + `    • Nodes that follow:\n`
+            + `      ${outgoingNodes.length > 0 ? outgoingNodes.join('\n      ') : 'None'}`;
+    };
+
+    // Helper function to calculate progress status statistics for an edge
+    const calculateEdgeProgressStats = (edgeName: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
+        if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
+        
+        const [currentStep, nextStep] = parseEdgeName(edgeName);
+        const { stepSequences, sortedData } = mainGraphData;
+        
+        // Find all students who took this specific edge transition
+        const edgeStudents = new Set<string>();
+        
+        // Group data by student to track transitions
+        // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
+        if (stepSequences && Object.keys(stepSequences).length > 0) {
+            Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
+                // studentProblems is { [problemName]: string[] }
+                if (studentProblems && typeof studentProblems === 'object') {
+                    Object.values(studentProblems).forEach((problemSequence: string[]) => {
+                        if (Array.isArray(problemSequence)) {
+                            // Find consecutive steps in this problem sequence
+                            for (let i = 0; i < problemSequence.length - 1; i++) {
+                                if (problemSequence[i] === currentStep && problemSequence[i + 1] === nextStep) {
+                                    edgeStudents.add(studentId);
+                                    return; // Only count each student once per edge, exit early
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Count progress status for students who took this edge
+        let graduatedCount = 0;
+        let promotedCount = 0;
+        let otherCount = 0;
+        
+        edgeStudents.forEach(studentId => {
+            const studentData = sortedData?.find((row: any) => row['Anon Student Id'] === studentId);
+            if (studentData) {
+                const progressStatus = studentData['CF (Workspace Progress Status)'];
+                if (progressStatus === 'GRADUATED') {
+                    graduatedCount++;
+                } else if (progressStatus === 'PROMOTED') {
+                    promotedCount++;
+                } else {
+                    otherCount++;
+                }
+            }
+        });
+        
+        const total = edgeStudents.size;
+        const graduatedPercentage = total > 0 ? ((graduatedCount / total) * 100).toFixed(1) : '0';
+        const promotedPercentage = total > 0 ? ((promotedCount / total) * 100).toFixed(1) : '0';
+        
+        return {
+            graduated: graduatedCount,
+            promoted: promotedCount,
+            other: otherCount,
+            total,
+            graduatedPercentage,
+            promotedPercentage
+        };
+    };
+
+    // Generate edge tooltip content
+    const generateEdgeTooltip = (edgeName: string, graphType: string): string => {
+        if (!mainGraphData) return `Edge: ${edgeName}`;
+        
+        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges } = mainGraphData;
+        const outcomes = edgeOutcomeCounts[edgeName] || {};
+        const edgeCount = edgeCounts[edgeName] || 0;
+        const [currentStep, nextStep] = parseEdgeName(edgeName);
+        const totalCount = totalNodeEdges[currentStep] || 0;
+        
+        const ratioPercentage = ((ratioEdges[edgeName] || 0) * 100).toFixed(1);
+        const totalOutcomes = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
+        
+        const uniqueStudents = edgeCount;
+        const studentsAtStartNode = totalCount;
+        const studentsNotTakingPath = studentsAtStartNode - uniqueStudents;
+        
+        // Calculate progress status statistics
+        const progressStats = calculateEdgeProgressStats(edgeName);
+        
+        // All outcomes breakdown
+        const allOutcomes = Object.entries(outcomes)
+            .sort(([,a], [,b]) => b - a)
+            .map(([outcome, count]) => {
+                const percentage = totalOutcomes > 0 ? ((count / totalOutcomes) * 100).toFixed(1) : '0';
+                return `${outcome}: ${count} (${percentage}%)`;
+            })
+            .join('\n      ');
+        
+        // Estimate first attempt outcomes (simplified approach)
+        const firstAttemptOutcomes = Object.entries(outcomes)
+            .sort(([,a], [,b]) => b - a)
+            .map(([outcome, count]) => {
+                // Rough estimate: assume 80-90% of outcomes are first attempts
+                const estimatedFirstAttempts = Math.max(1, Math.floor(count * 0.85));
+                const percentage = uniqueStudents > 0 ? ((estimatedFirstAttempts / uniqueStudents) * 100).toFixed(1) : '0';
+                return `${outcome}: ${estimatedFirstAttempts} (${percentage}%)`;
+            })
+            .join('\n      ');
+        
+        // Calculate visual thickness (normalized)
+        const maxEdgeCount = Math.max(...Object.values(edgeCounts));
+        const thickness = maxEdgeCount > 0 ? ((edgeCount / maxEdgeCount) * 10).toFixed(1) : '1.0';
+        
+        return `Transition Information (${graphType}):\n`
+            + `    • From: ${currentStep}\n`
+            + `    • To: ${nextStep}\n\n`
+            + `Student Flow:\n`
+            + `    • Students taking this path: ${uniqueStudents}\n`
+            + `    • Students at ${currentStep}: ${studentsAtStartNode}\n`
+            + `    • Students NOT taking this path: ${studentsNotTakingPath}\n`
+            + `    • Transition Probability: ${ratioPercentage}%\n`
+            + `      (${uniqueStudents} of ${studentsAtStartNode} students)\n\n`
+            + `Student Progress Status:\n`
+            + `    • Graduated: ${progressStats.graduated} (${progressStats.graduatedPercentage}%)\n`
+            + `    • Promoted: ${progressStats.promoted} (${progressStats.promotedPercentage}%)\n`
+            + `    • Other: ${progressStats.other}\n`
+            + `    • Total students tracked: ${progressStats.total}\n\n`
+            + `Transition Outcomes:\n`
+            + `    • All Outcomes:\n`
+            + `      ${allOutcomes || 'No outcome data'}\n\n`
+            + `    • First Attempt Outcomes (estimated):\n`
+            + `      ${firstAttemptOutcomes || 'No first attempt data'}\n\n`
+            + `Visual Properties:\n`
+            + `    • Edge Thickness: ${thickness} (normalized)\n`
+            + `    • Path Frequency: ${edgeCount} students\n`
+            + `    • Min Visits Threshold: ${minVisits}`;
+    };
+
+    // Store references to attached event listeners for cleanup
+    const eventListenersRef = useRef<Map<string, { elements: Element[], handlers: ((e: Event) => void)[] }>>(new Map());
+
+    // Store transform states for each graph to persist across tab switches
+    const transformStates = useRef<{[key: string]: {
+        scale: number;
+        translateX: number;
+        translateY: number;
+        initialScale: number;
+        initialTranslateX: number;
+        initialTranslateY: number;
+        isDragging: boolean;
+        lastMouseX: number;
+        lastMouseY: number;
+    }}>({});
+
+    // Cleanup function to remove all event listeners for a specific graph
+    const cleanupEventListeners = (filename: string) => {
+        const listeners = eventListenersRef.current.get(filename);
+        if (listeners) {
+            listeners.elements.forEach((element, index) => {
+                const handler = listeners.handlers[index];
+                if (handler) {
+                    element.removeEventListener('click', handler);
+                }
+            });
+            eventListenersRef.current.delete(filename);
+        }
+    };
+
+    // Render Graphviz graphs using d3-graphviz with advanced centering and zoom functionality
     const renderGraph = (
         dot: string | null,
         ref: React.RefObject<HTMLDivElement>,
         filename: string,
         numberOfGraphs: number
     ) => {
-        // TODO: remove filename from props
-        console.log("Filename: ", filename);
         if (dot && ref.current) {
+            // Clean up existing event listeners for this graph
+            cleanupEventListeners(filename);
+            
             // Dynamically adjust width based on the number of graphs
             const width = numberOfGraphs === 3 ? 325 : 425;
             const height = 530;
+            
+            // Account for container padding more accurately
+            const containerPadding = 16; // p-4 = 16px padding on each side
+            const effectiveWidth = width - (containerPadding * 2);
+            const effectiveHeight = height - (containerPadding * 2);
 
             try {
-                graphviz(ref.current)
+                const gviz = graphviz(ref.current)
                     .width(width)
                     .height(height)
-                    .renderDot(dot)
+                    .engine('dot')
+                    .zoom(false)
+                    .fit(false)
+                    .tweenShapes(false)
+                    .renderDot(dot);
+
+                // Add advanced centering, zoom and pan functionality after rendering
+                setTimeout(() => {
+                    if (ref.current) {
+                        const svg = ref.current.querySelector('svg') as SVGSVGElement;
+                        if (svg) {
+                            const gElement = svg.querySelector('g') as SVGGElement;
+
+                            // Calculate initial centering and scaling
+                            let initialScale = 1;
+                            let initialTranslateX = 0;
+                            let initialTranslateY = 0;
+
+                            if (gElement) {
+                                const bbox = gElement.getBBox();
+                                
+                                if (bbox.width > 0 && bbox.height > 0) {
+                                    // Only scale down if the graph is actually too large
+                                    const padding = 60;
+                                    const availableWidth = effectiveWidth - padding * 2;
+                                    const availableHeight = effectiveHeight - padding * 2;
+                                    
+                                    // Only scale if graph is larger than available space
+                                    if (bbox.width > availableWidth || bbox.height > availableHeight) {
+                                        const scaleX = availableWidth / bbox.width;
+                                        const scaleY = availableHeight / bbox.height;
+                                        initialScale = Math.min(scaleX, scaleY);
+                                    } else {
+                                        // Graph fits fine, use normal scale
+                                        initialScale = 1.0;
+                                    }
+                                    
+                                    // Calculate scaled dimensions
+                                    const scaledWidth = bbox.width * initialScale;
+                                    const scaledHeight = bbox.height * initialScale;
+                                    
+                                    // Calculate top-left position for the scaled graph
+                                    const scaledBboxTopLeftX = bbox.x * initialScale;
+                                    const scaledBboxTopLeftY = bbox.y * initialScale;
+                                    
+                                    // Calculate proper centering
+                                    initialTranslateX = (width - scaledWidth) / 2 - scaledBboxTopLeftX;
+                                    initialTranslateY = (height - scaledHeight) / 2 - scaledBboxTopLeftY;
+                                    
+                                    // Add upward bias to prevent bottom nodes from being cut off
+                                    initialTranslateY -= 60;
+                                    
+                                    // Add leftward bias to center graphs better
+                                    initialTranslateX -= 50;
+                                    
+                                    console.log(`Centering calculation for ${filename}:`, {
+                                        containerSize: { width, height },
+                                        effectiveSize: { width: effectiveWidth, height: effectiveHeight },
+                                        bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
+                                        scale: initialScale,
+                                        scaledDimensions: { width: scaledWidth, height: scaledHeight },
+                                        translate: { x: initialTranslateX, y: initialTranslateY },
+                                        containerPadding
+                                    });
+                                }
+                            }
+
+                            // Always reset to correct initial centering values for new renders
+                            // This ensures proper centering every time the graph is rendered
+                            transformStates.current[filename] = {
+                                scale: initialScale,
+                                translateX: initialTranslateX,
+                                translateY: initialTranslateY,
+                                initialScale: initialScale,
+                                initialTranslateX: initialTranslateX,
+                                initialTranslateY: initialTranslateY,
+                                isDragging: false,
+                                lastMouseX: 0,
+                                lastMouseY: 0
+                            };
+
+                            // Create local transform state for interaction handling
+                            // Always start with the correctly calculated centering values
+                            const transformState = {
+                                scale: transformStates.current[filename].scale,
+                                translateX: transformStates.current[filename].translateX,
+                                translateY: transformStates.current[filename].translateY,
+                                isDragging: false,
+                                lastMouseX: 0,
+                                lastMouseY: 0
+                            };
+
+                            // Function to update SVG transform
+                            const updateTransform = () => {
+                                if (gElement) {
+                                    gElement.setAttribute('transform', 
+                                        `translate(${transformState.translateX}, ${transformState.translateY}) scale(${transformState.scale})`
+                                    );
+                                }
+                            };
+
+                            // Apply current transform
+                            updateTransform();
+
+                            // Zoom constraints
+                            const minScale = 0.1;
+                            const maxScale = 3.0;
+
+                            // Reset view function
+                            const resetView = () => {
+                                transformState.scale = transformStates.current[filename].initialScale;
+                                transformState.translateX = transformStates.current[filename].initialTranslateX;
+                                transformState.translateY = transformStates.current[filename].initialTranslateY;
+                                // Update persistent state
+                                transformStates.current[filename].scale = transformState.scale;
+                                transformStates.current[filename].translateX = transformState.translateX;
+                                transformStates.current[filename].translateY = transformState.translateY;
+                                updateTransform();
+                            };
+
+                            // Mouse wheel zoom with focal point
+                            const wheelHandler = (e: WheelEvent) => {
+                                e.preventDefault();
+                                const rect = svg.getBoundingClientRect();
+                                const mouseX = e.clientX - rect.left;
+                                const mouseY = e.clientY - rect.top;
+                                
+                                const scaleFactor = e.deltaY > 0 ? 0.98 : 1.02;
+                                const newScale = Math.max(minScale, Math.min(maxScale, transformState.scale * scaleFactor));
+                                
+                                if (newScale !== transformState.scale) {
+                                    const scaleChange = newScale / transformState.scale;
+                                    transformState.translateX = mouseX - scaleChange * (mouseX - transformState.translateX);
+                                    transformState.translateY = mouseY - scaleChange * (mouseY - transformState.translateY);
+                                    transformState.scale = newScale;
+                                    // Update persistent state
+                                    transformStates.current[filename].scale = transformState.scale;
+                                    transformStates.current[filename].translateX = transformState.translateX;
+                                    transformStates.current[filename].translateY = transformState.translateY;
+                                    updateTransform();
+                                }
+                            };
+
+                            // Pan functionality with boundary constraints
+                            const mouseDownHandler = (e: MouseEvent) => {
+                                if (e.button === 0) { // Left mouse button
+                                    transformState.isDragging = true;
+                                    transformState.lastMouseX = e.clientX;
+                                    transformState.lastMouseY = e.clientY;
+                                    svg.style.cursor = 'grabbing';
+                                }
+                            };
+
+                            const mouseMoveHandler = (e: MouseEvent) => {
+                                if (transformState.isDragging) {
+                                    const deltaX = e.clientX - transformState.lastMouseX;
+                                    const deltaY = e.clientY - transformState.lastMouseY;
+                                    
+                                    let newTranslateX = transformState.translateX + deltaX;
+                                    let newTranslateY = transformState.translateY + deltaY;
+                                    
+                                    // Apply pan boundaries to prevent dragging completely outside container
+                                    if (gElement) {
+                                        const bbox = gElement.getBBox();
+                                        const scaledWidth = bbox.width * transformState.scale;
+                                        const scaledHeight = bbox.height * transformState.scale;
+                                        
+                                        // Calculate boundaries with padding
+                                        const padding = 50;
+                                        
+                                        if (scaledWidth > width) {
+                                            const minX = width - (bbox.x * transformState.scale + scaledWidth) - padding;
+                                            const maxX = -bbox.x * transformState.scale + padding;
+                                            newTranslateX = Math.max(minX, Math.min(maxX, newTranslateX));
+                                        }
+                                        
+                                        if (scaledHeight > height) {
+                                            const minY = height - (bbox.y * transformState.scale + scaledHeight) - padding;
+                                            const maxY = -bbox.y * transformState.scale + padding;
+                                            newTranslateY = Math.max(minY, Math.min(maxY, newTranslateY));
+                                        }
+                                    }
+                                    
+                                    transformState.translateX = newTranslateX;
+                                    transformState.translateY = newTranslateY;
+                                    transformState.lastMouseX = e.clientX;
+                                    transformState.lastMouseY = e.clientY;
+                                    updateTransform();
+                                }
+                            };
+
+                            const mouseUpHandler = () => {
+                                transformState.isDragging = false;
+                                svg.style.cursor = 'default';
+                            };
+
+                            // Double-click to reset view
+                            const doubleClickHandler = (e: MouseEvent) => {
+                                e.preventDefault();
+                                resetView();
+                            };
+
+                            // Add zoom and pan event listeners - only wheel and double-click for now
+                            svg.addEventListener('wheel', wheelHandler, { passive: false });
+                            svg.addEventListener('dblclick', doubleClickHandler);
+
+                            const newListeners: { elements: Element[], handlers: ((e: Event) => void)[] } = {
+                                elements: [],
+                                handlers: []
+                            };
+
+                            // Add node click handlers - try multiple selectors for nodes
+                            const nodeSelectors = ['.node', 'g.node', '[class*="node"]', 'ellipse', 'circle'];
+                            let nodes: Element[] = [];
+                            
+                            nodeSelectors.forEach(selector => {
+                                const found = svg.querySelectorAll(selector);
+                                found.forEach(node => {
+                                    if (!nodes.includes(node)) {
+                                        nodes.push(node);
+                                    }
+                                });
+                            });
+
+                            nodes.forEach(node => {
+                                const handler = (e: Event) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    
+                                    let title = node.querySelector('title')?.textContent;
+                                    let nodeName = '';
+                                    
+                                    if (title) {
+                                        nodeName = title.split('\n')[0];
+                                    } else {
+                                        // Try to get title from parent group
+                                        const parentGroup = node.closest('g');
+                                        if (parentGroup) {
+                                            const titleInGroup = parentGroup.querySelector('title')?.textContent;
+                                            if (titleInGroup) {
+                                                nodeName = titleInGroup.split('\n')[0];
+                                            }
+                                        }
+                                    }
+                                    
+                                    // If still no title, try to get it from sibling elements
+                                    if (!nodeName && node.parentElement) {
+                                        const siblingTitle = node.parentElement.querySelector('title')?.textContent;
+                                        if (siblingTitle) {
+                                            nodeName = siblingTitle.split('\n')[0];
+                                        }
+                                    }
+                                    
+                                    if (nodeName) {
+                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' : 
+                                                        filename === 'all_students' ? 'All Students' : 'Filtered Graph';
+                                        
+                                        const tooltipContent = generateNodeTooltip(nodeName, graphType);
+                                        
+                                        const historyItem: HistoryItem = {
+                                            id: `node-${Date.now()}-${Math.random()}`,
+                                            type: 'node',
+                                            timestamp: new Date(),
+                                            title: `Node: ${nodeName}`,
+                                            content: tooltipContent,
+                                            graphType,
+                                            expanded: false
+                                        };
+                                        
+                                        setHistoryItems(prev => [historyItem, ...prev].slice(0, 50));
+                                    }
+                                };
+                                
+                                node.addEventListener('click', handler);
+                                (node as HTMLElement).style.cursor = 'pointer';
+                                
+                                newListeners.elements.push(node);
+                                newListeners.handlers.push(handler);
+                            });
+
+                            // Add edge click handlers - use Set to avoid duplicates more efficiently
+                            const edgeSelectors = ['.edge', 'g.edge', '[class*="edge"]'];
+                            const edgeSet = new Set<Element>();
+                            
+                            edgeSelectors.forEach(selector => {
+                                const found = svg.querySelectorAll(selector);
+                                found.forEach(edge => edgeSet.add(edge));
+                            });
+                            
+                            const edges = Array.from(edgeSet);
+
+                            edges.forEach(edge => {
+                                const handler = (e: Event) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    let title = edge.querySelector('title')?.textContent;
+                                    let edgeName = '';
+                                    
+                                    if (title) {
+                                        edgeName = title.split('\n')[0];
+                                    } else {
+                                        const parentGroup = edge.closest('g');
+                                        if (parentGroup) {
+                                            const titleInGroup = parentGroup.querySelector('title')?.textContent;
+                                            if (titleInGroup) {
+                                                edgeName = titleInGroup.split('\n')[0];
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (edgeName) {
+                                        // Create a unique identifier for this click
+                                        const clickId = `${edgeName}-${filename}-${Date.now()}`;
+                                        
+                                        // Check if this exact click was processed recently (within 500ms)
+                                        const recentClickThreshold = 500;
+                                        const now = Date.now();
+                                        const recentClickIds = Array.from(recentClicks.current).filter(id => {
+                                            const timestamp = parseInt(id.split('-').pop() || '0');
+                                            return now - timestamp < recentClickThreshold;
+                                        });
+                                        
+                                        // Check if this edge was clicked very recently
+                                        const isDuplicate = recentClickIds.some(id => 
+                                            id.startsWith(`${edgeName}-${filename}-`)
+                                        );
+                                        
+                                        if (isDuplicate) {
+                                            return;
+                                        }
+                                        
+                                        // Add this click to recent clicks
+                                        recentClicks.current.add(clickId);
+                                        
+                                        // Clean up old click IDs to prevent memory leak
+                                        setTimeout(() => {
+                                            recentClicks.current.delete(clickId);
+                                        }, recentClickThreshold);
+                                        
+                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' : 
+                                                        filename === 'all_students' ? 'All Students' : 'Filtered Graph';
+                                        
+                                        const tooltipContent = generateEdgeTooltip(edgeName, graphType);
+                                        
+                                        const historyItem: HistoryItem = {
+                                            id: `edge-${Date.now()}-${Math.random()}`,
+                                            type: 'edge',
+                                            timestamp: new Date(),
+                                            title: `Edge: ${edgeName}`,
+                                            content: tooltipContent,
+                                            graphType,
+                                            expanded: false
+                                        };
+                                        
+                                        setHistoryItems(prev => [historyItem, ...prev].slice(0, 50));
+                                    }
+                                };
+                                
+                                edge.addEventListener('click', handler);
+                                (edge as HTMLElement).style.cursor = 'pointer';
+                                
+                                newListeners.elements.push(edge);
+                                newListeners.handlers.push(handler);
+                            });
+
+                            // Store the listeners for this graph
+                            eventListenersRef.current.set(filename, newListeners);
+
+                            // Add reset view button overlay
+                            const container = ref.current;
+                            if (container && !container.querySelector('.reset-view-btn')) {
+                                const resetButton = document.createElement('button');
+                                resetButton.className = 'reset-view-btn';
+                                resetButton.innerHTML = '↻';
+                                resetButton.title = 'Reset View (or double-click graph)';
+                                resetButton.style.cssText = `
+                                    position: absolute;
+                                    top: 10px;
+                                    right: 10px;
+                                    width: 30px;
+                                    height: 30px;
+                                    border: 1px solid #ccc;
+                                    border-radius: 4px;
+                                    background: rgba(255, 255, 255, 0.9);
+                                    cursor: pointer;
+                                    font-size: 16px;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    z-index: 10;
+                                `;
+                                resetButton.addEventListener('click', resetView);
+                                container.style.position = 'relative';
+                                container.appendChild(resetButton);
+                            }
+                        }
+                    }
+                }, 100);
+
             } catch (error) {
                 console.error("Error rendering graph:", error);
             }
@@ -319,33 +1101,138 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
 
     return (
-        <div className="graphviz-container flex-col w-[500px] items-center">
+        <div className="graphviz-container w-full flex flex-col">
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-300 mb-4">
+                <button
+                    onClick={() => setActiveTab('graphs')}
+                    className={`px-4 py-2 font-medium ${
+                        activeTab === 'graphs'
+                            ? 'border-b-2 border-blue-500 text-blue-600'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    Graphs
+                </button>
+                <button
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-2 font-medium ${
+                        activeTab === 'history'
+                            ? 'border-b-2 border-blue-500 text-blue-600'
+                            : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                >
+                    History {historyItems.length > 0 && (
+                        <span className="ml-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                            {historyItems.length}
+                        </span>
+                    )}
+                </button>
+            </div>
+
             <ErrorBoundary>
-                <div className="graphs flex justify-center w-[500px] h-[650px]"> {/*Not sure what this does*/}
-                    {topDotString && (
-                        <div
-                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
-                            <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
-                            <div ref={graphRefTop}
-                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white items-center"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
+                {/* Graphs Tab */}
+                <div 
+                    className="graphs-tab flex flex-col w-full h-full" 
+                    style={{ display: activeTab === 'graphs' ? 'flex' : 'none' }}
+                >
+                    <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
+                        {topDotString && (
+                            <div
+                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
+                                <div ref={graphRefTop}
+                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
+                                <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
+                            </div>
+                        )}
+                        {dotString && (
+                            <div
+                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
+                                <div ref={graphRefMain}
+                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
+                                <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} />
+                            </div>
+                        )}
+                        {filter && filter !== 'ALL' && filteredDotString && (
+                            <div
+                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph: {titleCase(filter)}</h2>
+                                <div ref={graphRefFiltered}
+                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
+                                <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* History Tab */}
+                <div 
+                    className="history-panel flex flex-col w-full h-full p-4 overflow-hidden"
+                    style={{ display: activeTab === 'history' ? 'flex' : 'none' }}
+                >
+                    <div className="flex justify-between items-center mb-4 flex-shrink-0">
+                        <h2 className="text-lg font-semibold">Node & Edge History</h2>
+                        <div className="flex gap-2">
+                            <span className="text-sm text-gray-500">
+                                {historyItems.length} items
+                            </span>
+                            {historyItems.length > 0 && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setHistoryItems([])}
+                                >
+                                    Clear History
+                                </Button>
+                            )}
                         </div>
-                    )}
-                    {dotString && (
-                        <div
-                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
-                            <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
-                            <div ref={graphRefMain}
-                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} /></div>
-                    )}
-                    {filter && filter !== 'ALL' && filteredDotString && (
-                        <div
-                            className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100`}>
-                            <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph: {titleCase(filter)}</h2>
-                            <div ref={graphRefFiltered}
-                                className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white"></div>
-                            <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
+                    </div>
+
+                    {historyItems.length === 0 ? (
+                        <div className="flex-1 flex items-center justify-center text-gray-500">
+                            <div className="text-center">
+                                <p className="text-lg mb-2">No history items yet</p>
+                                <p className="text-sm">Click on nodes or edges in the graphs to see their details here</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-4 min-h-0 pb-20">
+                            {historyItems.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+                                >
+                                    <div 
+                                        className="flex justify-between items-start mb-2 cursor-pointer"
+                                        onClick={() => toggleHistoryItem(item.id)}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <span className={`inline-block w-3 h-3 rounded-full ${
+                                                item.type === 'node' ? 'bg-blue-500' : 'bg-green-500'
+                                            }`}></span>
+                                            <h3 className="font-medium text-gray-900">{item.title}</h3>
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                                {item.graphType}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500">
+                                                {formatTime(item.timestamp)}
+                                            </span>
+                                            <span className="text-xs text-gray-400">
+                                                {item.expanded ? '▼' : '▶'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {item.expanded && (
+                                        <div className="bg-gray-50 rounded p-3 text-sm font-mono whitespace-pre-wrap break-words select-text">
+                                            {formatContent(item.content)}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>

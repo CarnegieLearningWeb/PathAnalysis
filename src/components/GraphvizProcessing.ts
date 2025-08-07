@@ -143,10 +143,293 @@ interface EdgeCounts {
 
 
 /**
- * Counts the edges between steps and outcomes in the step sequences.
- * @param stepSequences - The step sequences.
- * @param outcomeSequences - The outcome sequences.
- * @returns Various edge-related counts and statistics.
+ * Helper type for pre-calculated student-problem combinations to improve performance
+ */
+type StudentProblemCombination = {
+    studentId: string;
+    problemName: string;
+    steps: string[];
+    outcomes: string[];
+};
+
+/**
+ * Helper type for internal tracking data structures using Maps for better performance
+ */
+type EdgeTrackingMaps = {
+    totalNodeEdges: Map<string, Set<string>>;
+    edgeOutcomeCounts: Map<string, Map<string, number>>;
+    edgeCounts: Map<string, number>;
+    totalVisits: Map<string, number>;
+    studentEdgeCounts: Map<string, Set<string>>;
+    repeatVisits: Map<string, Map<string, number>>;
+    firstAttemptOutcomes: Map<string, Map<string, number>>;
+};
+
+/**
+ * Pre-calculates all valid student-problem combinations to avoid nested object lookups.
+ * Only includes problems with at least 2 steps (required for edge creation).
+ * 
+ * @param stepSequences - Student step sequences by studentId -> problemName -> steps[]
+ * @param outcomeSequences - Student outcome sequences by studentId -> problemName -> outcomes[]
+ * @returns Array of pre-calculated combinations for efficient processing
+ */
+const prepareStudentProblemCombinations = (
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    outcomeSequences: { [key: string]: { [key: string]: string[] } }
+): StudentProblemCombination[] => {
+    const combinations: StudentProblemCombination[] = [];
+
+    for (const [studentId, innerStepSequences] of Object.entries(stepSequences)) {
+        const innerOutcomeSequences = outcomeSequences[studentId] || {};
+        
+        for (const [problemName, steps] of Object.entries(innerStepSequences)) {
+            // Only include problems with at least 2 steps (needed to create edges)
+            if (steps.length >= 2) {
+                combinations.push({
+                    studentId,
+                    problemName,
+                    steps,
+                    outcomes: innerOutcomeSequences[problemName] || []
+                });
+            }
+        }
+    }
+
+    return combinations;
+};
+
+/**
+ * Initializes all tracking data structures using Maps for O(1) performance.
+ * Maps are more efficient than objects for frequent key-value operations.
+ * 
+ * @returns Object containing initialized tracking Maps
+ */
+const initializeTrackingMaps = (): EdgeTrackingMaps => ({
+    totalNodeEdges: new Map<string, Set<string>>(),
+    edgeOutcomeCounts: new Map<string, Map<string, number>>(),
+    edgeCounts: new Map<string, number>(),
+    totalVisits: new Map<string, number>(),
+    studentEdgeCounts: new Map<string, Set<string>>(),
+    repeatVisits: new Map<string, Map<string, number>>(),
+    firstAttemptOutcomes: new Map<string, Map<string, number>>()
+});
+
+/**
+ * Initializes tracking data structures for a new edge if they don't exist.
+ * This lazy initialization pattern avoids creating empty structures for unused edges.
+ * 
+ * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
+ * @param currentStep - The source node of the edge
+ * @param maps - The tracking data structures
+ */
+const initializeEdgeTracking = (
+    edgeKey: string,
+    currentStep: string,
+    maps: EdgeTrackingMaps
+): void => {
+    // Initialize edge-specific tracking if this is a new edge
+    if (!maps.studentEdgeCounts.has(edgeKey)) {
+        maps.studentEdgeCounts.set(edgeKey, new Set());
+        maps.totalVisits.set(edgeKey, 0);
+        maps.repeatVisits.set(edgeKey, new Map());
+        maps.edgeOutcomeCounts.set(edgeKey, new Map());
+    }
+    
+    // Initialize node tracking if this is a new source node
+    if (!maps.totalNodeEdges.has(currentStep)) {
+        maps.totalNodeEdges.set(currentStep, new Set());
+    }
+};
+
+/**
+ * Updates all tracking metrics for a single edge traversal by a student.
+ * This includes student counts, visit counts, repeat visits, outcomes, and first attempts.
+ * 
+ * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
+ * @param currentStep - The source node of the edge
+ * @param studentId - The student making the traversal
+ * @param outcome - The outcome of this step attempt
+ * @param maps - The tracking data structures
+ * @returns The updated maximum edge count across all edges
+ */
+const updateEdgeMetrics = (
+    edgeKey: string,
+    currentStep: string,
+    studentId: string,
+    outcome: string,
+    maps: EdgeTrackingMaps,
+    currentMaxEdgeCount: number
+): number => {
+    // Track unique students for this edge and source node
+    maps.studentEdgeCounts.get(edgeKey)!.add(studentId);
+    maps.totalNodeEdges.get(currentStep)!.add(studentId);
+    
+    // Increment total visit counter (includes repeat visits)
+    maps.totalVisits.set(edgeKey, maps.totalVisits.get(edgeKey)! + 1);
+    
+    // Track repeat visits per student per edge
+    const edgeRepeatVisits = maps.repeatVisits.get(edgeKey)!;
+    const currentRepeatCount = (edgeRepeatVisits.get(studentId) || 0) + 1;
+    edgeRepeatVisits.set(studentId, currentRepeatCount);
+
+    // Track first attempt outcomes (ignore subsequent attempts)
+    if (currentRepeatCount === 1) {
+        if (!maps.firstAttemptOutcomes.has(edgeKey)) {
+            maps.firstAttemptOutcomes.set(edgeKey, new Map());
+        }
+        const firstAttemptMap = maps.firstAttemptOutcomes.get(edgeKey)!;
+        firstAttemptMap.set(outcome, (firstAttemptMap.get(outcome) || 0) + 1);
+    }
+
+    // Update edge student count and track maximum
+    const currentEdgeCount = maps.studentEdgeCounts.get(edgeKey)!.size;
+    maps.edgeCounts.set(edgeKey, currentEdgeCount);
+    const newMaxEdgeCount = Math.max(currentMaxEdgeCount, currentEdgeCount);
+
+    // Track all outcomes (including repeat attempts)
+    const outcomeMap = maps.edgeOutcomeCounts.get(edgeKey)!;
+    outcomeMap.set(outcome, (outcomeMap.get(outcome) || 0) + 1);
+
+    return newMaxEdgeCount;
+};
+
+/**
+ * Processes all student learning paths to generate edge and node metrics.
+ * Uses a single-pass algorithm for optimal performance.
+ * 
+ * @param combinations - Pre-calculated student-problem combinations
+ * @param maps - Initialized tracking data structures
+ * @returns The maximum edge count found across all edges
+ */
+const processStudentPaths = (
+    combinations: StudentProblemCombination[],
+    maps: EdgeTrackingMaps
+): number => {
+    let maxEdgeCount = 0;
+
+    // Single pass through all student paths for optimal performance
+    for (const { studentId, steps, outcomes } of combinations) {
+        // Process each consecutive step pair to create edges
+        for (let i = 0; i < steps.length - 1; i++) {
+            const currentStep = steps[i];
+            const nextStep = steps[i + 1];
+            const outcome = outcomes[i + 1]; // Outcome corresponds to the target step
+            const edgeKey = `${currentStep}->${nextStep}`;
+
+            // Lazy initialization of tracking structures
+            initializeEdgeTracking(edgeKey, currentStep, maps);
+
+            // Update all metrics for this edge traversal
+            maxEdgeCount = updateEdgeMetrics(
+                edgeKey,
+                currentStep,
+                studentId,
+                outcome,
+                maps,
+                maxEdgeCount
+            );
+        }
+    }
+
+    return maxEdgeCount;
+};
+
+/**
+ * Converts internal Map data structures back to plain objects for API compatibility.
+ * Also calculates ratio edges (edge count relative to source node total).
+ * 
+ * @param maps - The tracking data structures using Maps
+ * @param maxEdgeCount - The maximum edge count for normalization
+ * @param topSequences - Pre-calculated top sequences
+ * @returns Final result object with all metrics
+ */
+const convertMapsToObjects = (
+    maps: EdgeTrackingMaps,
+    maxEdgeCount: number,
+    topSequences: SequenceCount[]
+) => {
+    // Convert node edge counts (unique students per node)
+    const totalNodeEdgesCounts: { [key: string]: number } = {};
+    maps.totalNodeEdges.forEach((students, node) => {
+        totalNodeEdgesCounts[node] = students.size;
+    });
+
+    // Convert edge counts and calculate ratios
+    const edgeCountsObj: { [key: string]: number } = {};
+    const ratioEdgesObj: { [key: string]: number } = {};
+    maps.edgeCounts.forEach((count, edge) => {
+        edgeCountsObj[edge] = count;
+        // Calculate ratio of edge count to source node total
+        const [sourceNode] = edge.split('->');
+        ratioEdgesObj[edge] = count / (totalNodeEdgesCounts[sourceNode] || 1);
+    });
+
+    // Convert total visits (includes repeat visits)
+    const totalVisitsObj: { [key: string]: number } = {};
+    maps.totalVisits.forEach((count, edge) => {
+        totalVisitsObj[edge] = count;
+    });
+
+    // Convert repeat visit tracking (nested Map -> nested object)
+    const repeatVisitsObj: { [key: string]: { [studentId: string]: number } } = {};
+    maps.repeatVisits.forEach((studentMap, edge) => {
+        repeatVisitsObj[edge] = {};
+        studentMap.forEach((count, studentId) => {
+            repeatVisitsObj[edge][studentId] = count;
+        });
+    });
+
+    // Convert outcome counts (nested Map -> nested object)
+    const edgeOutcomeCountsObj: { [key: string]: { [outcome: string]: number } } = {};
+    maps.edgeOutcomeCounts.forEach((outcomeMap, edge) => {
+        edgeOutcomeCountsObj[edge] = {};
+        outcomeMap.forEach((count, outcome) => {
+            edgeOutcomeCountsObj[edge][outcome] = count;
+        });
+    });
+
+    // Convert first attempt outcomes (nested Map -> nested object)
+    const firstAttemptOutcomesObj: { [key: string]: { [outcome: string]: number } } = {};
+    maps.firstAttemptOutcomes.forEach((outcomeMap, edge) => {
+        firstAttemptOutcomesObj[edge] = {};
+        outcomeMap.forEach((count, outcome) => {
+            firstAttemptOutcomesObj[edge][outcome] = count;
+        });
+    });
+
+    return {
+        edgeCounts: edgeCountsObj,
+        totalNodeEdges: totalNodeEdgesCounts,
+        ratioEdges: ratioEdgesObj,
+        edgeOutcomeCounts: edgeOutcomeCountsObj,
+        maxEdgeCount,
+        totalVisits: totalVisitsObj,
+        repeatVisits: repeatVisitsObj,
+        topSequences,
+        firstAttemptOutcomes: firstAttemptOutcomesObj
+    };
+};
+
+/**
+ * Counts unique students following each edge and tracks various learning analytics metrics.
+ * This is the main function for analyzing student learning path data.
+ * 
+ * Key features:
+ * - Counts each student only once per edge (unique student counting)
+ * - Tracks total visits including repeat attempts
+ * - Records first attempt outcomes separately from all outcomes
+ * - Calculates edge ratios relative to source node traffic
+ * - Uses optimized data structures (Maps/Sets) for better performance
+ * 
+ * Performance optimizations:
+ * - Single-pass algorithm through all data
+ * - Pre-calculated student-problem combinations
+ * - Map/Set data structures for O(1) operations
+ * - Lazy initialization of tracking structures
+ * 
+ * @param stepSequences - Student learning paths: studentId -> problemName -> step[]
+ * @param outcomeSequences - Student outcomes: studentId -> problemName -> outcome[]
+ * @returns Comprehensive edge and node analytics including counts, ratios, and sequences
  */
 export const countEdges = (
     stepSequences: { [key: string]: { [key: string]: string[] } },
@@ -162,145 +445,20 @@ export const countEdges = (
     topSequences: SequenceCount[];
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
 } => {
-    // Use Maps for better performance with frequent operations
-    const totalNodeEdges = new Map<string, Set<string>>();
-    const edgeOutcomeCounts = new Map<string, Map<string, number>>();
-    let maxEdgeCount = 0;
-    const edgeCounts = new Map<string, number>();
-    const totalVisits = new Map<string, number>();
-    const studentEdgeCounts = new Map<string, Set<string>>();
-    const repeatVisits = new Map<string, Map<string, number>>();
-    const firstAttemptOutcomes = new Map<string, Map<string, number>>();
-    const top5Sequences = getTopSequences(stepSequences, 5);
-
-    // Pre-calculate all student-problem combinations to avoid repeated lookups
-    const allCombinations: Array<{
-        studentId: string;
-        problemName: string;
-        steps: string[];
-        outcomes: string[];
-    }> = [];
-
-    for (const [studentId, innerStepSequences] of Object.entries(stepSequences)) {
-        const innerOutcomeSequences = outcomeSequences[studentId] || {};
-        
-        for (const [problemName, steps] of Object.entries(innerStepSequences)) {
-            if (steps.length >= 2) {
-                allCombinations.push({
-                    studentId,
-                    problemName,
-                    steps,
-                    outcomes: innerOutcomeSequences[problemName] || []
-                });
-            }
-        }
-    }
-
-    // Single pass through all combinations
-    for (const { studentId, steps, outcomes } of allCombinations) {
-        for (let i = 0; i < steps.length - 1; i++) {
-            const currentStep = steps[i];
-            const nextStep = steps[i + 1];
-            const outcome = outcomes[i + 1];
-            const edgeKey = `${currentStep}->${nextStep}`;
-
-            // Initialize collections if needed
-            if (!studentEdgeCounts.has(edgeKey)) {
-                studentEdgeCounts.set(edgeKey, new Set());
-                totalVisits.set(edgeKey, 0);
-                repeatVisits.set(edgeKey, new Map());
-                edgeOutcomeCounts.set(edgeKey, new Map());
-            }
-            if (!totalNodeEdges.has(currentStep)) {
-                totalNodeEdges.set(currentStep, new Set());
-            }
-
-            // Add student to edge and node tracking
-            studentEdgeCounts.get(edgeKey)!.add(studentId);
-            totalNodeEdges.get(currentStep)!.add(studentId);
-            
-            // Increment counters
-            totalVisits.set(edgeKey, totalVisits.get(edgeKey)! + 1);
-            
-            // Track repeat visits
-            const edgeRepeatVisits = repeatVisits.get(edgeKey)!;
-            const currentRepeatCount = (edgeRepeatVisits.get(studentId) || 0) + 1;
-            edgeRepeatVisits.set(studentId, currentRepeatCount);
-
-            // Track first attempt outcomes
-            if (currentRepeatCount === 1) {
-                if (!firstAttemptOutcomes.has(edgeKey)) {
-                    firstAttemptOutcomes.set(edgeKey, new Map());
-                }
-                const firstAttemptMap = firstAttemptOutcomes.get(edgeKey)!;
-                firstAttemptMap.set(outcome, (firstAttemptMap.get(outcome) || 0) + 1);
-            }
-
-            // Update edge count and max
-            const currentEdgeCount = studentEdgeCounts.get(edgeKey)!.size;
-            edgeCounts.set(edgeKey, currentEdgeCount);
-            maxEdgeCount = Math.max(maxEdgeCount, currentEdgeCount);
-
-            // Track outcomes
-            const outcomeMap = edgeOutcomeCounts.get(edgeKey)!;
-            outcomeMap.set(outcome, (outcomeMap.get(outcome) || 0) + 1);
-        }
-    }
-
-    // Convert Maps back to objects for compatibility
-    const totalNodeEdgesCounts: { [key: string]: number } = {};
-    totalNodeEdges.forEach((students, node) => {
-        totalNodeEdgesCounts[node] = students.size;
-    });
-
-    const edgeCountsObj: { [key: string]: number } = {};
-    const ratioEdgesObj: { [key: string]: number } = {};
-    edgeCounts.forEach((count, edge) => {
-        edgeCountsObj[edge] = count;
-        const [start] = edge.split('->');
-        ratioEdgesObj[edge] = count / (totalNodeEdgesCounts[start] || 1);
-    });
-
-    const totalVisitsObj: { [key: string]: number } = {};
-    totalVisits.forEach((count, edge) => {
-        totalVisitsObj[edge] = count;
-    });
-
-    const repeatVisitsObj: { [key: string]: { [studentId: string]: number } } = {};
-    repeatVisits.forEach((studentMap, edge) => {
-        repeatVisitsObj[edge] = {};
-        studentMap.forEach((count, studentId) => {
-            repeatVisitsObj[edge][studentId] = count;
-        });
-    });
-
-    const edgeOutcomeCountsObj: { [key: string]: { [outcome: string]: number } } = {};
-    edgeOutcomeCounts.forEach((outcomeMap, edge) => {
-        edgeOutcomeCountsObj[edge] = {};
-        outcomeMap.forEach((count, outcome) => {
-            edgeOutcomeCountsObj[edge][outcome] = count;
-        });
-    });
-
-    const firstAttemptOutcomesObj: { [key: string]: { [outcome: string]: number } } = {};
-    firstAttemptOutcomes.forEach((outcomeMap, edge) => {
-        firstAttemptOutcomesObj[edge] = {};
-        outcomeMap.forEach((count, outcome) => {
-            firstAttemptOutcomesObj[edge][outcome] = count;
-        });
-    });
-
-    return {
-        edgeCounts: edgeCountsObj,
-        totalNodeEdges: totalNodeEdgesCounts,
-        ratioEdges: ratioEdgesObj,
-        edgeOutcomeCounts: edgeOutcomeCountsObj,
-        maxEdgeCount,
-        totalVisits: totalVisitsObj,
-        repeatVisits: repeatVisitsObj,
-        topSequences: top5Sequences,
-        firstAttemptOutcomes: firstAttemptOutcomesObj
-    };
+    // Step 1: Pre-calculate student-problem combinations for efficient processing
+    const combinations = prepareStudentProblemCombinations(stepSequences, outcomeSequences);
+    
+    // Step 2: Initialize high-performance tracking data structures
+    const trackingMaps = initializeTrackingMaps();
+    
+    // Step 3: Calculate top sequences (independent of edge processing)
+    const topSequences = getTopSequences(stepSequences, 5);
+    
+    // Step 4: Process all student paths in a single optimized pass
+    const maxEdgeCount = processStudentPaths(combinations, trackingMaps);
+    
+    // Step 5: Convert internal data structures to API-compatible format
+    return convertMapsToObjects(trackingMaps, maxEdgeCount, topSequences);
 };
 
 
@@ -430,23 +588,254 @@ function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode:
 }
 
 /**
- * Function to generate a Graphviz DOT string for visualizing a sequence graph.
+ * Helper function to create a detailed tooltip for edges containing student statistics and outcomes.
+ * Provides comprehensive information about student paths, visits, outcomes, and visual properties.
+ * 
+ * @param currentStep - Source step name
+ * @param nextStep - Target step name  
+ * @param edgeKey - Edge identifier (currentStep->nextStep)
+ * @param edgeCount - Number of unique students traversing this edge
+ * @param totalCount - Total number of students at the source node
+ * @param visits - Total visits (including repeats) for this edge
+ * @param ratioEdges - Edge ratio data for calculating percentages
+ * @param outcomes - All outcome counts for this edge
+ * @param firstAttempts - First attempt outcome counts for this edge
+ * @param repeatVisits - Repeat visit data per student
+ * @param edgeColor - Color representing the edge's dominant outcomes
+ * @returns Formatted tooltip string for display on hover
+ */
+const createEdgeTooltip = (
+    currentStep: string,
+    nextStep: string,
+    edgeKey: string,
+    edgeCount: number,
+    totalCount: number,
+    visits: number,
+    ratioEdges: { [key: string]: number },
+    outcomes: { [outcome: string]: number },
+    firstAttempts: { [outcome: string]: number },
+    repeatVisits: { [key: string]: { [studentId: string]: number } },
+    edgeColor: string
+): string => {
+    // Build basic student statistics section
+    let tooltip = `${currentStep} to ${nextStep}\n\n`
+        + `Student Statistics:\n`
+        + `- Total Students at ${currentStep}: \n\t\t${totalCount}\n`
+        + `- Unique Students on this path: \n\t\t${edgeCount}\n`
+        + `- Total Edge Visits: \n\t\t${visits}\n`;
+
+    // Add repeat visit analysis if data exists
+    if (repeatVisits[edgeKey]) {
+        const repeatCounts = Object.values(repeatVisits[edgeKey]);
+        const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
+        const maxRepeats = Math.max(...repeatCounts);
+        tooltip += `- Students who repeated this path: \n\t\t${studentsWithRepeats}\n`
+            + `- Maximum visits by a student: \n\t\t${maxRepeats}\n`;
+    }
+
+    // Add path statistics and outcome analysis
+    const ratioPercent = ((ratioEdges[edgeKey] || 0) * 100).toFixed(2);
+    const outcomesStr = Object.entries(outcomes)
+        .map(([outcome, count]) => `${outcome}: ${count}`)
+        .join('\n\t\t');
+    const firstAttemptsStr = Object.entries(firstAttempts)
+        .map(([outcome, count]) => `${outcome}: ${count}`)
+        .join('\n\t\t');
+
+    tooltip += `\nPath Statistics:\n`
+        + `- Ratio: \n\t\t${ratioPercent}% of students at ${currentStep} go to ${nextStep}\n`
+        + `- All Outcomes: \n\t\t${outcomesStr}\n`
+        + `- First Attempt Outcomes: \n\t\t${firstAttemptsStr}\n`
+        + `\nVisual Properties:\n`
+        + `- Edge Color: \n\t\tHex: ${edgeColor}\n`;
+
+    return tooltip;
+};
+
+/**
+ * Helper function to create a tooltip for nodes showing rank, color, and student count.
+ * 
+ * @param rank - Position of the node in the selected sequence (0-based)
+ * @param color - Hex color of the node
+ * @param studentCount - Number of students who visited this node
+ * @returns Formatted tooltip string for node display
+ */
+const createNodeTooltip = (rank: number, color: string, studentCount: number): string => {
+    return `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${studentCount}`;
+};
+
+/**
+ * Generates nodes and edges for the "justTopSequence" mode where only the selected sequence is visualized.
+ * This creates a linear path showing just the selected sequence with proper node coloring and edge connections.
+ * 
+ * @param selectedSequence - Array of step names in the selected sequence
+ * @param normalizedThicknesses - Edge thickness values for visualization
+ * @param edgeOutcomeCounts - Outcome counts for each edge
+ * @param firstAttemptOutcomes - First attempt outcomes for each edge
+ * @param edgeCounts - Number of unique students per edge
+ * @param totalVisits - Total visits per edge (including repeats)
+ * @param totalNodeEdges - Student counts per node
+ * @param ratioEdges - Edge ratios for percentage calculations
+ * @param repeatVisits - Repeat visit data per student per edge
+ * @param minVisits - Minimum visits required to show an edge
+ * @param errorMode - Whether to use error-focused coloring
+ * @returns DOT string for nodes and edges in top sequence mode
+ */
+const generateTopSequenceVisualization = (
+    selectedSequence: string[],
+    normalizedThicknesses: { [key: string]: number },
+    edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } },
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
+    edgeCounts: { [key: string]: number },
+    totalVisits: { [key: string]: number },
+    totalNodeEdges: { [key: string]: number },
+    ratioEdges: { [key: string]: number },
+    repeatVisits: { [key: string]: { [studentId: string]: number } },
+    minVisits: number,
+    errorMode: boolean
+): string => {
+    let dotContent = '';
+    const totalSteps = selectedSequence.length;
+
+    // Generate nodes and edges for the linear sequence
+    for (let rank = 0; rank < totalSteps; rank++) {
+        const currentStep = selectedSequence[rank];
+        const color = calculateColor(rank, totalSteps);
+        const studentCount = totalNodeEdges[currentStep] || 0;
+        const nodeTooltip = createNodeTooltip(rank, color, studentCount);
+
+        // Add node definition with color and tooltip
+        dotContent += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
+
+        // Add edge to next node if not the last node
+        if (rank < totalSteps - 1) {
+            const nextStep = selectedSequence[rank + 1];
+            const edgeKey = `${currentStep}->${nextStep}`;
+            const thickness = normalizedThicknesses[edgeKey] || 1;
+            const outcomes = edgeOutcomeCounts[edgeKey] || {};
+            const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
+            const edgeCount = edgeCounts[edgeKey] || 0;
+            const visits = totalVisits[edgeKey] || 0;
+            const totalCount = totalNodeEdges[currentStep] || 0;
+            const edgeColor = calculateEdgeColors(outcomes, errorMode);
+
+            // Only show edge if it meets minimum visit threshold
+            if (edgeCount > minVisits) {
+                const tooltip = createEdgeTooltip(
+                    currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
+                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
+                );
+
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
+            }
+        }
+    }
+
+    return dotContent;
+};
+
+/**
+ * Generates nodes and edges for the full graph mode showing all qualifying edges.
+ * This creates a complete network visualization with all edges that meet the threshold criteria.
+ * 
+ * @param selectedSequence - Array of step names for node coloring
+ * @param normalizedThicknesses - Edge thickness values with threshold filtering
+ * @param edgeOutcomeCounts - Outcome counts for each edge
+ * @param firstAttemptOutcomes - First attempt outcomes for each edge
+ * @param edgeCounts - Number of unique students per edge
+ * @param totalVisits - Total visits per edge (including repeats)
+ * @param totalNodeEdges - Student counts per node
+ * @param ratioEdges - Edge ratios for percentage calculations
+ * @param repeatVisits - Repeat visit data per student per edge
+ * @param threshold - Minimum thickness threshold to show an edge
+ * @param minVisits - Minimum visits required to show an edge
+ * @param errorMode - Whether to use error-focused coloring
+ * @returns DOT string for nodes and edges in full graph mode
+ */
+const generateFullGraphVisualization = (
+    selectedSequence: string[],
+    normalizedThicknesses: { [key: string]: number },
+    edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } },
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
+    edgeCounts: { [key: string]: number },
+    totalVisits: { [key: string]: number },
+    totalNodeEdges: { [key: string]: number },
+    ratioEdges: { [key: string]: number },
+    repeatVisits: { [key: string]: { [studentId: string]: number } },
+    threshold: number,
+    minVisits: number,
+    errorMode: boolean
+): string => {
+    let dotContent = '';
+    const totalSteps = selectedSequence.length;
+
+    // First, generate all nodes with coloring based on selected sequence
+    for (let rank = 0; rank < totalSteps; rank++) {
+        const currentStep = selectedSequence[rank];
+        const color = calculateColor(rank, totalSteps);
+        const studentCount = totalNodeEdges[currentStep] || 0;
+        const nodeTooltip = createNodeTooltip(rank, color, studentCount);
+
+        dotContent += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
+    }
+
+    // Then, generate all qualifying edges
+    for (const edgeKey of Object.keys(normalizedThicknesses)) {
+        const thickness = normalizedThicknesses[edgeKey];
+        
+        // Only show edges that meet both thickness and visit thresholds
+        if (thickness >= threshold) {
+            const [currentStep, nextStep] = edgeKey.split('->');
+            const outcomes = edgeOutcomeCounts[edgeKey] || {};
+            const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
+            const edgeCount = edgeCounts[edgeKey] || 0;
+            const visits = totalVisits[edgeKey] || 0;
+            const totalCount = totalNodeEdges[currentStep] || 0;
+            const edgeColor = calculateEdgeColors(outcomes, errorMode);
+
+            // Apply minimum visits filter
+            if (edgeCount > minVisits) {
+                const tooltip = createEdgeTooltip(
+                    currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
+                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
+                );
+
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
+            }
+        }
+    }
+
+    return dotContent;
+};
+
+/**
+ * Main function to generate a Graphviz DOT string for visualizing student learning path graphs.
+ * Creates interactive visualizations with detailed tooltips, color coding, and filtering options.
  *
- * @param normalizedThicknesses - A dictionary mapping edges to their normalized thickness values.
- * @param ratioEdges - A dictionary of edge ratios (i.e., percentage of students traversing from one step to another).
- * @param edgeOutcomeCounts - A dictionary that tracks the count of outcomes for each edge.
- * @param edgeCounts - A dictionary tracking the total number of transitions between steps (edges).
- * @param totalNodeEdges - A dictionary of total transitions starting from a specific node.
- * @param threshold - Minimum thickness value to include an edge in the visualization.
- * @param minVisits - Minimum number of visits an edge must have to be included in the graph.
- * @param selectedSequence - The selected sequence of steps used to color the nodes.
+ * The function supports two visualization modes:
+ * 1. justTopSequence: Shows only the selected sequence as a linear path
+ * 2. Full graph: Shows all qualifying edges and nodes in a network layout
  *
- * @param justTopSequence
- * @param totalVisits
- * @param repeatVisits
- * @param errorMode
- * @param firstAttemptOutcomes
- * @returns A string in Graphviz DOT format that represents the graph.
+ * Visual features:
+ * - Node colors: Gradient from white (start) to light blue (end) based on sequence position
+ * - Edge colors: Weighted blend of outcome colors (red=error, green=success, blue=hints, yellow=interventions)
+ * - Edge thickness: Proportional to number of students following that path
+ * - Interactive tooltips: Detailed statistics on hover
+ *
+ * @param normalizedThicknesses - Edge thickness values normalized for visualization (0-max thickness)
+ * @param ratioEdges - Percentage of students at source node who follow each edge
+ * @param edgeOutcomeCounts - Count of all outcomes for each edge (includes repeat attempts)
+ * @param edgeCounts - Number of unique students who traversed each edge
+ * @param totalNodeEdges - Number of unique students who visited each node
+ * @param threshold - Minimum thickness required to show an edge in full graph mode
+ * @param minVisits - Minimum number of student visits required to show an edge
+ * @param selectedSequence - Sequence of steps used for node coloring and top sequence mode
+ * @param justTopSequence - If true, show only the selected sequence; if false, show full graph
+ * @param totalVisits - Total number of visits for each edge (includes repeat attempts)
+ * @param repeatVisits - Per-student visit counts for each edge (for repeat visit analysis)
+ * @param errorMode - If true, use error-focused coloring (excludes OK outcomes from edge colors)
+ * @param firstAttemptOutcomes - Count of outcomes only from first attempts (excludes repeats)
+ * @returns Complete Graphviz DOT string ready for rendering
  */
 export function generateDotString(
     normalizedThicknesses: { [key: string]: number },
@@ -463,114 +852,49 @@ export function generateDotString(
     errorMode: boolean,
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } }
 ): string {
+    // Validate input - return error graph if no valid sequence provided
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
 
+    // Initialize DOT string with Graphviz header and configuration
     let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
-    let totalSteps = selectedSequence.length;
-    let steps = selectedSequence;
 
+    // Generate visualization content based on mode
     if (justTopSequence) {
-        for (let rank = 0; rank < totalSteps; rank++) {
-            const currentStep = steps[rank];
-            const nextStep = steps[rank + 1];
-            const edgeKey = `${currentStep}->${nextStep}`;
-            const thickness = normalizedThicknesses[edgeKey] || 1;
-            const outcomes = edgeOutcomeCounts[edgeKey] || {};
-            const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
-            const edgeCount = edgeCounts[edgeKey] || 0;
-            const visits = totalVisits[edgeKey] || 0;
-            const totalCount = totalNodeEdges[currentStep] || 0;
-            const color = calculateColor(rank, totalSteps);
-            const edgeColor = calculateEdgeColors(outcomes, errorMode);
-            
-            let nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
-
-            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
-
-            if (edgeCount > minVisits) {
-                let tooltip = `${currentStep} to ${nextStep}\n\n`
-                    + `Student Statistics:\n`
-                    + `- Total Students at ${currentStep}: \n\t\t${totalCount}\n`
-                    + `- Unique Students on this path: \n\t\t${edgeCount}\n`
-                    + `- Total Edge Visits: \n\t\t${visits}\n`;
-
-                // Add repeat visit information for all edges
-                if (repeatVisits[edgeKey]) {
-                    const repeatCounts = Object.values(repeatVisits[edgeKey]);
-                    const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
-                    const maxRepeats = Math.max(...repeatCounts);
-                    tooltip += `- Students who repeated this path: \n\t\t${studentsWithRepeats}\n`
-                        + `- Maximum visits by a student: \n\t\t${maxRepeats}\n`;
-                }
-
-                tooltip += `\nPath Statistics:\n`
-                    + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                    + `- All Outcomes: \n\t\t${Object.entries(outcomes).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
-                    + `- First Attempt Outcomes: \n\t\t${Object.entries(firstAttempts).map(([outcome, count]) => `${outcome}: ${count}`).join('\n\t\t')}\n`
-                    + `\nVisual Properties:\n`
-                    + `- Edge Color: \n\t\tHex: ${edgeColor}\n`;
-
-                dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
-            }
-        }
+        // Top sequence mode: show only the selected sequence as a linear path
+        dotString += generateTopSequenceVisualization(
+            selectedSequence,
+            normalizedThicknesses,
+            edgeOutcomeCounts,
+            firstAttemptOutcomes,
+            edgeCounts,
+            totalVisits,
+            totalNodeEdges,
+            ratioEdges,
+            repeatVisits,
+            minVisits,
+            errorMode
+        );
     } else {
-        for (let rank = 0; rank < totalSteps; rank++) {
-            const currentStep = steps[rank];
-            const color = calculateColor(rank, totalSteps);
-            let nodeTooltip = `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${totalNodeEdges[currentStep] || 0}`;
-
-            dotString += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
-        }
-
-        for (const edgeKey of Object.keys(normalizedThicknesses)) {
-            if (normalizedThicknesses[edgeKey] >= threshold) {
-                const [currentStep, nextStep] = edgeKey.split('->');
-                const thickness = normalizedThicknesses[edgeKey];
-                const outcomes = edgeOutcomeCounts[edgeKey] || {};
-                const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
-                const edgeCount = edgeCounts[edgeKey] || 0;
-                const visits = totalVisits[edgeKey] || 0;
-                const totalCount = totalNodeEdges[currentStep] || 0;
-                const edgeColor = calculateEdgeColors(outcomes, errorMode);
-                const outcomesStr = Object.entries(outcomes)
-                    .map(([outcome, count]) => `${outcome}: ${count}`)
-                    .join('\n\t\t');
-                const firstAttemptsStr = Object.entries(firstAttempts)
-                    .map(([outcome, count]) => `${outcome}: ${count}`)
-                    .join('\n\t\t');
-
-                if (edgeCount > minVisits) {
-                    let tooltip = `${currentStep} to ${nextStep}\n\n`
-                        + `Student Statistics:\n`
-                        + `- Total Students at ${currentStep}: \n\t\t${totalCount || 0}\n`
-                        + `- Unique Students on this path: \n\t\t${edgeCount}\n`
-                        + `- Total Edge Visits: \n\t\t${visits}\n`;
-
-                    // Add repeat visit information for all edges
-                    if (repeatVisits[edgeKey]) {
-                        const repeatCounts = Object.values(repeatVisits[edgeKey]);
-                        const studentsWithRepeats = repeatCounts.filter(count => count > 1).length;
-                        const maxRepeats = Math.max(...repeatCounts);
-                        tooltip += `- Students who repeated this path: \n\t\t${studentsWithRepeats}\n`
-                            + `- Maximum visits by a student: \n\t\t${maxRepeats}\n`;
-                    }
-
-                    tooltip += `\nPath Statistics:\n`
-                        + `- Ratio: \n\t\t${((ratioEdges[edgeKey] || 0) * 100).toFixed(2)}% of students at ${currentStep} go to ${nextStep}\n`
-                        + `- All Outcomes: \n\t\t${outcomesStr}\n`
-                        + `- First Attempt Outcomes: \n\t\t${firstAttemptsStr}\n`
-                        + `\nVisual Properties:\n`
-                        + `- Edge Color: \n\t\tHex: ${edgeColor}\n`
-                        + `\t\tRGB: ${[parseInt(edgeColor.substring(1, 3), 16), parseInt(edgeColor.substring(3, 5), 16), parseInt(edgeColor.substring(5, 7), 16)]}`;
-
-                    dotString += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
-                }
-            }
-        }
+        // Full graph mode: show all qualifying edges and nodes
+        dotString += generateFullGraphVisualization(
+            selectedSequence,
+            normalizedThicknesses,
+            edgeOutcomeCounts,
+            firstAttemptOutcomes,
+            edgeCounts,
+            totalVisits,
+            totalNodeEdges,
+            ratioEdges,
+            repeatVisits,
+            threshold,
+            minVisits,
+            errorMode
+        );
     }
 
+    // Close DOT string and return complete graph definition
     dotString += '}';
     return dotString;
 }
