@@ -1,7 +1,9 @@
-import React, { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { Context } from "@/Context.tsx";
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import DataFileSelector from './DataFileSelector';
 
 interface UploadProps {
     onDataProcessed: (csvData: string) => void; // Callback function to handle processed CSV data
@@ -11,6 +13,7 @@ interface UploadProps {
 function Upload({ onDataProcessed }: UploadProps) {
     // Access loading state and setter from Context
     const { setLoading } = useContext(Context);
+    const [activeTab, setActiveTab] = useState<string>("select");
 
     // Handle file upload event
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,9 +55,68 @@ function Upload({ onDataProcessed }: UploadProps) {
     };
 
     return (
-        <div className="container flex flex-col gap-3 ">
-            <Label htmlFor='upload'>Upload CSV</Label>
-            <Input className='' id='upload' type="file" accept=".csv, .tsv" onChange={handleFileUpload} /> {/* Input for CSV file upload */}
+        <div className="container mx-auto max-w-4xl p-4">
+            <div className="space-y-6">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Load Data for Analysis</h2>
+                    <p className="text-gray-600">Choose how you'd like to load your CSV data</p>
+                </div>
+
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="select" className="flex items-center gap-2">
+                            📂 Select from Data Folder
+                        </TabsTrigger>
+                        <TabsTrigger value="upload" className="flex items-center gap-2">
+                            📤 Upload File
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="select" className="mt-6">
+                        <DataFileSelector onDataProcessed={onDataProcessed} />
+                    </TabsContent>
+
+                    <TabsContent value="upload" className="mt-6">
+                        <div className="border border-gray-200 rounded-lg p-6 bg-white">
+                            <div className="space-y-4">
+                                <Label htmlFor='upload' className="text-lg font-semibold">
+                                    Upload CSV File
+                                </Label>
+                                <p className="text-sm text-gray-600">
+                                    Select a CSV or TSV file from your computer to analyze student learning paths.
+                                </p>
+                                <Input 
+                                    className='file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100' 
+                                    id='upload' 
+                                    type="file" 
+                                    accept=".csv, .tsv" 
+                                    onChange={handleFileUpload} 
+                                />
+                                <div className="text-xs text-gray-500">
+                                    <p>Supported formats: CSV, TSV</p>
+                                    <p>Required fields: Time, Step Name, Outcome, CF (Workspace Progress Status), Problem Name, Anon Student Id</p>
+                                </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+                </Tabs>
+
+                <div className="text-center space-y-2">
+                    <p className="text-sm text-gray-500">
+                        Need data? Generate CSV files using the Astra model and transport them automatically.
+                    </p>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="text-sm font-mono text-gray-700">
+                            <div className="mb-2">💡 <strong>Quick workflow:</strong></div>
+                            <div className="space-y-1 text-left">
+                                <div>1. <code>cd astra && python app.py</code> (Generate data)</div>
+                                <div>2. <code>cd .. && python transport_data.py --all</code> (Transport files)</div>
+                                <div>3. Click "Select from Data Folder" tab above</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
