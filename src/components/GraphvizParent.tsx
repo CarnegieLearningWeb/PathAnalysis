@@ -390,7 +390,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const generateNodeTooltip = (nodeName: string, graphType: string): string => {
         if (!mainGraphData) return `Node: ${nodeName}`;
         
-        const { stepSequences, edgeCounts, edgeOutcomeCounts } = mainGraphData;
+        const { stepSequences, edgeCounts, edgeOutcomeCounts, firstAttemptOutcomes } = mainGraphData;
         
         // Find all edges involving this node
         const incomingEdges = Object.keys(edgeCounts).filter(edge => edge.endsWith(`->${nodeName}`));
@@ -441,14 +441,25 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         
         // Calculate outcome statistics for this node (from outgoing edges)
         const nodeOutcomes: { [outcome: string]: number } = {};
+        const nodeFirstAttemptOutcomes: { [outcome: string]: number } = {};
+        
         outgoingEdges.forEach(edge => {
+            // All outcomes (including repeat attempts)
             const outcomes = edgeOutcomeCounts[edge] || {};
             Object.entries(outcomes).forEach(([outcome, count]) => {
                 nodeOutcomes[outcome] = (nodeOutcomes[outcome] || 0) + count;
             });
+            
+            // First attempt outcomes only
+            const firstAttempts = firstAttemptOutcomes[edge] || {};
+            Object.entries(firstAttempts).forEach(([outcome, count]) => {
+                nodeFirstAttemptOutcomes[outcome] = (nodeFirstAttemptOutcomes[outcome] || 0) + count;
+            });
         });
         
         const totalOutcomes = Object.values(nodeOutcomes).reduce((sum, count) => sum + count, 0);
+        const totalFirstAttempts = Object.values(nodeFirstAttemptOutcomes).reduce((sum, count) => sum + count, 0);
+        
         const outcomeSummary = Object.entries(nodeOutcomes)
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
@@ -456,6 +467,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 return `${outcome}: ${count} (${percentage}%)`;
             })
             .slice(0, 5) // Show top 5 outcomes
+            .join('\n      ');
+        
+        const firstAttemptSummary = Object.entries(nodeFirstAttemptOutcomes)
+            .sort(([,a], [,b]) => b - a)
+            .map(([outcome, count]) => {
+                const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
+                return `${outcome}: ${count} (${percentage}%)`;
+            })
+            .slice(0, 5) // Show top 5 first attempt outcomes
             .join('\n      ');
         
         return `Node Information (${graphType}):\n`
@@ -472,9 +492,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             + `    • Other: ${progressStats.other}\n`
             + `    • Total students tracked: ${progressStats.total}\n\n`
             + `Learning Outcomes from this Step:\n`
-            + `    • Top Outcomes:\n`
+            + `    • All Outcomes (including repeat attempts):\n`
             + `      ${outcomeSummary || 'No outcome data available'}\n`
             + `    • Total recorded outcomes: ${totalOutcomes}\n\n`
+            + `    • First Attempt Outcomes:\n`
+            + `      ${firstAttemptSummary || 'No first attempt data available'}\n`
+            + `    • Total first attempts: ${totalFirstAttempts}\n\n`
             + `Graph Connectivity:\n`
             + `    • Incoming paths: ${filteredIncomingEdges.length} (above threshold)\n`
             + `    • Outgoing paths: ${filteredOutgoingEdges.length} (above threshold)\n`
