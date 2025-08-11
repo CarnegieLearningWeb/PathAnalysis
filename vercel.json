@@ -1,7 +1,12 @@
 {
   "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node@18.x"
-    }
-  }
+    "api/data-files.ts": {},
+    "api/data-files/[filename].ts": {},
+    "api/upload-csv.ts": {}
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
