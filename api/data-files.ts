@@ -70,11 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         if (Array.isArray(hfData)) {
           const huggingFaceFiles = hfData
-            .filter(item => item.type === 'file' && item.path.endsWith('.csv'))
+            .filter(item => item.type === 'file' && item.path && item.path.endsWith('.csv'))
             .map(file => ({
               filename: file.path,
               size: file.size || 0,
-              modified: new Date(file.lastCommit?.date || Date.now()).toISOString(),
+              modified: new Date().toISOString(),
               path: `/api/data-files/${encodeURIComponent(file.path)}`,
               downloadUrl: `https://huggingface.co/datasets/suryadev1/generated-csvs/resolve/main/${file.path}`,
               source: 'huggingface'
