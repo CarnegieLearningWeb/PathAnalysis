@@ -16,6 +16,7 @@ import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
+import { Download } from 'lucide-react';
 
 // History item interface
 interface HistoryItem {
@@ -38,6 +39,7 @@ interface GraphvizParentProps {
     onMaxEdgeCountChange: (count: number) => void;
     onMaxMinEdgeCountChange: (count: number) => void;
     errorMode: boolean;
+    uniqueStudentMode: boolean;
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
@@ -47,7 +49,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     minVisits,
     onMaxEdgeCountChange,
     onMaxMinEdgeCountChange,
-    errorMode
+    errorMode,
+    uniqueStudentMode
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
     const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
@@ -110,7 +113,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // Calculate and update the maximum minimum-edge count
             const sequenceToUse = selectedSequence || topSequences[0]?.sequence;
             if (sequenceToUse) {
-                const maxMinEdgeCount = calculateMaxMinEdgeCount(newEdgeCounts, sequenceToUse);
+                console.log("GraphvizParent: Calculating maxMinEdgeCount for MAIN graph");
+                console.log("GraphvizParent: Sequence length:", sequenceToUse.length);
+                console.log("GraphvizParent: Total edge count keys:", Object.keys(newEdgeCounts).length);
+                console.log("GraphvizParent: Unique student mode:", uniqueStudentMode);
+                
+                // Use edgeCounts (unique students) or totalVisits based on mode
+                const countsToUse = uniqueStudentMode ? newEdgeCounts : totalVisits;
+                const maxMinEdgeCount = calculateMaxMinEdgeCount(countsToUse, sequenceToUse);
+                console.log("GraphvizParent: Setting maxMinEdgeCount to:", maxMinEdgeCount);
                 onMaxMinEdgeCountChange(maxMinEdgeCount);
             }
 
@@ -121,7 +132,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
 
-            const normalizedThicknesses = normalizeThicknesses(newEdgeCounts, maxEdgeCount, 10);
+            // Use appropriate data for thickness normalization based on mode
+            const countsForThickness = uniqueStudentMode ? newEdgeCounts : totalVisits;
+            const maxCountForThickness = uniqueStudentMode ? maxEdgeCount : Math.max(...Object.values(totalVisits), 1);
+            const normalizedThicknesses = normalizeThicknesses(countsForThickness, maxCountForThickness, 10);
+            
+            console.log("GraphvizParent: Using counts for thickness:", uniqueStudentMode ? "unique students" : "total visits");
+            console.log("GraphvizParent: Max count for thickness:", maxCountForThickness);
 
             const dotString = generateDotString(
                 normalizedThicknesses,
@@ -136,7 +153,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 totalVisits,
                 repeatVisits,
                 errorMode,
-                mainGraphData.firstAttemptOutcomes
+                mainGraphData.firstAttemptOutcomes,
+                uniqueStudentMode
             );
 
             setDotString(dotString);
@@ -155,11 +173,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     totalVisits,
                     repeatVisits,
                     errorMode,
-                    mainGraphData.firstAttemptOutcomes
+                    mainGraphData.firstAttemptOutcomes,
+                    uniqueStudentMode
                 )
             );
         }
-    }, [mainGraphData, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, errorMode]);
+    }, [mainGraphData, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, errorMode, uniqueStudentMode]);
 
     // Memoized filtered graph data
     const filteredGraphData = useMemo(() => {
@@ -202,11 +221,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // Calculate max min edge count for filtered data
             const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
             if (sequenceToUse) {
-                const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredEdgeCounts, sequenceToUse);
+                console.log("GraphvizParent: Calculating maxMinEdgeCount for FILTERED graph");
+                console.log("GraphvizParent: Filter:", filter);
+                console.log("GraphvizParent: Filtered edge count keys:", Object.keys(filteredEdgeCounts).length);
+                console.log("GraphvizParent: Filtered unique student mode:", uniqueStudentMode);
+                const filteredCountsToUse = uniqueStudentMode ? filteredEdgeCounts : filteredTotalVisits;
+                const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredCountsToUse, sequenceToUse);
+                console.log("GraphvizParent: Setting filtered maxMinEdgeCount to:", filteredMinEdgeCount);
                 onMaxMinEdgeCountChange(filteredMinEdgeCount);
             }
 
-            const normalizedThicknesses = normalizeThicknesses(filteredEdgeCounts, filteredMaxEdgeCount, 10);
+            // Use appropriate data for filtered thickness normalization based on mode
+            const filteredCountsForThickness = uniqueStudentMode ? filteredEdgeCounts : filteredTotalVisits;
+            const filteredMaxCountForThickness = uniqueStudentMode ? filteredMaxEdgeCount : Math.max(...Object.values(filteredTotalVisits), 1);
+            const normalizedThicknesses = normalizeThicknesses(filteredCountsForThickness, filteredMaxCountForThickness, 10);
 
             const filteredDotString = generateDotString(
                 normalizedThicknesses,
@@ -221,7 +249,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 filteredTotalVisits,
                 filteredRepeatVisits,
                 errorMode,
-                filteredGraphData.firstAttemptOutcomes
+                filteredGraphData.firstAttemptOutcomes,
+                uniqueStudentMode
             );
 
             setFilteredDotString(filteredDotString);
@@ -231,12 +260,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             if (mainGraphData) {
                 const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
                 if (sequenceToUse) {
-                    const maxMinEdgeCount = calculateMaxMinEdgeCount(mainGraphData.edgeCounts, sequenceToUse);
+                    const resetCountsToUse = uniqueStudentMode ? mainGraphData.edgeCounts : mainGraphData.totalVisits;
+                    const maxMinEdgeCount = calculateMaxMinEdgeCount(resetCountsToUse, sequenceToUse);
                     onMaxMinEdgeCountChange(maxMinEdgeCount);
                 }
             }
         }
-    }, [filteredGraphData, minVisits, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange]);
+    }, [filteredGraphData, minVisits, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode]);
 
     // Cleanup all event listeners when component unmounts
     useEffect(() => {
@@ -1210,7 +1240,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         {filter && filter !== 'ALL' && filteredDotString && (
                             <div
                                 className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-4">Filtered Graph: {titleCase(filter)}</h2>
+                                <h2 className="text-lg font-semibold text-center mb-2">Filtered Graph: {titleCase(filter)}</h2>
                                 <div ref={graphRefFiltered}
                                     className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
                                 <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
@@ -1301,12 +1331,14 @@ interface ExportButtonProps {
     label?: string;
 }
 
-function ExportButton({ onClick, label = "Export Image" }: ExportButtonProps) {
+function ExportButton({ onClick, label = "Export as PNG" }: ExportButtonProps) {
     return (
         <Button
-            variant={'secondary'}
+            variant={'outline'}
             onClick={onClick}
+            className="flex items-center gap-2 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 shadow-sm"
         >
+            <Download className="h-4 w-4" />
             {label}
         </Button>
     );

@@ -25,7 +25,8 @@ function App() {
     const [filter, setFilter] = useState<string>('');
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
-    const [errorMode, setErrorMode] = useState<boolean>(false)
+    const [errorMode, setErrorMode] = useState<boolean>(false);
+    const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(false);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
     const {
@@ -46,8 +47,11 @@ function App() {
 
     // Update minVisitsPercentage when maxMinEdgeCount changes
     useEffect(() => {
+        console.log("App.tsx: maxMinEdgeCount changed to:", maxMinEdgeCount);
+        console.log("App.tsx: maxEdgeCount is:", maxEdgeCount);
         if (maxMinEdgeCount > 0) {
             const percentage = (maxMinEdgeCount / maxEdgeCount) * 100;
+            console.log("App.tsx: Setting slider to percentage:", percentage);
             setMinVisitsPercentage(Math.max(0, Math.min(100, percentage)));
         }
     }, [maxMinEdgeCount, maxEdgeCount]);
@@ -102,9 +106,14 @@ function App() {
     const handleToggle = () => setSelfLoops(!selfLoops);
 
     /**
-     * Toggles the self-loops inclusion in the graph by switching the state.
+     * Toggles the error mode inclusion in the graph by switching the state.
      */
     const handleToggleError = () => setErrorMode(!errorMode);
+
+    /**
+     * Toggles between unique students (first attempts only) and total visits (all attempts) mode.
+     */
+    const handleToggleUniqueStudentMode = () => setUniqueStudentMode(!uniqueStudentMode);
 
     /**
      * Updates the minimum visits for edges in the graph when the slider is moved.
@@ -220,8 +229,17 @@ function App() {
                                             <Switch isOn={errorMode} handleToggle={handleToggleError}/>
                                         </div>
 
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">
+                                                {uniqueStudentMode ? 'Unique Students Only (First Attempts)' : 'Total Visits (All Attempts)'}
+                                            </label>
+                                            <Switch isOn={uniqueStudentMode} handleToggle={handleToggleUniqueStudentMode}/>
+                                        </div>
+
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">Minimum Students</label>
+                                            <label className="text-sm font-medium text-gray-700">
+                                                {uniqueStudentMode ? 'Minimum Students' : 'Minimum Visits'}
+                                            </label>
                                             <div className="space-y-4">
                                                 <div>
                                                     <div className="flex justify-between mb-1">
@@ -236,13 +254,16 @@ function App() {
                                                             value={minVisitsPercentage}
                                                             onChange={handleSlider}
                                                             maxEdgeCount={maxEdgeCount}
+                                                            uniqueStudentMode={uniqueStudentMode}
                                                         />
                                                         <span className="text-sm text-gray-500">%</span>
                                                     </div>
                                                 </div>
                                                 <div>
                                                     <div className="flex justify-between mb-1">
-                                                        <span className="text-sm text-gray-500">Students</span>
+                                                        <span className="text-sm text-gray-500">
+                                                            {uniqueStudentMode ? 'Students' : 'Visits'}
+                                                        </span>
                                                     </div>
                                                     <Input
                                                         type="number"
@@ -256,7 +277,7 @@ function App() {
                                             </div>
                                             <p className="text-xs text-gray-500">
                                                 Maximum threshold before any node becomes
-                                                disconnected: {maxMinEdgeCount} students
+                                                disconnected: {maxMinEdgeCount} {uniqueStudentMode ? 'students' : 'visits'}
                                             </p>
                                         </div>
                                     </div>
@@ -279,6 +300,7 @@ function App() {
                                             onMaxEdgeCountChange={setMaxEdgeCount}
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
                                             errorMode={errorMode}
+                                            uniqueStudentMode={uniqueStudentMode}
                                         />
                                     </div>
                                 </div>

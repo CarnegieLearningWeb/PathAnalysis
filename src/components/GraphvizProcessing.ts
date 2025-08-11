@@ -720,7 +720,7 @@ const generateTopSequenceVisualization = (
             const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
             // Only show edge if it meets minimum visit threshold
-            if (edgeCount > minVisits) {
+            if (visits >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
@@ -794,7 +794,7 @@ const generateFullGraphVisualization = (
             const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
             // Apply minimum visits filter
-            if (edgeCount > minVisits) {
+            if (visits >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
@@ -850,12 +850,21 @@ export function generateDotString(
     totalVisits: { [key: string]: number },
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     errorMode: boolean,
-    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } }
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
+    uniqueStudentMode: boolean = false
 ): string {
     // Validate input - return error graph if no valid sequence provided
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
+
+    // Determine which counts to use based on mode
+    const visitsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
+    const outcomesToUse = uniqueStudentMode ? firstAttemptOutcomes : edgeOutcomeCounts;
+    
+    console.log("generateDotString: Using unique student mode:", uniqueStudentMode);
+    console.log("generateDotString: Using visits data keys:", Object.keys(visitsToUse).length);
+    console.log("generateDotString: Using outcomes data keys:", Object.keys(outcomesToUse).length);
 
     // Initialize DOT string with Graphviz header and configuration
     let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
@@ -866,10 +875,10 @@ export function generateDotString(
         dotString += generateTopSequenceVisualization(
             selectedSequence,
             normalizedThicknesses,
-            edgeOutcomeCounts,
+            outcomesToUse,
             firstAttemptOutcomes,
             edgeCounts,
-            totalVisits,
+            visitsToUse,
             totalNodeEdges,
             ratioEdges,
             repeatVisits,
@@ -881,10 +890,10 @@ export function generateDotString(
         dotString += generateFullGraphVisualization(
             selectedSequence,
             normalizedThicknesses,
-            edgeOutcomeCounts,
+            outcomesToUse,
             firstAttemptOutcomes,
             edgeCounts,
-            totalVisits,
+            visitsToUse,
             totalNodeEdges,
             ratioEdges,
             repeatVisits,
@@ -900,42 +909,132 @@ export function generateDotString(
 }
 
 /**
- * Calculates the minimum number of students on any edge in the selected sequence.
- * This is the smallest number of unique students that traverse any edge in the sequence.
- * @param edgeCounts - Dictionary mapping edge keys to the number of unique students
- * @param selectedSequence - The selected sequence of steps
- * @returns The minimum number of students on any edge in the sequence
+ * Calculates the maximum minimum threshold that keeps all nodes connected in the graph.
+ * This finds the highest threshold where no nodes get disconnected (become isolated).
+ * @param countsToUse - Dictionary mapping edge keys to the counts to use for analysis
+ * @param selectedSequence - The selected sequence of steps (used for reference but analyzes full graph)
+ * @returns The maximum minimum threshold that keeps all nodes connected
  */
 export function calculateMaxMinEdgeCount(
-    edgeCounts: { [key: string]: number },
-    selectedSequence: string[],
-    filteredEdgeCounts?: { [key: string]: number }
+    countsToUse: { [key: string]: number },
+    selectedSequence: string[]
 ): number {
-    if (!selectedSequence || selectedSequence.length < 2) {
-        console.log("No valid sequence provided");
+    
+    console.log("=== calculateMaxMinEdgeCount Debug ===");
+    console.log("Selected sequence:", selectedSequence);
+    console.log("Counts data type:", Object.keys(countsToUse).length > 0 ? 'valid' : 'empty');
+    console.log("Total edge counts available:", Object.keys(countsToUse).length);
+    console.log("Sample counts:", Object.entries(countsToUse).slice(0, 3));
+
+    // Get all unique nodes from the graph
+    const allNodes = new Set<string>();
+    Object.keys(countsToUse).forEach(edgeKey => {
+        const [fromNode, toNode] = edgeKey.split('->');
+        if (fromNode && toNode) {
+            allNodes.add(fromNode);
+            allNodes.add(toNode);
+        }
+    });
+
+    console.log("All nodes in graph:", Array.from(allNodes));
+    console.log("Total nodes:", allNodes.size);
+
+    if (allNodes.size === 0) {
+        console.log("No nodes found in graph, returning 0");
         return 0;
     }
 
-    let minStudentCount = Infinity;
-    console.log("Edge counts:", edgeCounts);
-    console.log("Filtered edge counts:", filteredEdgeCounts);
-    console.log("Selected sequence:", selectedSequence);
+    // Get all unique edge counts and sort them in descending order
+    const edgeCounts_values = Object.values(countsToUse).filter(count => count > 0);
+    const uniqueCounts = [...new Set(edgeCounts_values)].sort((a, b) => b - a);
+    
+    console.log("Unique edge counts (descending):", uniqueCounts);
 
-    // Check each edge in the sequence
-    for (let i = 0; i < selectedSequence.length - 1; i++) {
-        const currentStep = selectedSequence[i];
-        const nextStep = selectedSequence[i + 1];
-        const edgeKey = `${currentStep}->${nextStep}`;
+    // Binary search approach: find the highest threshold that keeps all nodes connected
+    let maxValidThreshold = 0;
+
+    for (const threshold of uniqueCounts) {
+        // Create a graph with only edges that meet this threshold
+        const validEdges = Object.entries(countsToUse)
+            .filter(([_, count]) => count >= threshold)
+            .map(([edge, count]) => ({ edge, count }));
+
+        console.log(`Testing threshold ${threshold}: ${validEdges.length} edges qualify`);
+
+        // Check if all nodes remain connected with this threshold
+        const isConnected = checkGraphConnectivity(validEdges, allNodes);
         
-        // Use filtered counts if available, otherwise fall back to main counts
-        const studentCount = filteredEdgeCounts ? 
-            (filteredEdgeCounts[edgeKey] || 0) : 
-            (edgeCounts[edgeKey] || 0);
-            
-        minStudentCount = Math.min(minStudentCount, studentCount);
+        if (isConnected) {
+            maxValidThreshold = threshold;
+            console.log(`✓ Threshold ${threshold} keeps all nodes connected`);
+            break; // Since we're going in descending order, this is the maximum valid threshold
+        } else {
+            console.log(`✗ Threshold ${threshold} disconnects some nodes`);
+        }
     }
 
-    return minStudentCount;
+    console.log("Final maxMinEdgeCount:", maxValidThreshold);
+    console.log("=== End calculateMaxMinEdgeCount Debug ===");
+    
+    return maxValidThreshold;
+}
+
+/**
+ * Checks if a graph is connected (all nodes can reach each other) given a set of edges.
+ * Uses depth-first search to verify connectivity.
+ */
+function checkGraphConnectivity(
+    edges: Array<{edge: string, count: number}>, 
+    allNodes: Set<string>
+): boolean {
+    if (allNodes.size === 0) return true;
+    if (edges.length === 0 && allNodes.size > 1) return false;
+
+    // Build adjacency list
+    const adjacencyList = new Map<string, Set<string>>();
+    
+    // Initialize all nodes
+    allNodes.forEach(node => {
+        adjacencyList.set(node, new Set());
+    });
+
+    // Add edges (bidirectional for connectivity check)
+    edges.forEach(({ edge }) => {
+        const [fromNode, toNode] = edge.split('->');
+        if (fromNode && toNode) {
+            adjacencyList.get(fromNode)?.add(toNode);
+            adjacencyList.get(toNode)?.add(fromNode); // Make it bidirectional for connectivity
+        }
+    });
+
+    // Check if all nodes are reachable from any starting node using DFS
+    const startNode = Array.from(allNodes)[0];
+    const visited = new Set<string>();
+    const stack = [startNode];
+
+    while (stack.length > 0) {
+        const currentNode = stack.pop()!;
+        if (visited.has(currentNode)) continue;
+        
+        visited.add(currentNode);
+        const neighbors = adjacencyList.get(currentNode) || new Set();
+        
+        neighbors.forEach(neighbor => {
+            if (!visited.has(neighbor)) {
+                stack.push(neighbor);
+            }
+        });
+    }
+
+    // Graph is connected if we visited all nodes
+    const isConnected = visited.size === allNodes.size;
+    
+    if (!isConnected) {
+        const disconnectedNodes = Array.from(allNodes).filter(node => !visited.has(node));
+        console.log("Disconnected nodes:", disconnectedNodes);
+    }
+    
+    return isConnected;
 }
 
 /**

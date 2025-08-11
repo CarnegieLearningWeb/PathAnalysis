@@ -7,9 +7,10 @@ interface SliderProps {
     value: number;
     onChange: (value: number) => void;
     maxEdgeCount?: number;
+    uniqueStudentMode?: boolean;
 }
 
-const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange, maxEdgeCount = 100}) => {
+const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange, maxEdgeCount = 100, uniqueStudentMode = false}) => {
     const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = Number(event.target.value);
         onChange(newValue);
@@ -22,13 +23,14 @@ const Slider: React.FC<SliderProps> = ({min, max, step = 1, value, onChange, max
         }
     };
 
-    // Calculate actual number of students from percentage
-    const actualStudents = Math.round((value / 100) * maxEdgeCount);
+    // Calculate actual number of students or visits from percentage
+    const actualCount = Math.round((value / 100) * maxEdgeCount);
+    const labelText = uniqueStudentMode ? 'Students' : 'Visits';
 
     return (
         <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-            Minimum Students: {actualStudents} ({value.toFixed(2)}% of {maxEdgeCount})
+            Minimum {labelText}: {actualCount} ({value.toFixed(2)}% of {maxEdgeCount})
         </label>
         <div className="flex items-center space-x-4">
             <input
