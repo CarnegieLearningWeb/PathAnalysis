@@ -1,6 +1,16 @@
 {
-    "routes": [
-      { "handle": "filesystem" },
-      { "src": "/(.*)", "dest": "/index.html" }
-    ]
-  }
+  "version": 2,
+  "functions": {
+    "api/data-files.ts": {
+      "runtime": "@vercel/node"
+    },
+    "api/data-files/[filename].ts": {
+      "runtime": "@vercel/node"
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
