@@ -83,7 +83,7 @@ function DataFileSelector({ onDataProcessed }: DataFilesSelectorProps) {
         setError('');
         
         try {
-            const response = await fetch(`/api/data-files/${encodeURIComponent(selectedFile)}/content`);
+            const response = await fetch(`/api/data-files/${encodeURIComponent(selectedFile)}`);
             
             if (!response.ok) {
                 throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
