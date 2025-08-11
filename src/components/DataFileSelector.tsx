@@ -48,6 +48,44 @@ function DataFileSelector({ onDataProcessed }: DataFilesSelectorProps) {
         return '📄'; // Default file icon
     };
 
+    // Parse filename and create formatted title
+    const parseFileTitle = (filename: string): string => {
+        // Remove file extension
+        const nameWithoutExt = filename.replace(/\.(csv|CSV)$/, '');
+        
+        // Split by hyphens and process each part
+        const parts = nameWithoutExt.split('-').map(part => {
+            // Handle specific abbreviations and terms
+            switch (part.toLowerCase()) {
+                case 'er':
+                    return 'Equivalent Ratios';
+                case 'me':
+                    return 'Means & Extremes';
+                case 'groundtruth':
+                case 'ground_truth':
+                    return 'Ground Truth';
+                case 'successful':
+                    return 'Successful';
+                case 'unsuccessful':
+                    return 'Unsuccessful';
+                case 'strategies':
+                    return 'Strategies';
+                case 'match':
+                    return 'Match';
+                case 'allstrategies':
+                case 'all_strategies':
+                    return 'All Strategies';
+                case 'astra':
+                    return 'ASTRA Generated';
+                default:
+                    // Capitalize first letter of each word
+                    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+            }
+        });
+        
+        return parts.join(' ');
+    };
+
     // Fetch available data files from the server
     const fetchDataFiles = async () => {
         setRefreshing(true);
@@ -160,6 +198,7 @@ function DataFileSelector({ onDataProcessed }: DataFilesSelectorProps) {
                             <div className="flex items-center justify-between">
                                 <div className="flex-1 min-w-0">
                                     <h4 className="font-medium text-sm text-gray-900">Selected File:</h4>
+                                    <p className="text-lg font-semibold text-blue-800 mt-1">{parseFileTitle(selectedFile)}</p>
                                     <p className="text-sm text-gray-600 font-mono truncate">{selectedFile}</p>
                                     {(() => {
                                         const file = dataFiles.find(f => f.filename === selectedFile);
