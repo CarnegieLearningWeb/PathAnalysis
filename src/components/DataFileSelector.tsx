@@ -13,7 +13,7 @@ interface DataFile {
 }
 
 interface DataFilesSelectorProps {
-    onDataProcessed: (csvData: string) => void;
+    onDataProcessed: (csvData: string, filename?: string) => void;
 }
 
 function DataFileSelector({ onDataProcessed }: DataFilesSelectorProps) {
@@ -133,7 +133,7 @@ function DataFileSelector({ onDataProcessed }: DataFilesSelectorProps) {
                 throw new Error('File is empty or invalid');
             }
             
-            onDataProcessed(csvData);
+            onDataProcessed(csvData, selectedFile);
             
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load file');

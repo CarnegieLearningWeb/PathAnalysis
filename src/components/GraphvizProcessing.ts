@@ -615,13 +615,15 @@ const createEdgeTooltip = (
     outcomes: { [outcome: string]: number },
     firstAttempts: { [outcome: string]: number },
     repeatVisits: { [key: string]: { [studentId: string]: number } },
-    edgeColor: string
+    edgeColor: string,
+    uniqueStudentMode: boolean = false
 ): string => {
-    // Build basic student statistics section
+    // Build basic statistics section with mode-appropriate labels
+    const countLabel = uniqueStudentMode ? 'Unique Students on this path' : 'Total Visits on this path';
     let tooltip = `${currentStep} to ${nextStep}\n\n`
-        + `Student Statistics:\n`
+        + `Statistics:\n`
         + `- Total Students at ${currentStep}: \n\t\t${totalCount}\n`
-        + `- Unique Students on this path: \n\t\t${edgeCount}\n`
+        + `- ${countLabel}: \n\t\t${edgeCount}\n`
         + `- Total Edge Visits: \n\t\t${visits}\n`;
 
     // Add repeat visit analysis if data exists
@@ -692,7 +694,8 @@ const generateTopSequenceVisualization = (
     ratioEdges: { [key: string]: number },
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     minVisits: number,
-    errorMode: boolean
+    errorMode: boolean,
+    uniqueStudentMode: boolean = false
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -723,7 +726,7 @@ const generateTopSequenceVisualization = (
             if (visits >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
-                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
+                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor, uniqueStudentMode
                 );
 
                 dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
@@ -764,7 +767,8 @@ const generateFullGraphVisualization = (
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     threshold: number,
     minVisits: number,
-    errorMode: boolean
+    errorMode: boolean,
+    uniqueStudentMode: boolean = false
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -797,7 +801,7 @@ const generateFullGraphVisualization = (
             if (visits >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
-                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor
+                    ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor, uniqueStudentMode
                 );
 
                 dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
@@ -865,10 +869,16 @@ export function generateDotString(
     console.log("generateDotString: Using unique student mode:", uniqueStudentMode);
     console.log("generateDotString: Using visits data keys:", Object.keys(visitsToUse).length);
     console.log("generateDotString: Using outcomes data keys:", Object.keys(outcomesToUse).length);
+    console.log("generateDotString: Sample visit counts:", Object.entries(visitsToUse).slice(0, 3));
+    console.log("generateDotString: Sample normalized thicknesses:", Object.entries(normalizedThicknesses).slice(0, 3));
+    console.log("generateDotString: Min visits threshold:", minVisits);
 
     // Initialize DOT string with Graphviz header and configuration
     let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
 
+    // Use appropriate edge counts for tooltips and statistics based on mode
+    const edgeCountsToUse = uniqueStudentMode ? edgeCounts : visitsToUse;
+    
     // Generate visualization content based on mode
     if (justTopSequence) {
         // Top sequence mode: show only the selected sequence as a linear path
@@ -877,13 +887,14 @@ export function generateDotString(
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
-            edgeCounts,
+            edgeCountsToUse,
             visitsToUse,
             totalNodeEdges,
             ratioEdges,
             repeatVisits,
             minVisits,
-            errorMode
+            errorMode,
+            uniqueStudentMode
         );
     } else {
         // Full graph mode: show all qualifying edges and nodes
@@ -892,14 +903,15 @@ export function generateDotString(
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
-            edgeCounts,
+            edgeCountsToUse,
             visitsToUse,
             totalNodeEdges,
             ratioEdges,
             repeatVisits,
             threshold,
             minVisits,
-            errorMode
+            errorMode,
+            uniqueStudentMode
         );
     }
 
@@ -910,9 +922,13 @@ export function generateDotString(
 
 /**
  * Calculates the maximum minimum threshold that keeps all nodes connected in the graph.
- * This finds the highest threshold where no nodes get disconnected (become isolated).
+ * This finds the highest threshold where:
+ * 1. No nodes in the entire graph become disconnected (isolated)
+ * 2. The selected sequence remains fully connected
+ * 3. All paths remain viable
+ * 
  * @param countsToUse - Dictionary mapping edge keys to the counts to use for analysis
- * @param selectedSequence - The selected sequence of steps (used for reference but analyzes full graph)
+ * @param selectedSequence - The selected sequence of steps to prioritize in analysis
  * @returns The maximum minimum threshold that keeps all nodes connected
  */
 export function calculateMaxMinEdgeCount(
@@ -936,8 +952,12 @@ export function calculateMaxMinEdgeCount(
         }
     });
 
+    // Also ensure all nodes from selected sequence are included
+    selectedSequence.forEach(node => allNodes.add(node));
+
     console.log("All nodes in graph:", Array.from(allNodes));
     console.log("Total nodes:", allNodes.size);
+    console.log("Selected sequence nodes:", selectedSequence);
 
     if (allNodes.size === 0) {
         console.log("No nodes found in graph, returning 0");
@@ -950,7 +970,7 @@ export function calculateMaxMinEdgeCount(
     
     console.log("Unique edge counts (descending):", uniqueCounts);
 
-    // Binary search approach: find the highest threshold that keeps all nodes connected
+    // Find the highest threshold that keeps all nodes connected
     let maxValidThreshold = 0;
 
     for (const threshold of uniqueCounts) {
@@ -962,14 +982,17 @@ export function calculateMaxMinEdgeCount(
         console.log(`Testing threshold ${threshold}: ${validEdges.length} edges qualify`);
 
         // Check if all nodes remain connected with this threshold
-        const isConnected = checkGraphConnectivity(validEdges, allNodes);
+        const isGraphConnected = checkGraphConnectivity(validEdges, allNodes);
         
-        if (isConnected) {
+        // Additional check: ensure selected sequence remains connected
+        const isSequenceConnected = checkSequenceConnectivity(validEdges, selectedSequence);
+        
+        if (isGraphConnected && isSequenceConnected) {
             maxValidThreshold = threshold;
-            console.log(`✓ Threshold ${threshold} keeps all nodes connected`);
+            console.log(`✓ Threshold ${threshold} keeps all nodes and sequence connected`);
             break; // Since we're going in descending order, this is the maximum valid threshold
         } else {
-            console.log(`✗ Threshold ${threshold} disconnects some nodes`);
+            console.log(`✗ Threshold ${threshold} disconnects nodes (graph: ${isGraphConnected}, sequence: ${isSequenceConnected})`);
         }
     }
 
@@ -977,6 +1000,51 @@ export function calculateMaxMinEdgeCount(
     console.log("=== End calculateMaxMinEdgeCount Debug ===");
     
     return maxValidThreshold;
+}
+
+/**
+ * Checks if the selected sequence remains connected with the given edges.
+ * Validates that each consecutive pair of nodes in the sequence has a valid path.
+ * 
+ * @param edges - Available edges with their counts
+ * @param selectedSequence - The sequence to validate connectivity for
+ * @returns True if the sequence remains fully connected
+ */
+function checkSequenceConnectivity(
+    edges: Array<{edge: string, count: number}>, 
+    selectedSequence: string[]
+): boolean {
+    if (selectedSequence.length <= 1) return true;
+    
+    // Build adjacency list from available edges
+    const adjacencyList = new Map<string, Set<string>>();
+    
+    edges.forEach(({ edge }) => {
+        const [fromNode, toNode] = edge.split('->');
+        if (fromNode && toNode) {
+            if (!adjacencyList.has(fromNode)) {
+                adjacencyList.set(fromNode, new Set());
+            }
+            adjacencyList.get(fromNode)!.add(toNode);
+        }
+    });
+    
+    // Check each consecutive pair in the sequence
+    for (let i = 0; i < selectedSequence.length - 1; i++) {
+        const currentNode = selectedSequence[i];
+        const nextNode = selectedSequence[i + 1];
+        
+        // Check if there's a direct edge from current to next
+        const hasDirectPath = adjacencyList.get(currentNode)?.has(nextNode);
+        
+        if (!hasDirectPath) {
+            console.log(`Sequence break: no path from ${currentNode} to ${nextNode}`);
+            return false;
+        }
+    }
+    
+    console.log("Selected sequence remains fully connected");
+    return true;
 }
 
 /**
@@ -1032,6 +1100,8 @@ function checkGraphConnectivity(
     if (!isConnected) {
         const disconnectedNodes = Array.from(allNodes).filter(node => !visited.has(node));
         console.log("Disconnected nodes:", disconnectedNodes);
+    } else {
+        console.log("All graph nodes remain connected");
     }
     
     return isConnected;

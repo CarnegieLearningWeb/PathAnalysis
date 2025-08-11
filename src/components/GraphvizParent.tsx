@@ -107,8 +107,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             // Note: edgeCounts are now used directly from mainGraphData
 
-            // Update the maxEdgeCount in the parent component
-            onMaxEdgeCountChange(maxEdgeCount);
+            // Update the maxEdgeCount in the parent component based on mode
+            const maxCountToUse = uniqueStudentMode ? maxEdgeCount : Math.max(...Object.values(totalVisits), 1);
+            console.log("GraphvizParent: Setting maxEdgeCount to:", maxCountToUse, "for mode:", uniqueStudentMode ? "unique students" : "total visits");
+            onMaxEdgeCountChange(maxCountToUse);
 
             // Calculate and update the maximum minimum-edge count
             const sequenceToUse = selectedSequence || topSequences[0]?.sequence;

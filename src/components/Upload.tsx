@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import DataFileSelector from './DataFileSelector';
 
 interface UploadProps {
-    onDataProcessed: (csvData: string) => void; // Callback function to handle processed CSV data
+    onDataProcessed: (csvData: string, filename?: string) => void; // Callback function to handle processed CSV data
 }
 
 // Functional component for file upload
@@ -36,7 +36,7 @@ function Upload({ onDataProcessed }: UploadProps) {
                     setLoading(false);
                     return;
                 }
-                onDataProcessed(csvData); // Process the CSV data
+                onDataProcessed(csvData, file.name); // Process the CSV data with filename
 
                 // Set loading state to false when the file is processed
                 setLoading(false);
@@ -100,22 +100,6 @@ function Upload({ onDataProcessed }: UploadProps) {
                         </div>
                     </TabsContent>
                 </Tabs>
-
-                <div className="text-center space-y-2">
-                    <p className="text-sm text-gray-500">
-                        Need data? Generate CSV files using the Astra model and transport them automatically.
-                    </p>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="text-sm font-mono text-gray-700">
-                            <div className="mb-2">💡 <strong>Quick workflow:</strong></div>
-                            <div className="space-y-1 text-left">
-                                <div>1. <code>cd astra && python app.py</code> (Generate data)</div>
-                                <div>2. <code>cd .. && python transport_data.py --all</code> (Transport files)</div>
-                                <div>3. Click "Select from Data Folder" tab above</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );
