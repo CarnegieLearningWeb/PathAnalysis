@@ -1,11 +1,7 @@
 {
-  "functions": {
-    "api/data-files.ts": {},
-    "api/data-files/[filename].ts": {},
-    "api/upload-csv.ts": {}
-  },
   "routes": [
     { "handle": "filesystem" },
+    { "src": "/api/data-files/([^/]+)", "dest": "/api/data-files/[filename]?filename=$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
