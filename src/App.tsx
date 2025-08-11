@@ -47,7 +47,7 @@ function App() {
     // Update minVisitsPercentage when maxMinEdgeCount changes
     useEffect(() => {
         if (maxMinEdgeCount > 0) {
-            const percentage = ((maxMinEdgeCount - 1) / maxEdgeCount) * 100;
+            const percentage = (maxMinEdgeCount / maxEdgeCount) * 100;
             setMinVisitsPercentage(Math.max(0, Math.min(100, percentage)));
         }
     }, [maxMinEdgeCount, maxEdgeCount]);
@@ -256,7 +256,7 @@ function App() {
                                             </div>
                                             <p className="text-xs text-gray-500">
                                                 Maximum threshold before any node becomes
-                                                disconnected: {maxMinEdgeCount - 1} students
+                                                disconnected: {maxMinEdgeCount} students
                                             </p>
                                         </div>
                                     </div>
