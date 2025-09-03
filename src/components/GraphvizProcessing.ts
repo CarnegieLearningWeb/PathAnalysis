@@ -987,12 +987,15 @@ export function calculateMaxMinEdgeCount(
         // Additional check: ensure selected sequence remains connected
         const isSequenceConnected = checkSequenceConnectivity(validEdges, selectedSequence);
         
-        if (isGraphConnected && isSequenceConnected) {
+        // Additional check: ensure non-first nodes have preceding nodes
+        const hasValidPredecessors = checkNodePredecessors(validEdges, allNodes, selectedSequence);
+        
+        if (isGraphConnected && isSequenceConnected && hasValidPredecessors) {
             maxValidThreshold = threshold;
             console.log(`✓ Threshold ${threshold} keeps all nodes and sequence connected`);
             break; // Since we're going in descending order, this is the maximum valid threshold
         } else {
-            console.log(`✗ Threshold ${threshold} disconnects nodes (graph: ${isGraphConnected}, sequence: ${isSequenceConnected})`);
+            console.log(`✗ Threshold ${threshold} disconnects nodes (graph: ${isGraphConnected}, sequence: ${isSequenceConnected}, predecessors: ${hasValidPredecessors})`);
         }
     }
 
@@ -1044,6 +1047,57 @@ function checkSequenceConnectivity(
     }
     
     console.log("Selected sequence remains fully connected");
+    return true;
+}
+
+/**
+ * Ensures that nodes which aren't first nodes in any path still have at least one preceding node.
+ * This prevents orphaning of intermediate nodes when applying threshold filters.
+ * 
+ * @param edges - Available edges with their counts
+ * @param allNodes - All nodes in the graph
+ * @param selectedSequence - The selected sequence (first node is considered a valid starting point)
+ * @returns True if all non-first nodes have at least one incoming edge
+ */
+function checkNodePredecessors(
+    edges: Array<{edge: string, count: number}>, 
+    allNodes: Set<string>,
+    selectedSequence: string[]
+): boolean {
+    // Build incoming edge map
+    const incomingEdges = new Map<string, Set<string>>();
+    
+    // Initialize all nodes with empty sets
+    allNodes.forEach(node => {
+        incomingEdges.set(node, new Set());
+    });
+    
+    // Track incoming edges for each node
+    edges.forEach(({ edge }) => {
+        const [fromNode, toNode] = edge.split('->');
+        if (fromNode && toNode) {
+            incomingEdges.get(toNode)?.add(fromNode);
+        }
+    });
+    
+    // Get the first node in the selected sequence (this can be without predecessors)
+    const firstSequenceNode = selectedSequence.length > 0 ? selectedSequence[0] : null;
+    
+    // Check that all nodes (except potential first nodes) have at least one predecessor
+    for (const node of allNodes) {
+        const hasIncomingEdges = (incomingEdges.get(node)?.size ?? 0) > 0;
+        
+        // Allow nodes without predecessors only if they're the first in the selected sequence
+        // or if they could be legitimate starting points
+        if (!hasIncomingEdges && node !== firstSequenceNode) {
+            // Additional check: see if this node appears as first in any actual student path
+            // For now, we'll be conservative and require all non-first-sequence nodes to have predecessors
+            console.log(`Node ${node} has no predecessors and isn't the first in selected sequence`);
+            return false;
+        }
+    }
+    
+    console.log("All nodes have valid predecessors or are legitimate starting points");
     return true;
 }
 

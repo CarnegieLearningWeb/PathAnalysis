@@ -31,6 +31,12 @@ interface HistoryItem {
 
 const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 
+// Helper function to compare arrays for exact equality
+const arraysEqual = (a: string[], b: string[]): boolean => {
+    if (a.length !== b.length) return false;
+    return a.every((val, index) => val === b[index]);
+};
+
 interface GraphvizParentProps {
     csvData: string;
     filter: string | null;
@@ -431,12 +437,30 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // Calculate statistics
         let totalVisitors = 0;
         let totalNodeVisits = 0;
+        const visitCounts: { [studentId: string]: number } = {};
+        
+        // Check if this is the selected sequence graph and we need to filter
+        const isSelectedSequenceGraph = graphType === 'Selected Sequence';
+        const sequenceToFilter = isSelectedSequenceGraph ? selectedSequence : null;
         
         if (stepSequences && Object.keys(stepSequences).length > 0) {
-            const visitCounts: { [studentId: string]: number } = {};
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
                 // studentProblems is { [problemName]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
+                    
+                    // For selected sequence graph, check if student took the exact path
+                    if (isSelectedSequenceGraph && sequenceToFilter) {
+                        let studentFollowedSequence = false;
+                        Object.values(studentProblems).forEach((problemSequence: string[]) => {
+                            if (Array.isArray(problemSequence) && arraysEqual(problemSequence, sequenceToFilter)) {
+                                studentFollowedSequence = true;
+                            }
+                        });
+                        if (!studentFollowedSequence) {
+                            return; // Skip this student if they didn't follow the exact sequence
+                        }
+                    }
+                    
                     let studentNodeVisits = 0;
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
                         if (Array.isArray(problemSequence)) {
@@ -455,9 +479,22 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         }
         
         const avgVisitsPerStudent = totalVisitors > 0 ? (totalNodeVisits / totalVisitors).toFixed(1) : '0';
-        const studentsWithRepeats = Math.max(0, totalNodeVisits - totalVisitors);
-        const singleVisits = Math.max(0, totalVisitors - studentsWithRepeats);
-        const multipleVisits = studentsWithRepeats;
+        
+        // Calculate correct student visit statistics
+        let studentsWithSingleVisit = 0;
+        let studentsWithMultipleVisits = 0;
+        
+        Object.values(visitCounts).forEach((visitCount: number) => {
+            if (visitCount > 1) {
+                studentsWithMultipleVisits++;
+            } else {
+                studentsWithSingleVisit++;
+            }
+        });
+        
+        
+        const singleVisits = studentsWithSingleVisit;
+        const multipleVisits = studentsWithMultipleVisits;
         
         // Count unique edges that meet the minimum visits threshold
         const filteredIncomingEdges = incomingEdges.filter(edge => (edgeCounts[edge] || 0) >= minVisits);

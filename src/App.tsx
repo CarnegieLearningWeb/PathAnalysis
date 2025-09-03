@@ -74,7 +74,7 @@ function App() {
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [errorMode, setErrorMode] = useState<boolean>(false);
-    const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(false);
+    const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(true);
     const [fileInfo, setFileInfo] = useState<{filename: string, source: string} | null>(null);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
