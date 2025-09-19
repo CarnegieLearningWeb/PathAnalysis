@@ -485,7 +485,8 @@ export function normalizeThicknessesRatios(
 
 
 /**
- * Normalizes edge thicknesses based on edge counts.
+ * Normalizes edge thicknesses based on edge counts using improved scaling.
+ * Uses square root scaling for better visual distribution when dealing with high values.
  * @param edgeCounts - The raw edge counts.
  * @param maxEdgeCount - The maximum edge count.
  * @param maxThickness - The maximum allowed thickness.
@@ -497,10 +498,21 @@ export function normalizeThicknesses(
     maxThickness: number
 ): { [key: string]: number } {
     const normalized: { [key: string]: number } = {};
+    const minThickness = 0.5; // Ensure edges are always visible
+
+    // Use square root scaling for better visual distribution with high values
+    const maxSqrt = Math.sqrt(maxEdgeCount);
 
     Object.keys(edgeCounts).forEach((edge) => {
         const count = edgeCounts[edge];
-        normalized[edge] = (count / maxEdgeCount) * maxThickness;
+        // Apply square root scaling to compress the range
+        const sqrtCount = Math.sqrt(count);
+        let thickness = (sqrtCount / maxSqrt) * maxThickness;
+        
+        // Ensure minimum thickness for visibility
+        thickness = Math.max(thickness, minThickness);
+        
+        normalized[edge] = thickness;
     });
 
     return normalized;
@@ -620,10 +632,12 @@ const createEdgeTooltip = (
 ): string => {
     // Build basic statistics section with mode-appropriate labels
     const countLabel = uniqueStudentMode ? 'Unique Students on this path' : 'Total Visits on this path';
+    const countValue = uniqueStudentMode ? edgeCount : visits;
     let tooltip = `${currentStep} to ${nextStep}\n\n`
         + `Statistics:\n`
         + `- Total Students at ${currentStep}: \n\t\t${totalCount}\n`
-        + `- ${countLabel}: \n\t\t${edgeCount}\n`
+        + `- ${countLabel}: \n\t\t${countValue}\n`
+        + `- Unique Students on this path: \n\t\t${edgeCount}\n`
         + `- Total Edge Visits: \n\t\t${visits}\n`;
 
     // Add repeat visit analysis if data exists
@@ -719,11 +733,12 @@ const generateTopSequenceVisualization = (
             const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
             const edgeCount = edgeCounts[edgeKey] || 0;
             const visits = totalVisits[edgeKey] || 0;
+            const visitsForFiltering = uniqueStudentMode ? edgeCount : visits;
             const totalCount = totalNodeEdges[currentStep] || 0;
             const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
-            // Only show edge if it meets minimum visit threshold
-            if (visits >= minVisits) {
+            // Only show edge if it meets minimum visit threshold (using mode-appropriate count)
+            if (visitsForFiltering >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor, uniqueStudentMode
@@ -773,14 +788,34 @@ const generateFullGraphVisualization = (
     let dotContent = '';
     const totalSteps = selectedSequence.length;
 
-    // First, generate all nodes with coloring based on selected sequence
-    for (let rank = 0; rank < totalSteps; rank++) {
-        const currentStep = selectedSequence[rank];
-        const color = calculateColor(rank, totalSteps);
-        const studentCount = totalNodeEdges[currentStep] || 0;
-        const nodeTooltip = createNodeTooltip(rank, color, studentCount);
+    // First, collect all nodes that will appear in edges
+    const allNodesInEdges = new Set<string>();
+    for (const edgeKey of Object.keys(normalizedThicknesses)) {
+        const thickness = normalizedThicknesses[edgeKey];
+        if (thickness >= threshold) {
+            const edgeCount = edgeCounts[edgeKey] || 0;
+            const visits = totalVisits[edgeKey] || 0;
+            const visitsForFiltering = uniqueStudentMode ? edgeCount : visits;
+            
+            if (visitsForFiltering >= minVisits) {
+                const [currentStep, nextStep] = edgeKey.split('->');
+                if (currentStep && nextStep) {
+                    allNodesInEdges.add(currentStep);
+                    allNodesInEdges.add(nextStep);
+                }
+            }
+        }
+    }
 
-        dotContent += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
+    // Generate all nodes that will appear, with coloring based on selected sequence
+    for (const nodeName of allNodesInEdges) {
+        const sequenceRank = selectedSequence.indexOf(nodeName);
+        const color = sequenceRank >= 0 ? calculateColor(sequenceRank, totalSteps) : '#ffffff'; // White for nodes not in sequence
+        const rank = sequenceRank >= 0 ? sequenceRank + 1 : 0;
+        const studentCount = totalNodeEdges[nodeName] || 0;
+        const nodeTooltip = createNodeTooltip(sequenceRank, color, studentCount);
+
+        dotContent += `    "${nodeName}" [rank=${rank}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
     }
 
     // Then, generate all qualifying edges
@@ -794,11 +829,12 @@ const generateFullGraphVisualization = (
             const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
             const edgeCount = edgeCounts[edgeKey] || 0;
             const visits = totalVisits[edgeKey] || 0;
+            const visitsForFiltering = uniqueStudentMode ? edgeCount : visits;
             const totalCount = totalNodeEdges[currentStep] || 0;
             const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
-            // Apply minimum visits filter
-            if (visits >= minVisits) {
+            // Apply minimum visits filter (using mode-appropriate count)
+            if (visitsForFiltering >= minVisits) {
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor, uniqueStudentMode
@@ -867,17 +903,14 @@ export function generateDotString(
     const outcomesToUse = uniqueStudentMode ? firstAttemptOutcomes : edgeOutcomeCounts;
     
     console.log("generateDotString: Using unique student mode:", uniqueStudentMode);
-    console.log("generateDotString: Using visits data keys:", Object.keys(visitsToUse).length);
-    console.log("generateDotString: Using outcomes data keys:", Object.keys(outcomesToUse).length);
-    console.log("generateDotString: Sample visit counts:", Object.entries(visitsToUse).slice(0, 3));
-    console.log("generateDotString: Sample normalized thicknesses:", Object.entries(normalizedThicknesses).slice(0, 3));
     console.log("generateDotString: Min visits threshold:", minVisits);
+    console.log("generateDotString: Thickness threshold:", threshold);
 
     // Initialize DOT string with Graphviz header and configuration
     let dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
 
     // Use appropriate edge counts for tooltips and statistics based on mode
-    const edgeCountsToUse = uniqueStudentMode ? edgeCounts : visitsToUse;
+    const edgeCountsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
     
     // Generate visualization content based on mode
     if (justTopSequence) {
@@ -1062,7 +1095,7 @@ function checkSequenceConnectivity(
 function checkNodePredecessors(
     edges: Array<{edge: string, count: number}>, 
     allNodes: Set<string>,
-    selectedSequence: string[]
+    _selectedSequence: string[]
 ): boolean {
     // Build incoming edge map
     const incomingEdges = new Map<string, Set<string>>();
@@ -1072,29 +1105,49 @@ function checkNodePredecessors(
         incomingEdges.set(node, new Set());
     });
     
-    // Track incoming edges for each node
+    // Track incoming edges for each node (excluding self-loops)
     edges.forEach(({ edge }) => {
         const [fromNode, toNode] = edge.split('->');
-        if (fromNode && toNode) {
+        if (fromNode && toNode && fromNode !== toNode) { // Skip self-loops
             incomingEdges.get(toNode)?.add(fromNode);
         }
     });
     
-    // Get the first node in the selected sequence (this can be without predecessors)
-    const firstSequenceNode = selectedSequence.length > 0 ? selectedSequence[0] : null;
+    // Find all nodes that could be legitimate starting points
+    const nodesWithoutPredecessors = new Set<string>();
+    const nodesWithPredecessors = new Set<string>();
     
-    // Check that all nodes (except potential first nodes) have at least one predecessor
     for (const node of allNodes) {
         const hasIncomingEdges = (incomingEdges.get(node)?.size ?? 0) > 0;
-        
-        // Allow nodes without predecessors only if they're the first in the selected sequence
-        // or if they could be legitimate starting points
-        if (!hasIncomingEdges && node !== firstSequenceNode) {
-            // Additional check: see if this node appears as first in any actual student path
-            // For now, we'll be conservative and require all non-first-sequence nodes to have predecessors
-            console.log(`Node ${node} has no predecessors and isn't the first in selected sequence`);
-            return false;
+        if (hasIncomingEdges) {
+            nodesWithPredecessors.add(node);
+        } else {
+            nodesWithoutPredecessors.add(node);
         }
+    }
+    
+    // If we have some nodes with predecessors and some without, that's fine
+    // This allows for multiple entry points in the graph
+    // Only fail if ALL nodes lack predecessors (which would be unusual) or if we have
+    // too many isolated nodes (more than half the graph)
+    const totalNodes = allNodes.size;
+    const isolatedNodes = nodesWithoutPredecessors.size;
+    
+    if (totalNodes > 1 && isolatedNodes === totalNodes) {
+        // All nodes are isolated - this suggests a problem with the threshold
+        console.log("All nodes have no predecessors - threshold may be too high");
+        return false;
+    }
+    
+    if (totalNodes > 2 && isolatedNodes > totalNodes / 2) {
+        // More than half the nodes are isolated - likely too restrictive
+        console.log(`Too many isolated nodes: ${isolatedNodes}/${totalNodes}`);
+        return false;
+    }
+    
+    // Log the nodes without predecessors for debugging
+    if (nodesWithoutPredecessors.size > 0) {
+        console.log(`Nodes without predecessors (acceptable starting points): ${Array.from(nodesWithoutPredecessors).join(', ')}`);
     }
     
     console.log("All nodes have valid predecessors or are legitimate starting points");
@@ -1121,9 +1174,10 @@ function checkGraphConnectivity(
     });
 
     // Add edges (bidirectional for connectivity check)
+    // Skip self-loops as they don't contribute to graph connectivity
     edges.forEach(({ edge }) => {
         const [fromNode, toNode] = edge.split('->');
-        if (fromNode && toNode) {
+        if (fromNode && toNode && fromNode !== toNode) { // Skip self-loops
             adjacencyList.get(fromNode)?.add(toNode);
             adjacencyList.get(toNode)?.add(fromNode); // Make it bidirectional for connectivity
         }

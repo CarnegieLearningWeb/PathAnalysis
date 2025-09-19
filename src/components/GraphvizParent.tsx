@@ -75,12 +75,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const graphRefFiltered = useRef<HTMLDivElement>(null);
     const graphRefTop = useRef<HTMLDivElement>(null);
 
-    // Memoized data processing for main graph
+    // Memoized data processing for main graph - responds to uniqueStudentMode for self-loops
     const mainGraphData = useMemo(() => {
         if (!csvData) return null;
         
         const sortedData = loadAndSortData(csvData);
-        const stepSequences = createStepSequences(sortedData, selfLoops);
+        // Self-loops should only be included when NOT in unique student mode (first attempts)
+        // In first attempts mode, self-loops are logically impossible
+        const includeLoops = !uniqueStudentMode;
+        const stepSequences = createStepSequences(sortedData, includeLoops);
         const outcomeSequences = createOutcomeSequences(sortedData);
         
         // Add equation answer analysis
@@ -95,9 +98,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             outcomeSequences,
             ...results
         };
-    }, [csvData, selfLoops]);
+    }, [csvData, uniqueStudentMode]); // Now depends on uniqueStudentMode for self-loops logic
     
-    // Main graph calculation - removed filter from dependencies
+    // Main graph calculation - STATIC (only responds to uniqueStudentMode)
     useEffect(() => {
         if (mainGraphData) {
             const {
@@ -110,8 +113,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 repeatVisits,
                 topSequences
             } = mainGraphData;
-
-            // Note: edgeCounts are now used directly from mainGraphData
 
             // Update the maxEdgeCount in the parent component based on mode
             const maxCountToUse = uniqueStudentMode ? maxEdgeCount : Math.max(...Object.values(totalVisits), 1);
@@ -148,19 +149,26 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             console.log("GraphvizParent: Using counts for thickness:", uniqueStudentMode ? "unique students" : "total visits");
             console.log("GraphvizParent: Max count for thickness:", maxCountForThickness);
 
+            // STATIC main graph - ignore user options except uniqueStudentMode
+            // Use mode-appropriate edge counts
+            const edgeCountsForGraph = uniqueStudentMode ? newEdgeCounts : totalVisits;
+            
+            // Use simple fixed threshold of 0.8 for main graph to show meaningful edges
+            const optimalThreshold = 1;
+            
             const dotString = generateDotString(
                 normalizedThicknesses,
                 ratioEdges,
                 edgeOutcomeCounts,
-                newEdgeCounts,
+                edgeCountsForGraph,
                 totalNodeEdges,
-                1,
-                minVisits,
+                optimalThreshold, // Use calculated optimal threshold
+                0, // Force minVisits to 0 for static main graph
                 sequenceToUse,
                 false,
                 totalVisits,
                 repeatVisits,
-                errorMode,
+                false, // Force errorMode to false for static main graph
                 mainGraphData.firstAttemptOutcomes,
                 uniqueStudentMode
             );
@@ -172,21 +180,21 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     normalizedThicknesses,
                     ratioEdges,
                     edgeOutcomeCounts,
-                    newEdgeCounts,
+                    edgeCountsForGraph,
                     totalNodeEdges,
-                    1,
-                    minVisits,
+                    0, // Use threshold 0 to show ALL edges for static top graph
+                    0, // Force minVisits to 0 for static top graph
                     selectedSequence || topSequences[0].sequence,
                     true,
                     totalVisits,
                     repeatVisits,
-                    errorMode,
+                    false, // Force errorMode to false for static top graph
                     mainGraphData.firstAttemptOutcomes,
                     uniqueStudentMode
                 )
             );
         }
-    }, [mainGraphData, minVisits, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, errorMode, uniqueStudentMode]);
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode]); // Static except for uniqueStudentMode and selectedSequence
 
     // Memoized filtered graph data
     const filteredGraphData = useMemo(() => {

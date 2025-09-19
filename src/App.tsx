@@ -316,7 +316,16 @@ function App() {
                                         <div className="pb-2 border-b border-gray-200">
                                             <label className="text-sm font-medium text-gray-700">Include Self Loops</label>
 
-                                            <Switch isOn={selfLoops} handleToggle={handleToggle}/>
+                                            <Switch 
+                                                isOn={selfLoops} 
+                                                handleToggle={handleToggle}
+                                                disabled={uniqueStudentMode}
+                                            />
+                                            {uniqueStudentMode && (
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Self-loops are not possible in first attempts mode
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="pb-2 border-b border-gray-200">
@@ -390,7 +399,7 @@ function App() {
                                         <GraphvizParent
                                             csvData={csvData}
                                             filter={filter}
-                                            selfLoops={selfLoops}
+                                            selfLoops={uniqueStudentMode ? false : selfLoops}
                                             minVisits={minVisits}
                                             onMaxEdgeCountChange={setMaxEdgeCount}
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
