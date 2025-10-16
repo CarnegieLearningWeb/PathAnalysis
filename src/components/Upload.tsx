@@ -13,7 +13,7 @@ interface UploadProps {
 function Upload({ onDataProcessed }: UploadProps) {
     // Access loading state and setter from Context
     const { setLoading } = useContext(Context);
-    const [activeTab, setActiveTab] = useState<string>("select");
+    const [activeTab, setActiveTab] = useState<string>("upload");
 
     // Handle file upload event
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,11 +64,11 @@ function Upload({ onDataProcessed }: UploadProps) {
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="select" className="flex items-center gap-2">
-                            📂 Select from Data Folder
-                        </TabsTrigger>
                         <TabsTrigger value="upload" className="flex items-center gap-2">
                             📤 Upload File
+                        </TabsTrigger>
+                        <TabsTrigger value="select" className="flex items-center gap-2">
+                            📂 Select from Data Folder
                         </TabsTrigger>
                     </TabsList>
 

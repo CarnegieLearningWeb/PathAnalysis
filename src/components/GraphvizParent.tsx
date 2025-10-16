@@ -75,14 +75,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const graphRefFiltered = useRef<HTMLDivElement>(null);
     const graphRefTop = useRef<HTMLDivElement>(null);
 
-    // Memoized data processing for main graph - responds to uniqueStudentMode for self-loops
+    // Memoized data processing for main graph - responds to both selfLoops setting and uniqueStudentMode
     const mainGraphData = useMemo(() => {
         if (!csvData) return null;
         
         const sortedData = loadAndSortData(csvData);
-        // Self-loops should only be included when NOT in unique student mode (first attempts)
-        // In first attempts mode, self-loops are logically impossible
-        const includeLoops = !uniqueStudentMode;
+        // Self-loops should only be included when selfLoops is enabled AND not in unique student mode
+        // In unique student mode (first attempts), self-loops are logically impossible
+        const includeLoops = selfLoops && !uniqueStudentMode;
         const stepSequences = createStepSequences(sortedData, includeLoops);
         const outcomeSequences = createOutcomeSequences(sortedData);
         
@@ -90,7 +90,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
         console.log(formatEquationAnswerStats(equationStats));
         
-        const results = countEdges(stepSequences, outcomeSequences);
+        const results = countEdges(stepSequences, outcomeSequences, sortedData);
         
         return {
             sortedData,
@@ -98,7 +98,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             outcomeSequences,
             ...results
         };
-    }, [csvData, uniqueStudentMode]); // Now depends on uniqueStudentMode for self-loops logic
+    }, [csvData, selfLoops, uniqueStudentMode]); // Depends on both selfLoops and uniqueStudentMode
     
     // Main graph calculation - STATIC (only responds to uniqueStudentMode)
     useEffect(() => {
@@ -149,11 +149,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             console.log("GraphvizParent: Using counts for thickness:", uniqueStudentMode ? "unique students" : "total visits");
             console.log("GraphvizParent: Max count for thickness:", maxCountForThickness);
 
-            // STATIC main graph - ignore user options except uniqueStudentMode
+            // Main graph - responds to uniqueStudentMode and minVisits slider
             // Use mode-appropriate edge counts
             const edgeCountsForGraph = uniqueStudentMode ? newEdgeCounts : totalVisits;
             
-            // Use simple fixed threshold of 0.8 for main graph to show meaningful edges
+            // Use simple fixed threshold for connectivity, but allow minVisits to control visibility
             const optimalThreshold = 1;
             
             const dotString = generateDotString(
@@ -163,14 +163,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 edgeCountsForGraph,
                 totalNodeEdges,
                 optimalThreshold, // Use calculated optimal threshold
-                0, // Force minVisits to 0 for static main graph
+                minVisits, // Use minVisits from slider to control main graph
                 sequenceToUse,
                 false,
                 totalVisits,
                 repeatVisits,
-                false, // Force errorMode to false for static main graph
+                errorMode, // Use actual errorMode setting
                 mainGraphData.firstAttemptOutcomes,
-                uniqueStudentMode
+                uniqueStudentMode,
             );
 
             setDotString(dotString);
@@ -190,21 +190,21 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     repeatVisits,
                     false, // Force errorMode to false for static top graph
                     mainGraphData.firstAttemptOutcomes,
-                    uniqueStudentMode
+                    uniqueStudentMode,
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode]); // Static except for uniqueStudentMode and selectedSequence
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode]); // Responds to uniqueStudentMode, minVisits, errorMode and selectedSequence
 
     // Memoized filtered graph data
     const filteredGraphData = useMemo(() => {
         if (!filter || filter === 'ALL' || !mainGraphData) return null;
         
         const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-        const filteredStepSequences = createStepSequences(filteredData, selfLoops);
+        const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
         const filteredOutcomeSequences = createOutcomeSequences(filteredData);
         
-        const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
+        const results = countEdges(filteredStepSequences, filteredOutcomeSequences, filteredData);
         
         return {
             filteredData,
@@ -219,7 +219,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             repeatVisits: results.repeatVisits,
             firstAttemptOutcomes: results.firstAttemptOutcomes
         };
-    }, [filter, mainGraphData, selfLoops]);
+    }, [filter, mainGraphData, selfLoops, uniqueStudentMode]);
 
     // Filtered graph calculation - only runs when filter changes
     useEffect(() => {
@@ -266,7 +266,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 filteredRepeatVisits,
                 errorMode,
                 filteredGraphData.firstAttemptOutcomes,
-                uniqueStudentMode
+                uniqueStudentMode,
             );
 
             setFilteredDotString(filteredDotString);
@@ -438,11 +438,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         
         const { stepSequences, edgeCounts, edgeOutcomeCounts, firstAttemptOutcomes } = mainGraphData;
         
-        // Find all edges involving this node
-        const incomingEdges = Object.keys(edgeCounts).filter(edge => edge.endsWith(`->${nodeName}`));
+        // Find outgoing edges for outcome calculations
         const outgoingEdges = Object.keys(edgeCounts).filter(edge => edge.startsWith(`${nodeName}->`));
         
-        // Calculate statistics
+        // Calculate statistics based on mode
         let totalVisitors = 0;
         let totalNodeVisits = 0;
         const visitCounts: { [studentId: string]: number } = {};
@@ -472,8 +471,17 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     let studentNodeVisits = 0;
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
                         if (Array.isArray(problemSequence)) {
-                            const nodeVisits = problemSequence.filter(step => step === nodeName).length;
-                            studentNodeVisits += nodeVisits;
+                            if (uniqueStudentMode) {
+                                // In unique student mode, count only if student visited this node
+                                const nodeVisits = problemSequence.filter(step => step === nodeName).length;
+                                if (nodeVisits > 0) {
+                                    studentNodeVisits = 1; // Count as 1 unique visit regardless of repeats
+                                }
+                            } else {
+                                // In total visits mode, count all visits including repeats
+                                const nodeVisits = problemSequence.filter(step => step === nodeName).length;
+                                studentNodeVisits += nodeVisits;
+                            }
                         }
                     });
                     
@@ -504,12 +512,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const singleVisits = studentsWithSingleVisit;
         const multipleVisits = studentsWithMultipleVisits;
         
-        // Count unique edges that meet the minimum visits threshold
-        const filteredIncomingEdges = incomingEdges.filter(edge => (edgeCounts[edge] || 0) >= minVisits);
-        const filteredOutgoingEdges = outgoingEdges.filter(edge => (edgeCounts[edge] || 0) >= minVisits);
-        
-        const incomingNodes = filteredIncomingEdges.map(edge => edge.split('->')[0]).sort();
-        const outgoingNodes = filteredOutgoingEdges.map(edge => edge.split('->')[1]).sort();
+        // Note: Removed graph connectivity section to match history tab format
         
         // Calculate progress status statistics
         const progressStats = calculateNodeProgressStats(nodeName);
@@ -555,81 +558,106 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .slice(0, 5) // Show top 5 first attempt outcomes
             .join('\n      ');
         
-        return `Node Information (${graphType}):\n`
-            + `    • Step Name: ${nodeName}\n\n`
-            + `Student Activity:\n`
-            + `    • Total Students Visited: ${totalVisitors}\n`
-            + `    • Total Visits (including repeats): ${totalNodeVisits}\n`
+        const activityLabel = uniqueStudentMode ? 'Student Activity' : 'Visit Activity';
+        const visitorsLabel = uniqueStudentMode ? 'Total Students Visited' : 'Total Students Who Visited';
+        const visitsLabel = uniqueStudentMode ? 'Total Visits (including repeats)' : 'Total Visits to This Node';
+        const otherPercentage = progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0';
+        
+        return `${activityLabel}:\n`
+            + `    • ${visitorsLabel}: ${totalVisitors}\n`
+            + `    • ${visitsLabel}: ${totalNodeVisits}\n`
             + `    • Students with single visit: ${singleVisits}\n`
             + `    • Students with multiple visits: ${multipleVisits}\n`
             + `    • Average visits per student: ${avgVisitsPerStudent}\n\n`
             + `Student Progress Status:\n`
             + `    • Graduated: ${progressStats.graduated} (${graduatedPercentage}%)\n`
             + `    • Promoted: ${progressStats.promoted} (${promotedPercentage}%)\n`
-            + `    • Other: ${progressStats.other}\n`
+            + `    • Other: ${progressStats.other} (${otherPercentage}%)\n`
             + `    • Total students tracked: ${progressStats.total}\n\n`
-            + `Learning Outcomes from this Step:\n`
-            + `    • All Outcomes (including repeat attempts):\n`
-            + `      ${outcomeSummary || 'No outcome data available'}\n`
-            + `    • Total recorded outcomes: ${totalOutcomes}\n\n`
+            + `Learning Outcomes:\n`
+            + `    • All Outcomes:\n`
+            + `      ${outcomeSummary || 'No outcome data available'}\n\n`
             + `    • First Attempt Outcomes:\n`
-            + `      ${firstAttemptSummary || 'No first attempt data available'}\n`
-            + `    • Total first attempts: ${totalFirstAttempts}\n\n`
-            + `Graph Connectivity:\n`
-            + `    • Incoming paths: ${filteredIncomingEdges.length} (above threshold)\n`
-            + `    • Outgoing paths: ${filteredOutgoingEdges.length} (above threshold)\n`
-            + `    • Total incoming: ${incomingEdges.length}\n`
-            + `    • Total outgoing: ${outgoingEdges.length}\n`
-            + `    • Nodes that precede:\n`
-            + `      ${incomingNodes.length > 0 ? incomingNodes.join('\n      ') : 'None'}\n`
-            + `    • Nodes that follow:\n`
-            + `      ${outgoingNodes.length > 0 ? outgoingNodes.join('\n      ') : 'None'}`;
+            + `      ${firstAttemptSummary || 'No first attempt data available'}`;
     };
+    
 
-    // Memoized student progress map for performance
-    const studentProgressMap = useMemo(() => {
-        if (!mainGraphData?.sortedData) return new Map<string, string>();
-        
-        const map = new Map<string, string>();
-        mainGraphData.sortedData.forEach((row: any) => {
-            const studentId = row['Anon Student Id'];
-            const progressStatus = row['CF (Workspace Progress Status)'];
-            if (studentId && progressStatus) {
-                map.set(studentId, progressStatus);
-            }
-        });
-        return map;
-    }, [mainGraphData?.sortedData]);
-
-    // Helper function to calculate progress status statistics for an edge (optimized)
+    // Helper function to calculate exact progress status statistics for an edge
     const calculateEdgeProgressStats = (edgeName: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
         if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
         
-        // Use the existing edge count instead of recalculating
-        // For performance, use a simplified calculation based on existing data
-        // instead of doing the expensive triple-nested loop
-        const total = mainGraphData.edgeCounts[edgeName] || 0;
+        const { stepSequences, sortedData } = mainGraphData;
+        const [fromStep, toStep] = parseEdgeName(edgeName);
+        const studentsOnEdge = new Set<string>();
         
-        // Use approximate distribution based on overall data patterns
-        // This is much faster than calculating exact student-by-student statistics
-        const overallGraduated = Array.from(studentProgressMap.values()).filter(status => status === 'GRADUATED').length;
-        const overallPromoted = Array.from(studentProgressMap.values()).filter(status => status === 'PROMOTED').length;
-        const overallTotal = studentProgressMap.size;
+        // Find all students who took this specific transition
+        if (stepSequences && Object.keys(stepSequences).length > 0) {
+            Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
+                if (studentProblems && typeof studentProblems === 'object') {
+                    Object.values(studentProblems).forEach((problemSequence: string[]) => {
+                        if (Array.isArray(problemSequence)) {
+                            if (uniqueStudentMode) {
+                                // In unique student mode, only count the first occurrence of this transition
+                                for (let i = 0; i < problemSequence.length - 1; i++) {
+                                    if (problemSequence[i] === fromStep && problemSequence[i + 1] === toStep) {
+                                        studentsOnEdge.add(studentId);
+                                        break; // Only count first occurrence per student
+                                    }
+                                }
+                            } else {
+                                // In total visits mode, we still count unique students but they represent all who ever made this transition
+                                for (let i = 0; i < problemSequence.length - 1; i++) {
+                                    if (problemSequence[i] === fromStep && problemSequence[i + 1] === toStep) {
+                                        studentsOnEdge.add(studentId);
+                                        break; // Still only add each student once to the set
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
         
-        const graduatedRatio = overallTotal > 0 ? overallGraduated / overallTotal : 0;
-        const promotedRatio = overallTotal > 0 ? overallPromoted / overallTotal : 0;
+        // Count exact progress status for students who took this transition
+        let graduatedCount = 0;
+        let promotedCount = 0;
+        let otherCount = 0;
         
-        const graduated = Math.round(total * graduatedRatio);
-        const promoted = Math.round(total * promotedRatio);
-        const other = Math.max(0, total - graduated - promoted);
+        if (sortedData && sortedData.length > 0 && studentsOnEdge.size > 0) {
+            // Create a map of student progress status
+            const studentProgressMap = new Map<string, string>();
+            sortedData.forEach((row: any) => {
+                const studentId = row['Anon Student Id'];
+                const progressStatus = row['CF (Workspace Progress Status)'];
+                if (studentId && progressStatus) {
+                    studentProgressMap.set(studentId, progressStatus);
+                }
+            });
+            
+            studentsOnEdge.forEach(studentId => {
+                const progressStatus = studentProgressMap.get(studentId);
+                if (progressStatus === 'GRADUATED') {
+                    graduatedCount++;
+                } else if (progressStatus === 'PROMOTED') {
+                    promotedCount++;
+                } else if (progressStatus) {
+                    otherCount++;
+                }
+            });
+        }
         
-        const graduatedPercentage = total > 0 ? ((graduated / total) * 100).toFixed(1) : '0';
-        const promotedPercentage = total > 0 ? ((promoted / total) * 100).toFixed(1) : '0';
+        const total = studentsOnEdge.size;
+        const graduatedPercentage = total > 0 ? ((graduatedCount / total) * 100).toFixed(1) : '0';
+        const promotedPercentage = total > 0 ? ((promotedCount / total) * 100).toFixed(1) : '0';
+        
+        // Note: Progress status is always based on unique students regardless of mode
+        // because progress status is a property of individual students, not visits
         
         return {
-            graduated,
-            promoted,
-            other,
+            graduated: graduatedCount,
+            promoted: promotedCount,
+            other: otherCount,
             total,
             graduatedPercentage,
             promotedPercentage
@@ -637,21 +665,31 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
 
     // Generate edge tooltip content
-    const generateEdgeTooltip = (edgeName: string, graphType: string): string => {
+    const generateEdgeTooltip = (edgeName: string, _graphType: string): string => {
         if (!mainGraphData) return `Edge: ${edgeName}`;
         
-        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges } = mainGraphData;
+        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges, totalVisits } = mainGraphData;
         const outcomes = edgeOutcomeCounts[edgeName] || {};
-        const edgeCount = edgeCounts[edgeName] || 0;
-        const [currentStep, nextStep] = parseEdgeName(edgeName);
-        const totalCount = totalNodeEdges[currentStep] || 0;
+        const [currentStep, _nextStep] = parseEdgeName(edgeName);
+        
+        // Use different counts based on mode
+        const edgeCount = uniqueStudentMode ? (edgeCounts[edgeName] || 0) : (totalVisits[edgeName] || 0);
+        
+        // Calculate total visits to the start node by summing all outgoing edges
+        const totalVisitsFromStartNode = Object.keys(totalVisits)
+            .filter(edge => edge.startsWith(`${currentStep}->`))
+            .reduce((sum, edge) => sum + (totalVisits[edge] || 0), 0);
+            
+        const totalAtStartNode = uniqueStudentMode ? 
+            (totalNodeEdges[currentStep] || 0) : 
+            (totalVisitsFromStartNode || totalNodeEdges[currentStep] || 0);
         
         const ratioPercentage = ((ratioEdges[edgeName] || 0) * 100).toFixed(1);
         const totalOutcomes = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
         
-        const uniqueStudents = edgeCount;
-        const studentsAtStartNode = totalCount;
-        const studentsNotTakingPath = studentsAtStartNode - uniqueStudents;
+        const pathCount = edgeCount;
+        const totalAtStart = totalAtStartNode;
+        const notTakingPath = Math.max(0, totalAtStart - pathCount); // Ensure non-negative
         
         // Calculate progress status statistics
         const progressStats = calculateEdgeProgressStats(edgeName);
@@ -665,44 +703,48 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             })
             .join('\n      ');
         
-        // Estimate first attempt outcomes (simplified approach)
-        const firstAttemptOutcomes = Object.entries(outcomes)
+        // Calculate actual first attempt outcomes from mainGraphData
+        const edgeFirstAttemptOutcomes = mainGraphData?.firstAttemptOutcomes?.[edgeName] || {};
+        const totalFirstAttempts = Object.values(edgeFirstAttemptOutcomes).reduce((sum, count) => sum + count, 0);
+        
+        const firstAttemptOutcomes = Object.entries(edgeFirstAttemptOutcomes)
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
-                // Rough estimate: assume 80-90% of outcomes are first attempts
-                const estimatedFirstAttempts = Math.max(1, Math.floor(count * 0.85));
-                const percentage = uniqueStudents > 0 ? ((estimatedFirstAttempts / uniqueStudents) * 100).toFixed(1) : '0';
-                return `${outcome}: ${estimatedFirstAttempts} (${percentage}%)`;
+                const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
+                return `${outcome}: ${count} (${percentage}%)`;
             })
             .join('\n      ');
         
-        // Calculate visual thickness (normalized)
-        const maxEdgeCount = Math.max(...Object.values(edgeCounts));
-        const thickness = maxEdgeCount > 0 ? ((edgeCount / maxEdgeCount) * 10).toFixed(1) : '1.0';
+        // Calculate visual thickness (normalized) based on mode
+        const countsForThickness = uniqueStudentMode ? edgeCounts : totalVisits;
+        const maxCount = Math.max(...Object.values(countsForThickness));
+        const thickness = maxCount > 0 ? ((pathCount / maxCount) * 10).toFixed(1) : '1.0';
         
-        return `Transition Information (${graphType}):\n`
-            + `    • From: ${currentStep}\n`
-            + `    • To: ${nextStep}\n\n`
-            + `Student Flow:\n`
-            + `    • Students taking this path: ${uniqueStudents}\n`
-            + `    • Students at ${currentStep}: ${studentsAtStartNode}\n`
-            + `    • Students NOT taking this path: ${studentsNotTakingPath}\n`
+        const modeLabel = uniqueStudentMode ? 'Students' : 'Visits';
+        const pathLabel = uniqueStudentMode ? 'Students taking this path' : 'Total visits on this path';
+        const startLabel = uniqueStudentMode ? `Students at ${currentStep}` : `Total visits to ${currentStep}`;
+        const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
+        
+        return `${modeLabel} Flow:\n`
+            + `    • ${pathLabel}: ${pathCount}\n`
+            + `    • ${startLabel}: ${totalAtStart}\n`
+            + `    • ${notTakingLabel}: ${notTakingPath}\n`
             + `    • Transition Probability: ${ratioPercentage}%\n`
-            + `      (${uniqueStudents} of ${studentsAtStartNode} students)\n\n`
+            + `      (${pathCount} of ${totalAtStart} ${modeLabel.toLowerCase()})\n\n`
             + `Student Progress Status:\n`
             + `    • Graduated: ${progressStats.graduated} (${progressStats.graduatedPercentage}%)\n`
             + `    • Promoted: ${progressStats.promoted} (${progressStats.promotedPercentage}%)\n`
-            + `    • Other: ${progressStats.other}\n`
+            + `    • Other: ${progressStats.other} (${progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0'}%)\n`
             + `    • Total students tracked: ${progressStats.total}\n\n`
             + `Transition Outcomes:\n`
             + `    • All Outcomes:\n`
             + `      ${allOutcomes || 'No outcome data'}\n\n`
-            + `    • First Attempt Outcomes (estimated):\n`
+            + `    • First Attempt Outcomes:\n`
             + `      ${firstAttemptOutcomes || 'No first attempt data'}\n\n`
             + `Visual Properties:\n`
             + `    • Edge Thickness: ${thickness} (normalized)\n`
-            + `    • Path Frequency: ${edgeCount} students\n`
-            + `    • Min Visits Threshold: ${minVisits}`;
+            + `    • Path Frequency: ${pathCount} ${modeLabel.toLowerCase()}\n`
+            + `    • Min ${modeLabel} Threshold: ${minVisits}`;
     };
 
     // Store references to attached event listeners for cleanup
@@ -1383,9 +1425,9 @@ function ExportButton({ onClick, label = "Export as PNG" }: ExportButtonProps) {
         <Button
             variant={'outline'}
             onClick={onClick}
-            className="flex items-center gap-2 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 shadow-sm"
+            className="flex h-2 items-center gap-1 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 shadow-sm text-xs"
         >
-            <Download className="h-4 w-4" />
+            <Download className="h-3 w-3" />
             {label}
         </Button>
     );

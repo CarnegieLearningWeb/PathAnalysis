@@ -178,6 +178,7 @@ function App() {
      */
     const handleToggleUniqueStudentMode = () => setUniqueStudentMode(!uniqueStudentMode);
 
+
     /**
      * Updates the minimum visits for edges in the graph when the slider is moved.
      *
@@ -340,6 +341,7 @@ function App() {
                                             <Switch isOn={uniqueStudentMode} handleToggle={handleToggleUniqueStudentMode}/>
                                         </div>
 
+
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium text-gray-700">
                                                 {uniqueStudentMode ? 'Minimum Students' : 'Minimum Visits'}
@@ -354,7 +356,7 @@ function App() {
                                                         <Slider
                                                             step={1}
                                                             min={0}
-                                                            max={100}
+                                                            max={maxMinEdgeCount > 0 ? Math.round((maxMinEdgeCount / maxEdgeCount) * 100) : 100}
                                                             value={minVisitsPercentage}
                                                             onChange={handleSlider}
                                                             maxEdgeCount={maxEdgeCount}
@@ -379,10 +381,15 @@ function App() {
                                                     />
                                                 </div>
                                             </div>
-                                            <p className="text-xs text-gray-500">
-                                                Maximum threshold before any node becomes
-                                                disconnected: {maxMinEdgeCount} {uniqueStudentMode ? 'students' : 'visits'}
-                                            </p>
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-gray-500">
+                                                    Controls the "All Students, All Paths" graph visibility
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Maximum threshold before any node becomes
+                                                    disconnected: {maxMinEdgeCount} {uniqueStudentMode ? 'students' : 'visits'}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
