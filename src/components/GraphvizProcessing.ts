@@ -13,6 +13,7 @@ interface CSVRow {
     'CF (Workspace Progress Status)': string;
     'Problem Name': string;
     'Anon Student Id': string;
+    'CF (Is Autofilled)': string;
 }
 
 interface EdgeCounts {
@@ -60,14 +61,40 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         skipEmptyLines: true,
     }).data;
 
-    const transformedData = parsedData.map(row => ({
+    // Debug: Log the first row to see what columns exist
+    if (parsedData.length > 0) {
+        console.log("loadAndSortData: First row columns:", Object.keys(parsedData[0]));
+        console.log("loadAndSortData: Sample CF_Autofill values:",
+            parsedData.slice(0, 5).map((row: any) => row['CF_Autofill'] || row['CF (Autofill)'] || row['CF (Is Autofilled)'] || 'MISSING')
+        );
+    }
+
+    // Filter out autofilled rows FIRST, before any other processing
+    // The actual column name is 'CF (Is Autofilled)'
+    const filteredData = parsedData.filter(row => {
+        const autofillValue = (row as any)['CF (Is Autofilled)'];
+        // Check for various ways "true" might be represented
+        const isAutofill = autofillValue === 'True' ||
+                          autofillValue === 'true' ||
+                          autofillValue === 'TRUE' ||
+                          autofillValue === '1' ||
+                          autofillValue === 1 ||
+                          autofillValue === true;
+        return !isAutofill;
+    });
+
+    console.log(`loadAndSortData: Filtered out ${parsedData.length - filteredData.length} autofilled rows (${parsedData.length} -> ${filteredData.length})`);
+    console.log(`loadAndSortData: Percentage filtered: ${((parsedData.length - filteredData.length) / parsedData.length * 100).toFixed(1)}%`);
+
+    const transformedData = filteredData.map(row => ({
         'Session Id': row['Session Id'],
         'Time': row['Time'],
         'Step Name': row['Step Name'] || 'DoneButton',
         'Outcome': row['Outcome'],
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
         'Problem Name': row['Problem Name'],
-        'Anon Student Id': row['Anon Student Id']
+        'Anon Student Id': row['Anon Student Id'],
+        'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)']
     }));
 
     // Cache Date objects to avoid repeated parsing during sort
@@ -92,12 +119,14 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
 
 /**
  * Creates step sequences from sorted data, optionally allowing self-loops.
+ * Excludes steps where CF_Autofill is "True".
  * @param sortedData - The sorted CSV rows.
  * @param selfLoops - A boolean to include self-loops.
  * @returns A dictionary mapping session IDs to sequences of step names.
  */
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
+        // Note: Autofilled rows are already filtered out in loadAndSortData
         const studentId: string = row['Anon Student Id'];
         const problemName: string = row['Problem Name'];
 
@@ -115,11 +144,13 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
 
 /**
  * Creates outcome sequences from sorted data.
+ * Excludes outcomes where CF_Autofill is "True".
  * @param sortedData - The sorted CSV rows.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
 export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
+        // Note: Autofilled rows are already filtered out in loadAndSortData
         const studentId = row['Anon Student Id'];
         const problemName = row['Problem Name'];
 
@@ -526,6 +557,191 @@ export const countEdges = (
 
     return result;
 };
+
+/**
+ * Counts edges for a specific selected sequence with two modes:
+ *
+ * Mode 1 (onlyStudentsOnSequence = true): Progressive filtering
+ * - Each edge shows progressively fewer students as we move through the sequence
+ * - Only students who used THIS exact path from the beginning up to each edge are counted
+ * - Example for [A, B, C, D]:
+ *   - Edge A->B: Shows all students who went A->B (starting the path)
+ *   - Edge B->C: Shows only students who went A->B->C (continued from A)
+ *   - Edge C->D: Shows only students who went A->B->C->D (completed the full path)
+ *
+ * Mode 2 (onlyStudentsOnSequence = false): All students
+ * - Shows ALL students who made each transition between nodes in the sequence
+ * - No filtering based on whether they followed the selected path
+ * - Example for [A, B, C, D]:
+ *   - Edge A->B: Shows ALL students who went A->B at any point
+ *   - Edge B->C: Shows ALL students who went B->C at any point
+ *   - Edge C->D: Shows ALL students who went C->D at any point
+ *
+ * @param stepSequences - All student step sequences
+ * @param outcomeSequences - All student outcome sequences
+ * @param selectedSequence - The specific sequence to analyze
+ * @param onlyStudentsOnSequence - If true, use progressive filtering; if false, show all students
+ * @returns Edge counts for the selected sequence
+ */
+export const countEdgesForSelectedSequence = (
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    outcomeSequences: { [key: string]: { [key: string]: string[] } },
+    selectedSequence: string[],
+    onlyStudentsOnSequence: boolean = true
+): {
+    totalNodeEdges: { [p: string]: number };
+    edgeOutcomeCounts: { [p: string]: { [p: string]: number } };
+    maxEdgeCount: number;
+    ratioEdges: { [key: string]: number };
+    edgeCounts: { [key: string]: number };
+    totalVisits: { [key: string]: number };
+    repeatVisits: { [key: string]: { [studentId: string]: number } };
+    firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
+} => {
+    const trackingMaps = initializeTrackingMaps();
+    let maxEdgeCount = 0;
+
+    if (onlyStudentsOnSequence) {
+        // MODE 1: Progressive filtering - only students who followed the sequence
+        console.log(`countEdgesForSelectedSequence: Progressive filtering mode (students on sequence)`);
+
+        // Track students at each position in the sequence for proper ratio calculation
+        const studentsAtSequencePosition = new Map<number, Set<string>>();
+        for (let i = 0; i < selectedSequence.length; i++) {
+            studentsAtSequencePosition.set(i, new Set<string>());
+        }
+
+        Object.entries(stepSequences).forEach(([studentId, problems]) => {
+            const innerOutcomeSequences = outcomeSequences[studentId] || {};
+
+            Object.entries(problems).forEach(([problemName, steps]) => {
+                const outcomes = innerOutcomeSequences[problemName] || [];
+
+                // Check if this student completed the full sequence
+                const fullSequenceMatch = containsSequence(steps, selectedSequence);
+                if (fullSequenceMatch) {
+                    // Mark that this student reached every position in the sequence
+                    for (let pos = 0; pos < selectedSequence.length; pos++) {
+                        studentsAtSequencePosition.get(pos)!.add(studentId);
+                    }
+                } else {
+                    // Check which partial sequences this student completed
+                    for (let pos = 0; pos < selectedSequence.length; pos++) {
+                        const partialSequence = selectedSequence.slice(0, pos + 1);
+                        if (containsSequence(steps, partialSequence)) {
+                            studentsAtSequencePosition.get(pos)!.add(studentId);
+                        }
+                    }
+                }
+
+                // For each edge in the selected sequence
+                for (let seqIndex = 0; seqIndex < selectedSequence.length - 1; seqIndex++) {
+                    const currentStep = selectedSequence[seqIndex];
+                    const nextStep = selectedSequence[seqIndex + 1];
+                    const edgeKey = `${currentStep}->${nextStep}`;
+
+                    // Build the partial sequence up to and including this edge
+                    const partialSequence = selectedSequence.slice(0, seqIndex + 2);
+
+                    // Check if this student's path contains this partial sequence
+                    if (containsSequence(steps, partialSequence)) {
+                        // Find the position of this edge in the student's actual path
+                        for (let i = 0; i < steps.length - 1; i++) {
+                            if (steps[i] === currentStep && steps[i + 1] === nextStep) {
+                                const outcome = outcomes[i + 1];
+
+                                initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+
+                                maxEdgeCount = updateEdgeMetrics(
+                                    edgeKey,
+                                    currentStep,
+                                    studentId,
+                                    outcome,
+                                    trackingMaps,
+                                    maxEdgeCount
+                                );
+                                break; // Only count the first occurrence of this edge for this student
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Override totalNodeEdges with progressive sequence counts
+        trackingMaps.totalNodeEdges.clear();
+        for (let i = 0; i < selectedSequence.length; i++) {
+            const nodeName = selectedSequence[i];
+            const studentsAtPosition = studentsAtSequencePosition.get(i)!;
+            trackingMaps.totalNodeEdges.set(nodeName, studentsAtPosition);
+        }
+    } else {
+        // MODE 2: All students - anyone who made each transition, regardless of path
+        console.log(`countEdgesForSelectedSequence: All students mode (any transition)`);
+
+        Object.entries(stepSequences).forEach(([studentId, problems]) => {
+            const innerOutcomeSequences = outcomeSequences[studentId] || {};
+
+            Object.entries(problems).forEach(([problemName, steps]) => {
+                const outcomes = innerOutcomeSequences[problemName] || [];
+
+                // For each edge in the selected sequence
+                for (let seqIndex = 0; seqIndex < selectedSequence.length - 1; seqIndex++) {
+                    const currentStep = selectedSequence[seqIndex];
+                    const nextStep = selectedSequence[seqIndex + 1];
+                    const edgeKey = `${currentStep}->${nextStep}`;
+
+                    // Find ANY occurrence of this transition in the student's path
+                    for (let i = 0; i < steps.length - 1; i++) {
+                        if (steps[i] === currentStep && steps[i + 1] === nextStep) {
+                            const outcome = outcomes[i + 1];
+
+                            initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+
+                            maxEdgeCount = updateEdgeMetrics(
+                                edgeKey,
+                                currentStep,
+                                studentId,
+                                outcome,
+                                trackingMaps,
+                                maxEdgeCount
+                            );
+                            break; // Only count the first occurrence of this edge for this student
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    const result = convertMapsToObjects(trackingMaps, maxEdgeCount, []);
+
+    return result;
+};
+
+/**
+ * Helper function to check if a sequence contains a subsequence
+ * @param sequence - The full sequence to search in
+ * @param subsequence - The subsequence to search for
+ * @returns True if subsequence is found in sequence
+ */
+function containsSequence(sequence: string[], subsequence: string[]): boolean {
+    if (subsequence.length === 0) return true;
+    if (sequence.length < subsequence.length) return false;
+
+    for (let i = 0; i <= sequence.length - subsequence.length; i++) {
+        let found = true;
+        for (let j = 0; j < subsequence.length; j++) {
+            if (sequence[i + j] !== subsequence[j]) {
+                found = false;
+                break;
+            }
+        }
+        if (found) return true;
+    }
+
+    return false;
+}
 
 // ============================================================================
 // SECTION 4: GRAPH CONNECTIVITY ANALYSIS
@@ -936,7 +1152,7 @@ const createNodeTooltip = (rank: number, color: string, studentCount: number): s
  */
 const createEdgeTooltip = (
     currentStep: string,
-    nextStep: string,
+    _nextStep: string,
     edgeKey: string,
     edgeCount: number,
     totalCount: number,
@@ -944,8 +1160,8 @@ const createEdgeTooltip = (
     ratioEdges: { [key: string]: number },
     outcomes: { [outcome: string]: number },
     firstAttempts: { [outcome: string]: number },
-    repeatVisits: { [key: string]: { [studentId: string]: number } },
-    edgeColor: string,
+    _repeatVisits: { [key: string]: { [studentId: string]: number } },
+    _edgeColor: string,
     normalizedThickness: number,
     minVisits: number,
     uniqueStudentMode: boolean = false,

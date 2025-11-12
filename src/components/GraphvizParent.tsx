@@ -1,10 +1,11 @@
 // React component code
-import { useContext, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { graphviz } from 'd3-graphviz';
 import {
     generateDotString,
     normalizeThicknesses,
     countEdges,
+    countEdgesForSelectedSequence,
     createStepSequences,
     createOutcomeSequences,
     loadAndSortData,
@@ -17,6 +18,7 @@ import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
 import { Download } from 'lucide-react';
+import GraphMenu from './GraphMenu';
 
 // History item interface
 interface HistoryItem {
@@ -39,41 +41,56 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
 
 interface GraphvizParentProps {
     csvData: string;
-    filter: string | null;
+    filters: string[];
     selfLoops: boolean;
-    minVisits: number;
+    minVisits: number; // Global default, can be overridden per graph
     onMaxEdgeCountChange: (count: number) => void;
     onMaxMinEdgeCountChange: (count: number) => void;
     errorMode: boolean;
     uniqueStudentMode: boolean;
+    problemName: string;
 }
 
 const GraphvizParent: React.FC<GraphvizParentProps> = ({
     csvData,
-    filter,
+    filters,
     selfLoops,
     minVisits,
     onMaxEdgeCountChange,
     onMaxMinEdgeCountChange,
     errorMode,
-    uniqueStudentMode
+    uniqueStudentMode,
+    problemName
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
-    const [filteredDotString, setFilteredDotString] = useState<string | null>(null);
+    const [filteredDotStrings, setFilteredDotStrings] = useState<{[key: string]: string}>({});
     const [topDotString, setTopDotString] = useState<string | null>(null);
     const { selectedSequence, setSelectedSequence, top5Sequences, setTop5Sequences } = useContext(Context);
+
+    // Per-graph min visits state - initialized to empty, will be set when data loads
+    const [minVisitsPerGraph, setMinVisitsPerGraph] = useState<{[key: string]: number}>({});
+
+    // State for selected sequence graph filtering
+    const [showOnlySequenceStudents, setShowOnlySequenceStudents] = useState<boolean>(true);
 
     // History state management
     const [activeTab, setActiveTab] = useState<'graphs' | 'history'>('graphs');
     const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
-    
+
     // Track recent clicks to prevent duplicates
     const recentClicks = useRef<Set<string>>(new Set());
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
-    const graphRefFiltered = useRef<HTMLDivElement>(null);
+    const graphRefFilteredRefs = useRef<{[key: string]: React.RefObject<HTMLDivElement>}>({});
     const graphRefTop = useRef<HTMLDivElement>(null);
+
+    // Create refs for each filter dynamically
+    filters.forEach(filter => {
+        if (!graphRefFilteredRefs.current[filter]) {
+            graphRefFilteredRefs.current[filter] = React.createRef<HTMLDivElement>();
+        }
+    });
 
     // Memoized data processing for main graph - responds to both selfLoops setting and uniqueStudentMode
     const mainGraphData = useMemo(() => {
@@ -90,7 +107,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
         console.log(formatEquationAnswerStats(equationStats));
         
-        const results = countEdges(stepSequences, outcomeSequences, sortedData);
+        const results = countEdges(stepSequences, outcomeSequences);
         
         return {
             sortedData,
@@ -163,7 +180,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 edgeCountsForGraph,
                 totalNodeEdges,
                 optimalThreshold, // Use calculated optimal threshold
-                minVisits, // Use minVisits from slider to control main graph
+                minVisitsPerGraph['all_students'] ?? Math.round(maxEdgeCount * 0.1), // Use per-graph minVisits or 10% default
                 sequenceToUse,
                 false,
                 totalVisits,
@@ -175,103 +192,166 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             setDotString(dotString);
 
+            // For the selected sequence graph, use progressive filtering
+            // Only count students who completed the FULL sequence (if checkbox is enabled)
+            const sequenceToUseForCounting = selectedSequence || topSequences[0]?.sequence || [];
+            const sequenceResults = countEdgesForSelectedSequence(
+                mainGraphData.stepSequences,
+                mainGraphData.outcomeSequences,
+                sequenceToUseForCounting,
+                showOnlySequenceStudents  // Pass the checkbox state
+            );
+
+            // Use the filtered edge counts for the selected sequence graph
+            const sequenceCountsForThickness = uniqueStudentMode ? sequenceResults.edgeCounts : sequenceResults.totalVisits;
+            const sequenceMaxCount = uniqueStudentMode ? sequenceResults.maxEdgeCount : Math.max(...Object.values(sequenceResults.totalVisits), 1);
+            const sequenceNormalizedThicknesses = normalizeThicknesses(sequenceCountsForThickness, sequenceMaxCount, 10);
+
             setTopDotString(
                 generateDotString(
-                    normalizedThicknesses,
-                    ratioEdges,
-                    edgeOutcomeCounts,
-                    edgeCountsForGraph,
-                    totalNodeEdges,
+                    sequenceNormalizedThicknesses,
+                    sequenceResults.ratioEdges,
+                    sequenceResults.edgeOutcomeCounts,
+                    uniqueStudentMode ? sequenceResults.edgeCounts : sequenceResults.totalVisits,
+                    sequenceResults.totalNodeEdges,
                     0, // Use threshold 0 to show ALL edges for static top graph
-                    0, // Force minVisits to 0 for static top graph
-                    selectedSequence || topSequences[0].sequence,
+                    minVisitsPerGraph['selected_sequence'] ?? 0, // Use per-graph minVisits or default to 0
+                    selectedSequence || topSequences[0]?.sequence || [],
                     true,
-                    totalVisits,
-                    repeatVisits,
+                    sequenceResults.totalVisits,
+                    sequenceResults.repeatVisits,
                     false, // Force errorMode to false for static top graph
-                    mainGraphData.firstAttemptOutcomes,
+                    sequenceResults.firstAttemptOutcomes,
                     uniqueStudentMode,
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode]); // Responds to uniqueStudentMode, minVisits, errorMode and selectedSequence
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents and selectedSequence
 
-    // Memoized filtered graph data
-    const filteredGraphData = useMemo(() => {
-        if (!filter || filter === 'ALL' || !mainGraphData) return null;
-        
-        const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-        const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
-        const filteredOutcomeSequences = createOutcomeSequences(filteredData);
-        
-        const results = countEdges(filteredStepSequences, filteredOutcomeSequences, filteredData);
-        
-        return {
-            filteredData,
-            filteredStepSequences,
-            filteredOutcomeSequences,
-            edgeCounts: results.edgeCounts,
-            totalNodeEdges: results.totalNodeEdges,
-            ratioEdges: results.ratioEdges,
-            edgeOutcomeCounts: results.edgeOutcomeCounts,
-            maxEdgeCount: results.maxEdgeCount,
-            totalVisits: results.totalVisits,
-            repeatVisits: results.repeatVisits,
-            firstAttemptOutcomes: results.firstAttemptOutcomes
-        };
-    }, [filter, mainGraphData, selfLoops, uniqueStudentMode]);
+    // Memoized filtered graph data for each filter
+    const filteredGraphDataMap = useMemo(() => {
+        if (!mainGraphData || filters.length === 0) return {};
 
-    // Filtered graph calculation - only runs when filter changes
-    useEffect(() => {
-        if (filteredGraphData) {
-            const {
-                edgeCounts: filteredEdgeCounts,
-                totalNodeEdges: filteredTotalNodeEdges,
-                ratioEdges: filteredRatioEdges,
-                edgeOutcomeCounts: filteredEdgeOutcomeCounts,
-                maxEdgeCount: filteredMaxEdgeCount,
-                totalVisits: filteredTotalVisits,
-                repeatVisits: filteredRepeatVisits
-            } = filteredGraphData;
+        const result: {[key: string]: any} = {};
 
-            // Calculate max min edge count for filtered data
-            const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
-            if (sequenceToUse) {
-                console.log("GraphvizParent: Calculating maxMinEdgeCount for FILTERED graph");
-                console.log("GraphvizParent: Filter:", filter);
-                console.log("GraphvizParent: Filtered edge count keys:", Object.keys(filteredEdgeCounts).length);
-                console.log("GraphvizParent: Filtered unique student mode:", uniqueStudentMode);
-                const filteredCountsToUse = uniqueStudentMode ? filteredEdgeCounts : filteredTotalVisits;
-                const filteredMinEdgeCount = calculateMaxMinEdgeCount(filteredCountsToUse, sequenceToUse);
-                console.log("GraphvizParent: Setting filtered maxMinEdgeCount to:", filteredMinEdgeCount);
-                onMaxMinEdgeCountChange(filteredMinEdgeCount);
+        filters.forEach(filter => {
+            const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
+            const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
+            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+
+            const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
+
+            result[filter] = {
+                filteredData,
+                filteredStepSequences,
+                filteredOutcomeSequences,
+                edgeCounts: results.edgeCounts,
+                totalNodeEdges: results.totalNodeEdges,
+                ratioEdges: results.ratioEdges,
+                edgeOutcomeCounts: results.edgeOutcomeCounts,
+                maxEdgeCount: results.maxEdgeCount,
+                totalVisits: results.totalVisits,
+                repeatVisits: results.repeatVisits,
+                firstAttemptOutcomes: results.firstAttemptOutcomes
+            };
+        });
+
+        return result;
+    }, [filters, mainGraphData, selfLoops, uniqueStudentMode]);
+
+    // Initialize minVisits for main graphs when data loads
+    React.useEffect(() => {
+        if (!mainGraphData) return;
+
+        const newMinVisits = {...minVisitsPerGraph};
+        let changed = false;
+
+        // Initialize main graphs - selected sequence should start at 0
+        if (!('selected_sequence' in minVisitsPerGraph)) {
+            newMinVisits['selected_sequence'] = 0;
+            changed = true;
+        }
+        if (!('all_students' in minVisitsPerGraph)) {
+            newMinVisits['all_students'] = Math.round(mainGraphData.maxEdgeCount * 0.1);
+            changed = true;
+        }
+
+        if (changed) {
+            setMinVisitsPerGraph(newMinVisits);
+        }
+    }, [mainGraphData]);
+
+    // Initialize minVisits for filtered graphs when they load
+    React.useEffect(() => {
+        if (Object.keys(filteredGraphDataMap).length === 0) return;
+
+        const newMinVisits = {...minVisitsPerGraph};
+        let changed = false;
+
+        filters.forEach(filter => {
+            const key = `filtered_graph_${filter}`;
+            const filteredData = filteredGraphDataMap[filter];
+
+            if (filteredData && !(key in newMinVisits)) {
+                // Set to 10% of the filtered graph's maxEdgeCount
+                newMinVisits[key] = Math.round(filteredData.maxEdgeCount * 0.1);
+                changed = true;
             }
+        });
 
-            // Use appropriate data for filtered thickness normalization based on mode
-            const filteredCountsForThickness = uniqueStudentMode ? filteredEdgeCounts : filteredTotalVisits;
-            const filteredMaxCountForThickness = uniqueStudentMode ? filteredMaxEdgeCount : Math.max(...Object.values(filteredTotalVisits), 1);
-            const normalizedThicknesses = normalizeThicknesses(filteredCountsForThickness, filteredMaxCountForThickness, 10);
+        if (changed) {
+            setMinVisitsPerGraph(newMinVisits);
+        }
+    }, [filters, filteredGraphDataMap]);
 
-            const filteredDotString = generateDotString(
-                normalizedThicknesses,
-                filteredRatioEdges,
-                filteredEdgeOutcomeCounts,
-                filteredEdgeCounts,
-                filteredTotalNodeEdges,
-                1,
-                minVisits,
-                sequenceToUse,
-                false,
-                filteredTotalVisits,
-                filteredRepeatVisits,
-                errorMode,
-                filteredGraphData.firstAttemptOutcomes,
-                uniqueStudentMode,
-            );
+    // Filtered graphs calculation - runs when filters change
+    useEffect(() => {
+        if (Object.keys(filteredGraphDataMap).length > 0) {
+            const newFilteredDotStrings: {[key: string]: string} = {};
 
-            setFilteredDotString(filteredDotString);
+            Object.entries(filteredGraphDataMap).forEach(([filter, filteredGraphData]) => {
+                const {
+                    edgeCounts: filteredEdgeCounts,
+                    totalNodeEdges: filteredTotalNodeEdges,
+                    ratioEdges: filteredRatioEdges,
+                    edgeOutcomeCounts: filteredEdgeOutcomeCounts,
+                    maxEdgeCount: filteredMaxEdgeCount,
+                    totalVisits: filteredTotalVisits,
+                    repeatVisits: filteredRepeatVisits
+                } = filteredGraphData;
+
+                const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
+
+                // Use appropriate data for filtered thickness normalization based on mode
+                const filteredCountsForThickness = uniqueStudentMode ? filteredEdgeCounts : filteredTotalVisits;
+                const visitValues = Object.values(filteredTotalVisits) as number[];
+                const filteredMaxCountForThickness = uniqueStudentMode ? filteredMaxEdgeCount : Math.max(...visitValues, 1);
+                const normalizedThicknesses = normalizeThicknesses(filteredCountsForThickness, filteredMaxCountForThickness, 10);
+
+                const graphKey = `filtered_graph_${filter}`;
+                const filteredDotString = generateDotString(
+                    normalizedThicknesses,
+                    filteredRatioEdges,
+                    filteredEdgeOutcomeCounts,
+                    filteredEdgeCounts,
+                    filteredTotalNodeEdges,
+                    1,
+                    minVisitsPerGraph[graphKey] ?? Math.round(filteredMaxEdgeCount * 0.1), // Use per-graph minVisits or 10% default
+                    sequenceToUse,
+                    false,
+                    filteredTotalVisits,
+                    filteredRepeatVisits,
+                    errorMode,
+                    filteredGraphData.firstAttemptOutcomes,
+                    uniqueStudentMode,
+                );
+
+                newFilteredDotStrings[filter] = filteredDotString;
+            });
+
+            setFilteredDotStrings(newFilteredDotStrings);
         } else {
-            setFilteredDotString(null);
+            setFilteredDotStrings({});
             // Reset max min edge count to the main graph's value
             if (mainGraphData) {
                 const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
@@ -282,7 +362,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
         }
-    }, [filteredGraphData, minVisits, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode]);
+    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode]);
 
     // Cleanup all event listeners when component unmounts
     useEffect(() => {
@@ -294,12 +374,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         };
     }, []);
 
-    // Export a graph as high-quality PNG
-    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, filename: string) => {
+    // Export a graph as high-quality PNG with problem name
+    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, graphName: string, minStudents?: number) => {
         if (!graphRef.current) return;
 
         const svgElement = graphRef.current.querySelector('svg');
         if (!svgElement) return;
+
+        // Build filename: problemName_graphName_minXX
+        const sanitizedProblemName = problemName.replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedGraphName = graphName.replace(/[^a-zA-Z0-9]/g, '_');
+        let filename = `${sanitizedProblemName}_${sanitizedGraphName}`;
+        if (minStudents !== undefined) {
+            filename += `_min${minStudents}`;
+        }
 
         // Get SVG dimensions
         const width = svgElement.viewBox.baseVal.width || 425;
@@ -343,7 +431,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
     };
 
-    const numberOfGraphs = [topDotString, dotString, filteredDotString].filter(Boolean).length;
+    const numberOfGraphs = [topDotString, dotString, ...Object.values(filteredDotStrings)].filter(Boolean).length;
 
     // Helper functions for history management
     const formatTime = (date: Date): string => {
@@ -788,14 +876,18 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // Clean up existing event listeners for this graph
             cleanupEventListeners(filename);
             
-            // Dynamically adjust width based on the number of graphs
-            const width = numberOfGraphs === 3 ? 325 : 425;
+            // Dynamically adjust width based on the number of graphs and which graph it is
+            // Selected Sequence is narrower since it only displays vertically
+            const isSelectedSequence = filename === 'selected_sequence';
+            let width: number;
+
+            if (isSelectedSequence) {
+                width = 250; // Narrower for vertical-only Selected Sequence
+            } else {
+                width = numberOfGraphs >= 3 ? 375 : 475; // Reduced to fit within container padding
+            }
+
             const height = 530;
-            
-            // Account for container padding more accurately
-            const containerPadding = 16; // p-4 = 16px padding on each side
-            const effectiveWidth = width - (containerPadding * 2);
-            const effectiveHeight = height - (containerPadding * 2);
 
             try {
                 graphviz(ref.current)
@@ -825,9 +917,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 if (bbox.width > 0 && bbox.height > 0) {
                                     // Only scale down if the graph is actually too large
                                     const padding = 60;
-                                    const availableWidth = effectiveWidth - padding * 2;
-                                    const availableHeight = effectiveHeight - padding * 2;
-                                    
+                                    const availableWidth = width - padding * 2;
+                                    const availableHeight = height - padding * 2;
+
                                     // Only scale if graph is larger than available space
                                     if (bbox.width > availableWidth || bbox.height > availableHeight) {
                                         const scaleX = availableWidth / bbox.width;
@@ -837,33 +929,31 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         // Graph fits fine, use normal scale
                                         initialScale = 1.0;
                                     }
-                                    
+
                                     // Calculate scaled dimensions
                                     const scaledWidth = bbox.width * initialScale;
                                     const scaledHeight = bbox.height * initialScale;
-                                    
+
                                     // Calculate top-left position for the scaled graph
                                     const scaledBboxTopLeftX = bbox.x * initialScale;
                                     const scaledBboxTopLeftY = bbox.y * initialScale;
-                                    
+
                                     // Calculate proper centering
                                     initialTranslateX = (width - scaledWidth) / 2 - scaledBboxTopLeftX;
                                     initialTranslateY = (height - scaledHeight) / 2 - scaledBboxTopLeftY;
-                                    
+
                                     // Add upward bias to prevent bottom nodes from being cut off
                                     initialTranslateY -= 60;
-                                    
+
                                     // Add leftward bias to center graphs better
                                     initialTranslateX -= 50;
-                                    
+
                                     console.log(`Centering calculation for ${filename}:`, {
                                         containerSize: { width, height },
-                                        effectiveSize: { width: effectiveWidth, height: effectiveHeight },
                                         bbox: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height },
                                         scale: initialScale,
                                         scaledDimensions: { width: scaledWidth, height: scaledHeight },
-                                        translate: { x: initialTranslateX, y: initialTranslateY },
-                                        containerPadding
+                                        translate: { x: initialTranslateX, y: initialTranslateY }
                                     });
                                 }
                             }
@@ -1087,8 +1177,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         
                                         console.log(`Node clicked: ${nodeName} in ${filename}`);
                                         
-                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' : 
-                                                        filename === 'all_students' ? 'All Students' : 'Filtered Graph';
+                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' :
+                                                        filename === 'all_students' ? 'All Students' :
+                                                        filename.startsWith('filtered_graph_') ? `Filtered Graph: ${titleCase(filename.replace('filtered_graph_', ''))}` : 'Filtered Graph';
                                         
                                         const tooltipContent = generateNodeTooltip(nodeName, graphType);
                                         
@@ -1172,8 +1263,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                             recentClicks.current.delete(clickId);
                                         }, recentClickThreshold);
                                         
-                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' : 
-                                                        filename === 'all_students' ? 'All Students' : 'Filtered Graph';
+                                        const graphType = filename === 'selected_sequence' ? 'Selected Sequence' :
+                                                        filename === 'all_students' ? 'All Students' :
+                                                        filename.startsWith('filtered_graph_') ? `Filtered Graph: ${titleCase(filename.replace('filtered_graph_', ''))}` : 'Filtered Graph';
                                         
                                         // Create history item with basic info immediately
                                         const historyItem: HistoryItem = {
@@ -1221,20 +1313,28 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 resetButton.title = 'Reset View (or double-click graph)';
                                 resetButton.style.cssText = `
                                     position: absolute;
-                                    top: 10px;
-                                    right: 10px;
-                                    width: 30px;
-                                    height: 30px;
-                                    border: 1px solid #ccc;
+                                    top: 8px;
+                                    right: 8px;
+                                    width: 32px;
+                                    height: 32px;
+                                    border: 1px solid #d1d5db;
                                     border-radius: 4px;
-                                    background: rgba(255, 255, 255, 0.9);
+                                    background: rgba(255, 255, 255, 1);
+                                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
                                     cursor: pointer;
                                     font-size: 16px;
                                     display: flex;
                                     align-items: center;
-                                    justify-content: center;
+                                    justify-center: center;
                                     z-index: 10;
+                                    transition: background-color 0.2s;
                                 `;
+                                resetButton.addEventListener('mouseover', () => {
+                                    resetButton.style.background = 'rgba(249, 250, 251, 1)';
+                                });
+                                resetButton.addEventListener('mouseout', () => {
+                                    resetButton.style.background = 'rgba(255, 255, 255, 1)';
+                                });
                                 resetButton.addEventListener('click', resetView);
                                 container.style.position = 'relative';
                                 container.appendChild(resetButton);
@@ -1263,12 +1363,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [dotString, numberOfGraphs]);
 
     useEffect(() => {
-        if (filter && filter !== 'ALL' && filteredDotString && graphRefFiltered.current) {
-            renderGraph(filteredDotString, graphRefFiltered, 'filtered_graph', numberOfGraphs);
-        } else if (filter === 'ALL' || !filter) {
-            setFilteredDotString(null);
-        }
-    }, [filteredDotString, numberOfGraphs, filter]);
+        filters.forEach(filter => {
+            const dotString = filteredDotStrings[filter];
+            const ref = graphRefFilteredRefs.current[filter];
+            if (dotString && ref?.current) {
+                renderGraph(dotString, ref, `filtered_graph_${filter}`, numberOfGraphs);
+            }
+        });
+    }, [filteredDotStrings, numberOfGraphs, filters]);
 
 
     return (
@@ -1310,31 +1412,71 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
                         {topDotString && (
                             <div
-                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                className={`graph-item flex flex-col items-center w-[350px] border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                 <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
-                                <div ref={graphRefTop}
-                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
-                                <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence')} />
+                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
+                                    <GraphMenu
+                                        maxValue={mainGraphData?.maxEdgeCount || 100}
+                                        value={minVisitsPerGraph['selected_sequence'] ?? 0}
+                                        onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, 'selected_sequence': value})}
+                                        uniqueStudentMode={uniqueStudentMode}
+                                        showSlider={false}
+                                        showSequenceFilter={true}
+                                        showOnlySequenceStudents={showOnlySequenceStudents}
+                                        onSequenceFilterChange={(value) => setShowOnlySequenceStudents(value)}
+                                    />
+                                    <div ref={graphRefTop} className="w-full h-full"></div>
+                                </div>
+                                <div className="w-full flex justify-center mt-2">
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence', minVisitsPerGraph['selected_sequence'])} />
+                                </div>
                             </div>
                         )}
                         {dotString && (
                             <div
-                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                 <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
-                                <div ref={graphRefMain}
-                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
-                                <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students')} />
+                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
+                                    <GraphMenu
+                                        maxValue={mainGraphData?.maxEdgeCount || 100}
+                                        value={minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1)}
+                                        onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, 'all_students': value})}
+                                        uniqueStudentMode={uniqueStudentMode}
+                                    />
+                                    <div ref={graphRefMain} className="w-full h-full"></div>
+                                </div>
+                                <div className="w-full flex justify-center mt-2">
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1))} />
+                                </div>
                             </div>
                         )}
-                        {filter && filter !== 'ALL' && filteredDotString && (
-                            <div
-                                className={`graph-item flex flex-col items-center ${topDotString && dotString && filteredDotString ? 'w-[400px]' : 'w-[500px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-2">Filtered Graph: {titleCase(filter)}</h2>
-                                <div ref={graphRefFiltered}
-                                    className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center"></div>
-                                <ExportButton onClick={() => exportGraphAsPNG(graphRefFiltered, 'filtered_graph')} />
-                            </div>
-                        )}
+                        {filters.map(filter => {
+                            const dotString = filteredDotStrings[filter];
+                            const ref = graphRefFilteredRefs.current[filter];
+                            const graphKey = `filtered_graph_${filter}`;
+                            const filteredGraphData = filteredGraphDataMap[filter];
+                            if (!dotString || !ref) return null;
+
+                            return (
+                                <div
+                                    key={filter}
+                                    className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                    <h2 className="text-lg font-semibold text-center mb-2">Filtered Graph: {titleCase(filter)}</h2>
+                                    <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
+                                        <GraphMenu
+                                            maxValue={filteredGraphData?.maxEdgeCount || 100}
+                                            value={minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1)}
+                                            onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, [graphKey]: value})}
+                                            uniqueStudentMode={uniqueStudentMode}
+                                        />
+                                        <div ref={ref} className="w-full h-full"></div>
+                                    </div>
+                                    <div className="w-full flex justify-center mt-2">
+                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1))} />
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 

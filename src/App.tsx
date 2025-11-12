@@ -4,7 +4,6 @@ import {Button} from './components/ui/button';
 import Upload from "@/components/Upload.tsx";
 import GraphvizParent from "@/components/GraphvizParent.tsx";
 import FilterComponent from './components/FilterComponent.tsx';
-import Slider from '@/components/slider.tsx';
 import SequenceSelector from "@/components/SequenceSelector.tsx";
 import {Context, SequenceCount} from "@/Context.tsx";
 import {
@@ -12,7 +11,6 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import {Input} from "@/components/ui/input"
 
 import Loading from './components/Loading.tsx';
 import Switch from "./components/switch.tsx";
@@ -69,8 +67,8 @@ const getFileTypeIcon = (filename: string): string => {
 function App() {
     // State to hold the uploaded CSV data as a string
     // const [csvData, setCsvData] = useState<string>('');
-    // State to manage the filter value for filtering the graph data
-    const [filter, setFilter] = useState<string>('');
+    // State to manage the filter values for filtering the graph data (can show multiple)
+    const [filters, setFilters] = useState<string[]>([]);
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [errorMode, setErrorMode] = useState<boolean>(false);
@@ -178,16 +176,6 @@ function App() {
      */
     const handleToggleUniqueStudentMode = () => setUniqueStudentMode(!uniqueStudentMode);
 
-
-    /**
-     * Updates the minimum visits for edges in the graph when the slider is moved.
-     *
-     * @param {number} value - The new value for minimum visits.
-     */
-    const handleSlider = (value: number) => {
-        setMinVisitsPercentage(value);
-    };
-
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
      *
@@ -202,21 +190,8 @@ function App() {
         }
     };
 
-    // Calculate actual min visits from percentage
+    // Calculate actual min visits from percentage (still needed for GraphvizParent)
     const minVisits = Math.round((minVisitsPercentage / 100) * maxEdgeCount);
-
-    /**
-     * Updates the minimum visits percentage when the input value changes.
-     *
-     * @param {string} value - The new value from the input.
-     */
-    const handleInputChange = (value: string) => {
-        const numValue = parseInt(value);
-        if (!isNaN(numValue)) {
-            const percentage = Math.min(100, Math.max(0, (numValue / maxEdgeCount) * 100));
-            setMinVisitsPercentage(percentage);
-        }
-    };
 
     /**
      * Updates the loading state when the file upload or processing begins or ends.
@@ -230,17 +205,6 @@ function App() {
             <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 mb-4">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <h1 className="text-2xl text-gray-900">Path Analysis Tool</h1>
-                    <div className="flex items-center space-x-4">
-                        <Button
-                            variant="destructive"
-                            onClick={() => {
-                                resetData();
-                                setFileInfo(null);
-                            }}
-                        >
-                            Reset
-                        </Button>
-                    </div>
                 </div>
             </header>
             {!showControls && <Upload onDataProcessed={handleDataProcessed}/>}
@@ -260,8 +224,8 @@ function App() {
                 showControls && (
                     <div className="p-5 m-2 flex flex-col gap-3">
 
-                        <div className="selected-sequence-bar flex justify-between bg-gray-200 p-4 mb-4">
-                            <h2 className="text-lg font-semibold">Selected Sequence:</h2>
+                        <div className="selected-sequence-bar flex items-center bg-gray-200 p-4 mb-4">
+                            <h2 className="text-lg font-semibold whitespace-nowrap">Selected Sequence:</h2>
                             {selectedSequence && (
                                 <h2 className="flex-1 text-sm break-words whitespace-normal ml-2">
                                     {selectedSequence.toString().split(',').join(' → ')}
@@ -290,16 +254,17 @@ function App() {
                                 </div>
                             </div>
                         )}
-                        {/* Properties Button */}
-                        <Popover>
-                            <PopoverTrigger
-                                className="w-fit bg-slate-500 p-3 rounded-lg text-white">Properties</PopoverTrigger>
-                            <PopoverContent className="w-96 bg-white rounded-lg shadow-lg p-6 border border-gray-200 mx-10">
+                        {/* Properties and Reset Buttons */}
+                        <div className="flex items-center gap-2">
+                            <Popover>
+                                <PopoverTrigger
+                                    className="w-fit bg-slate-500 p-3 rounded-lg text-white">Properties</PopoverTrigger>
+                                <PopoverContent className="w-96 bg-white rounded-lg shadow-lg p-6 border border-gray-200 mx-10">
                                 <div className="flex flex-col space-y-6">
                                     {/* Filter Section */}
                                     <div className="space-y-2">
                                         <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                                        <FilterComponent onFilterChange={setFilter} currentFilter={filter}/>
+                                        <FilterComponent onFilterChange={setFilters} currentFilters={filters}/>
                                     </div>
 
                                     {/* Sequence Section */}
@@ -340,62 +305,22 @@ function App() {
                                             </label>
                                             <Switch isOn={uniqueStudentMode} handleToggle={handleToggleUniqueStudentMode}/>
                                         </div>
-
-
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-700">
-                                                {uniqueStudentMode ? 'Minimum Students' : 'Minimum Visits'}
-                                            </label>
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <div className="flex justify-between mb-1">
-                                                        {/* <span className="text-sm text-gray-500">Percentage</span>
-                                                        <span className="text-sm text-gray-500">{minVisitsPercentage}%</span> */}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Slider
-                                                            step={1}
-                                                            min={0}
-                                                            max={maxMinEdgeCount > 0 ? Math.round((maxMinEdgeCount / maxEdgeCount) * 100) : 100}
-                                                            value={minVisitsPercentage}
-                                                            onChange={handleSlider}
-                                                            maxEdgeCount={maxEdgeCount}
-                                                            uniqueStudentMode={uniqueStudentMode}
-                                                        />
-                                                        <span className="text-sm text-gray-500">%</span>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="flex justify-between mb-1">
-                                                        <span className="text-sm text-gray-500">
-                                                            {uniqueStudentMode ? 'Students' : 'Visits'}
-                                                        </span>
-                                                    </div>
-                                                    <Input
-                                                        type="number"
-                                                        value={minVisits}
-                                                        onChange={(e) => handleInputChange(e.target.value)}
-                                                        className="w-full"
-                                                        min={0}
-                                                        max={maxEdgeCount}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-xs text-gray-500">
-                                                    Controls the "All Students, All Paths" graph visibility
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    Maximum threshold before any node becomes
-                                                    disconnected: {maxMinEdgeCount} {uniqueStudentMode ? 'students' : 'visits'}
-                                                </p>
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
                             </PopoverContent>
                         </Popover>
 
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                resetData();
+                                setFileInfo(null);
+                            }}
+                            className="p-3"
+                        >
+                            Reset
+                        </Button>
+                    </div>
 
                         {/* Graph and Data Display */}
                         {!loading && csvData && (
@@ -405,13 +330,14 @@ function App() {
                                         {/* GraphvizParent component generates and displays the graph based on the CSV data */}
                                         <GraphvizParent
                                             csvData={csvData}
-                                            filter={filter}
+                                            filters={filters}
                                             selfLoops={uniqueStudentMode ? false : selfLoops}
                                             minVisits={minVisits}
                                             onMaxEdgeCountChange={setMaxEdgeCount}
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
                                             errorMode={errorMode}
                                             uniqueStudentMode={uniqueStudentMode}
+                                            problemName={fileInfo?.filename.replace(/\.(csv|CSV)$/, '') || 'unknown'}
                                         />
                                     </div>
                                 </div>
