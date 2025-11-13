@@ -28,7 +28,7 @@ const FilterComponent: React.FC<FilterComponentProps> = ({ onFilterChange, curre
                     <Checkbox
                         id="graduated"
                         checked={currentFilters.includes('GRADUATED')}
-                        onCheckedChange={(checked) => handleCheckboxChange('GRADUATED', checked as boolean)}
+                        onCheckedChange={(checked: boolean | 'indeterminate') => handleCheckboxChange('GRADUATED', checked as boolean)}
                     />
                     <Label htmlFor="graduated" className="cursor-pointer">Graduated</Label>
                 </div>
@@ -36,7 +36,7 @@ const FilterComponent: React.FC<FilterComponentProps> = ({ onFilterChange, curre
                     <Checkbox
                         id="promoted"
                         checked={currentFilters.includes('PROMOTED')}
-                        onCheckedChange={(checked) => handleCheckboxChange('PROMOTED', checked as boolean)}
+                        onCheckedChange={(checked: boolean | 'indeterminate') => handleCheckboxChange('PROMOTED', checked as boolean)}
                     />
                     <Label htmlFor="promoted" className="cursor-pointer">Promoted</Label>
                 </div>

@@ -37,7 +37,7 @@ This tool visualizes student learning paths through educational content, showing
 1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
 2. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running ```npm install -g @bun/cli```. Docs: https://bun.sh/
 3. Run ```bun install``` to download the necessary dependencies.
-4. You will need a local .env file with secret variables. Reach out to Ethan for these.
+4. You will need a local .env file with secret variables.
 5. Run ```bun run dev``` to start the development server.
 
 ## File Format Requirements

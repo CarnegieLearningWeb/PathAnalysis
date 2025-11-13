@@ -378,7 +378,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, graphName: string, minStudents?: number) => {
         if (!graphRef.current) return;
 
-        const svgElement = graphRef.current.querySelector('svg');
+        const svgElement = graphRef.current.querySelector('svg') as SVGSVGElement;
         if (!svgElement) return;
 
         // Build filename: problemName_graphName_minXX
@@ -389,21 +389,43 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             filename += `_min${minStudents}`;
         }
 
-        // Get SVG dimensions
-        const width = svgElement.viewBox.baseVal.width || 425;
-        const height = svgElement.viewBox.baseVal.height || 600;
+        // Get the actual content bounding box to capture the entire visible graph
+        const gElement = svgElement.querySelector('g') as SVGGElement;
+        if (!gElement) return;
 
-        // Clone the SVG to avoid style inheritance issues
-        const clonedSvg = svgElement.cloneNode(true);
+        const bbox = gElement.getBBox();
+
+        // Add padding around the content
+        const padding = 20;
+        const contentWidth = bbox.width + (padding * 2);
+        const contentHeight = bbox.height + (padding * 2);
+
+        // Clone the SVG and adjust its viewBox to match the content
+        const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
+        const clonedG = clonedSvg.querySelector('g') as SVGGElement;
+
+        // Remove any transforms from the cloned g element to get the raw content
+        if (clonedG) {
+            clonedG.removeAttribute('transform');
+        }
+
+        // Set viewBox to show all content with padding
+        clonedSvg.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${contentWidth} ${contentHeight}`);
+        clonedSvg.setAttribute('width', contentWidth.toString());
+        clonedSvg.setAttribute('height', contentHeight.toString());
 
         // Create a high-resolution canvas
-        const scaleFactor = 5; // Adjust for higher quality (e.g., 2x or 3x)
+        const scaleFactor = 3; // High quality export
         const canvas = document.createElement('canvas');
-        canvas.width = (width * scaleFactor) * 1.25;
-        canvas.height = (height * scaleFactor) * 1.5;
+        canvas.width = contentWidth * scaleFactor;
+        canvas.height = contentHeight * scaleFactor;
         const ctx = canvas.getContext('2d');
 
         if (!ctx) return;
+
+        // Fill with white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Serialize the SVG
         const svgData = new XMLSerializer().serializeToString(clonedSvg);
@@ -412,10 +434,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const img = new Image();
         img.onload = () => {
             // Scale the canvas content for higher resolution
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.scale(scaleFactor, scaleFactor);
-
-            ctx.drawImage(img, 0, 0);
+            ctx.drawImage(img, 0, 0, contentWidth, contentHeight);
 
             // Export as PNG
             const link = document.createElement('a');
@@ -878,16 +898,19 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             
             // Dynamically adjust width based on the number of graphs and which graph it is
             // Selected Sequence is narrower since it only displays vertically
+            // Container widths: Selected Sequence = 350px, Others = 475px/575px
+            // Each has outer padding (p-4 = 32px) and inner white div padding (p-4 = 32px)
+            // So available space = container - 64px total padding
             const isSelectedSequence = filename === 'selected_sequence';
             let width: number;
 
             if (isSelectedSequence) {
-                width = 250; // Narrower for vertical-only Selected Sequence
+                width = 350 - 64; // 286px for vertical-only Selected Sequence
             } else {
-                width = numberOfGraphs >= 3 ? 375 : 475; // Reduced to fit within container padding
+                width = numberOfGraphs >= 3 ? 475 - 64 : 575 - 64; // 411px or 511px
             }
 
-            const height = 530;
+            const height = 575 - 64; // 511px to match inner div height minus padding
 
             try {
                 graphviz(ref.current)
@@ -1304,40 +1327,42 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             // Store the listeners for this graph
                             eventListenersRef.current.set(filename, newListeners);
 
-                            // Add reset view button overlay
-                            const container = ref.current;
-                            if (container && !container.querySelector('.reset-view-btn')) {
-                                const resetButton = document.createElement('button');
-                                resetButton.className = 'reset-view-btn';
-                                resetButton.innerHTML = '↻';
-                                resetButton.title = 'Reset View (or double-click graph)';
-                                resetButton.style.cssText = `
-                                    position: absolute;
-                                    top: 8px;
-                                    right: 8px;
-                                    width: 32px;
-                                    height: 32px;
-                                    border: 1px solid #d1d5db;
-                                    border-radius: 4px;
-                                    background: rgba(255, 255, 255, 1);
-                                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-                                    cursor: pointer;
-                                    font-size: 16px;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-center: center;
-                                    z-index: 10;
-                                    transition: background-color 0.2s;
-                                `;
-                                resetButton.addEventListener('mouseover', () => {
-                                    resetButton.style.background = 'rgba(249, 250, 251, 1)';
-                                });
-                                resetButton.addEventListener('mouseout', () => {
-                                    resetButton.style.background = 'rgba(255, 255, 255, 1)';
-                                });
-                                resetButton.addEventListener('click', resetView);
-                                container.style.position = 'relative';
-                                container.appendChild(resetButton);
+                            // Add reset view button overlay to parent container (sibling of GraphMenu)
+                            const graphContainer = ref.current;
+                            if (graphContainer) {
+                                const parentContainer = graphContainer.parentElement;
+                                if (parentContainer && !parentContainer.querySelector('.reset-view-btn')) {
+                                    const resetButton = document.createElement('button');
+                                    resetButton.className = 'reset-view-btn';
+                                    resetButton.innerHTML = '↻';
+                                    resetButton.title = 'Reset View (or double-click graph)';
+                                    resetButton.style.cssText = `
+                                        position: absolute;
+                                        top: 8px;
+                                        right: 8px;
+                                        width: 32px;
+                                        height: 32px;
+                                        border: 1px solid #d1d5db;
+                                        border-radius: 4px;
+                                        background: rgba(255, 255, 255, 1);
+                                        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+                                        cursor: pointer;
+                                        font-size: 16px;
+                                        display: flex;
+                                        align-items: center;
+                                        justify-content: center;
+                                        z-index: 10;
+                                        transition: background-color 0.2s;
+                                    `;
+                                    resetButton.addEventListener('mouseover', () => {
+                                        resetButton.style.background = 'rgba(249, 250, 251, 1)';
+                                    });
+                                    resetButton.addEventListener('mouseout', () => {
+                                        resetButton.style.background = 'rgba(255, 255, 255, 1)';
+                                    });
+                                    resetButton.addEventListener('click', resetView);
+                                    parentContainer.appendChild(resetButton);
+                                }
                             }
                         }
                     }
@@ -1418,12 +1443,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <GraphMenu
                                         maxValue={mainGraphData?.maxEdgeCount || 100}
                                         value={minVisitsPerGraph['selected_sequence'] ?? 0}
-                                        onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, 'selected_sequence': value})}
+                                        onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, 'selected_sequence': value})}
                                         uniqueStudentMode={uniqueStudentMode}
                                         showSlider={false}
                                         showSequenceFilter={true}
                                         showOnlySequenceStudents={showOnlySequenceStudents}
-                                        onSequenceFilterChange={(value) => setShowOnlySequenceStudents(value)}
+                                        onSequenceFilterChange={(value: boolean) => setShowOnlySequenceStudents(value)}
                                     />
                                     <div ref={graphRefTop} className="w-full h-full"></div>
                                 </div>
@@ -1440,7 +1465,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <GraphMenu
                                         maxValue={mainGraphData?.maxEdgeCount || 100}
                                         value={minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1)}
-                                        onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, 'all_students': value})}
+                                        onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, 'all_students': value})}
                                         uniqueStudentMode={uniqueStudentMode}
                                     />
                                     <div ref={graphRefMain} className="w-full h-full"></div>
@@ -1466,7 +1491,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         <GraphMenu
                                             maxValue={filteredGraphData?.maxEdgeCount || 100}
                                             value={minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1)}
-                                            onChange={(value) => setMinVisitsPerGraph({...minVisitsPerGraph, [graphKey]: value})}
+                                            onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, [graphKey]: value})}
                                             uniqueStudentMode={uniqueStudentMode}
                                         />
                                         <div ref={ref} className="w-full h-full"></div>
