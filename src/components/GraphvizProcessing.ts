@@ -376,6 +376,7 @@ const initializeEdgeTracking = (
 const updateEdgeMetrics = (
     edgeKey: string,
     currentStep: string,
+    _nextStep: string,
     studentId: string,
     outcome: string,
     maps: EdgeTrackingMaps,
@@ -434,6 +435,7 @@ const processStudentPaths = (
             maxEdgeCount = updateEdgeMetrics(
                 edgeKey,
                 currentStep,
+                nextStep,
                 studentId,
                 outcome,
                 maps,
@@ -655,6 +657,7 @@ export const countEdgesForSelectedSequence = (
                                 maxEdgeCount = updateEdgeMetrics(
                                     edgeKey,
                                     currentStep,
+                                    nextStep,
                                     studentId,
                                     outcome,
                                     trackingMaps,
@@ -701,6 +704,7 @@ export const countEdgesForSelectedSequence = (
                             maxEdgeCount = updateEdgeMetrics(
                                 edgeKey,
                                 currentStep,
+                                nextStep,
                                 studentId,
                                 outcome,
                                 trackingMaps,
@@ -1261,14 +1265,15 @@ const generateTopSequenceVisualization = (
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     minVisits: number,
     errorMode: boolean,
-    uniqueStudentMode: boolean = false
+    uniqueStudentMode: boolean = false,
+    colorNodesBySequence: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
 
     for (let rank = 0; rank < totalSteps; rank++) {
         const currentStep = selectedSequence[rank];
-        const color = calculateColor(rank, totalSteps);
+        const color = colorNodesBySequence ? calculateColor(rank, totalSteps) : '#ffffff';
         const studentCount = totalNodeEdges[currentStep] || 0;
         const nodeTooltip = createNodeTooltip(rank, color, studentCount);
 
@@ -1333,7 +1338,8 @@ const generateFullGraphVisualization = (
     threshold: number,
     minVisits: number,
     errorMode: boolean,
-    uniqueStudentMode: boolean = false
+    uniqueStudentMode: boolean = false,
+    colorNodesBySequence: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -1358,7 +1364,7 @@ const generateFullGraphVisualization = (
 
     for (const nodeName of allNodesInEdges) {
         const sequenceRank = selectedSequence.indexOf(nodeName);
-        const color = sequenceRank >= 0 ? calculateColor(sequenceRank, totalSteps) : '#ffffff';
+        const color = (colorNodesBySequence && sequenceRank >= 0) ? calculateColor(sequenceRank, totalSteps) : '#ffffff';
         const rank = sequenceRank >= 0 ? sequenceRank + 1 : 0;
         const studentCount = totalNodeEdges[nodeName] || 0;
         const nodeTooltip = createNodeTooltip(sequenceRank, color, studentCount);
@@ -1438,7 +1444,8 @@ export function generateDotString(
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     errorMode: boolean,
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
-    uniqueStudentMode: boolean = false
+    uniqueStudentMode: boolean = false,
+    colorNodesBySequence: boolean = true
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -1468,7 +1475,8 @@ export function generateDotString(
             repeatVisits,
             minVisits,
             errorMode,
-            uniqueStudentMode
+            uniqueStudentMode,
+            colorNodesBySequence
         );
     } else {
         dotString += generateFullGraphVisualization(
@@ -1484,7 +1492,8 @@ export function generateDotString(
             threshold,
             minVisits,
             errorMode,
-            uniqueStudentMode
+            uniqueStudentMode,
+            colorNodesBySequence
         );
     }
 

@@ -12,6 +12,10 @@ interface GraphMenuProps {
     showSequenceFilter?: boolean;
     showOnlySequenceStudents?: boolean;
     onSequenceFilterChange?: (value: boolean) => void;
+    // Optional props for node coloring checkbox
+    showNodeColoringOption?: boolean;
+    colorNodesBySequence?: boolean;
+    onNodeColoringChange?: (value: boolean) => void;
 }
 
 const GraphMenu: React.FC<GraphMenuProps> = ({
@@ -22,7 +26,10 @@ const GraphMenu: React.FC<GraphMenuProps> = ({
     showSlider = true,
     showSequenceFilter = false,
     showOnlySequenceStudents = true,
-    onSequenceFilterChange
+    onSequenceFilterChange,
+    showNodeColoringOption = false,
+    colorNodesBySequence = true,
+    onNodeColoringChange
 }) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -53,6 +60,22 @@ const GraphMenu: React.FC<GraphMenuProps> = ({
                                 />
                                 <span className="ml-2 text-xs font-medium text-gray-700">
                                     Include only students on this path in edge counts
+                                </span>
+                            </label>
+                        </div>
+                    )}
+
+                    {showNodeColoringOption && onNodeColoringChange && (
+                        <div className="mb-4">
+                            <label className="flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={colorNodesBySequence}
+                                    onChange={(e) => onNodeColoringChange(e.target.checked)}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="ml-2 text-xs font-medium text-gray-700">
+                                    Color nodes by sequence position
                                 </span>
                             </label>
                         </div>

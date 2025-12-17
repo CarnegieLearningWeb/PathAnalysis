@@ -73,6 +73,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     // State for selected sequence graph filtering
     const [showOnlySequenceStudents, setShowOnlySequenceStudents] = useState<boolean>(true);
 
+    // State for node coloring
+    const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
+
     // History state management
     const [activeTab, setActiveTab] = useState<'graphs' | 'history'>('graphs');
     const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
@@ -188,6 +191,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 errorMode, // Use actual errorMode setting
                 mainGraphData.firstAttemptOutcomes,
                 uniqueStudentMode,
+                colorNodesBySequence,
             );
 
             setDotString(dotString);
@@ -223,10 +227,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     false, // Force errorMode to false for static top graph
                     sequenceResults.firstAttemptOutcomes,
                     uniqueStudentMode,
+                    colorNodesBySequence,
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents and selectedSequence
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence and selectedSequence
 
     // Memoized filtered graph data for each filter
     const filteredGraphDataMap = useMemo(() => {
@@ -344,6 +349,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     errorMode,
                     filteredGraphData.firstAttemptOutcomes,
                     uniqueStudentMode,
+                    colorNodesBySequence,
                 );
 
                 newFilteredDotStrings[filter] = filteredDotString;
@@ -375,19 +381,23 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, []);
 
     // Export a graph as high-quality PNG with problem name
-    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, graphName: string, minStudents?: number) => {
+    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, graphName: string, minStudents?: number, isColored?: boolean) => {
         if (!graphRef.current) return;
 
         const svgElement = graphRef.current.querySelector('svg') as SVGSVGElement;
         if (!svgElement) return;
 
-        // Build filename: problemName_graphName_minXX
+        // Build filename: problemName_graphName_minXX_colored
         const sanitizedProblemName = problemName.replace(/[^a-zA-Z0-9]/g, '_');
         const sanitizedGraphName = graphName.replace(/[^a-zA-Z0-9]/g, '_');
         let filename = `${sanitizedProblemName}_${sanitizedGraphName}`;
         if (minStudents !== undefined) {
             filename += `_min${minStudents}`;
         }
+        if (isColored) {
+            filename += '_colored';
+        }
+        console.log('Export PNG - isColored:', isColored, 'filename:', filename);
 
         // Get the actual content bounding box to capture the entire visible graph
         const gElement = svgElement.querySelector('g') as SVGGElement;
@@ -484,10 +494,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     // Helper function to calculate progress status statistics for students at a node
     const calculateNodeProgressStats = (nodeName: string): { graduated: number; promoted: number; other: number; total: number } => {
         if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0 };
-        
+
         const { stepSequences, sortedData } = mainGraphData;
         const studentsAtNode = new Set<string>();
-        
+
         // Find all students who visited this node
         // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
         if (stepSequences && Object.keys(stepSequences).length > 0) {
@@ -502,26 +512,30 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             });
         }
-        
+
         // Count progress status for students who visited this node
+        // IMPORTANT: Filter by current problemName to get accurate progress status
         let graduatedCount = 0;
         let promotedCount = 0;
         let otherCount = 0;
-        
+
         if (sortedData && sortedData.length > 0) {
-            // Create a map of all students and their progress status
+            // Create a map of students and their progress status FOR THIS PROBLEM ONLY
             const studentProgressMap = new Map<string, string>();
             sortedData.forEach((row: any) => {
                 const studentId = row['Anon Student Id'];
+                const rowProblemName = row['Problem Name'];
                 const progressStatus = row['CF (Workspace Progress Status)'];
-                if (studentId && progressStatus) {
+
+                // Only use progress status from rows for the current problem
+                if (studentId && progressStatus && rowProblemName === problemName) {
                     studentProgressMap.set(studentId, progressStatus);
                 }
             });
-            
+
             studentsAtNode.forEach(studentId => {
                 const progressStatus = studentProgressMap.get(studentId);
-                
+
                 if (progressStatus === 'GRADUATED') {
                     graduatedCount++;
                 } else if (progressStatus === 'PROMOTED') {
@@ -531,7 +545,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             });
         }
-        
+
         return {
             graduated: graduatedCount,
             promoted: promotedCount,
@@ -728,21 +742,25 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         }
         
         // Count exact progress status for students who took this transition
+        // IMPORTANT: Filter by current problemName to get accurate progress status
         let graduatedCount = 0;
         let promotedCount = 0;
         let otherCount = 0;
-        
+
         if (sortedData && sortedData.length > 0 && studentsOnEdge.size > 0) {
-            // Create a map of student progress status
+            // Create a map of student progress status FOR THIS PROBLEM ONLY
             const studentProgressMap = new Map<string, string>();
             sortedData.forEach((row: any) => {
                 const studentId = row['Anon Student Id'];
+                const rowProblemName = row['Problem Name'];
                 const progressStatus = row['CF (Workspace Progress Status)'];
-                if (studentId && progressStatus) {
+
+                // Only use progress status from rows for the current problem
+                if (studentId && progressStatus && rowProblemName === problemName) {
                     studentProgressMap.set(studentId, progressStatus);
                 }
             });
-            
+
             studentsOnEdge.forEach(studentId => {
                 const progressStatus = studentProgressMap.get(studentId);
                 if (progressStatus === 'GRADUATED') {
@@ -1449,11 +1467,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         showSequenceFilter={true}
                                         showOnlySequenceStudents={showOnlySequenceStudents}
                                         onSequenceFilterChange={(value: boolean) => setShowOnlySequenceStudents(value)}
+                                        showNodeColoringOption={true}
+                                        colorNodesBySequence={colorNodesBySequence}
+                                        onNodeColoringChange={(value: boolean) => setColorNodesBySequence(value)}
                                     />
                                     <div ref={graphRefTop} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence', minVisitsPerGraph['selected_sequence'])} />
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence', minVisitsPerGraph['selected_sequence'], colorNodesBySequence)} />
                                 </div>
                             </div>
                         )}
@@ -1471,7 +1492,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <div ref={graphRefMain} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1))} />
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1), colorNodesBySequence)} />
                                 </div>
                             </div>
                         )}
@@ -1497,7 +1518,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         <div ref={ref} className="w-full h-full"></div>
                                     </div>
                                     <div className="w-full flex justify-center mt-2">
-                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1))} />
+                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1), colorNodesBySequence)} />
                                     </div>
                                 </div>
                             );
