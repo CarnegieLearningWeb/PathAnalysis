@@ -228,7 +228,9 @@ function App() {
                             <h2 className="text-lg font-semibold whitespace-nowrap">Selected Sequence:</h2>
                             {selectedSequence && (
                                 <h2 className="flex-1 text-sm break-words whitespace-normal ml-2">
-                                    {selectedSequence.toString().split(',').join(' → ')}
+                                    {selectedSequence.length === 0
+                                        ? <span className="italic text-gray-500">None — showing full graphs only</span>
+                                        : selectedSequence.toString().split(',').join(' → ')}
                                 </h2>
                             )}
                         </div>

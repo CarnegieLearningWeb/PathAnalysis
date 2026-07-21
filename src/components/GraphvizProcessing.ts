@@ -1702,7 +1702,10 @@ export function generateDotString(
     sequenceFunnelCounts: { [key: string]: number } | null = null,
     sequenceErrorCounts: { [key: string]: number } | null = null
 ): string {
-    if (!selectedSequence || selectedSequence.length === 0) {
+    // An empty (but defined) sequence means "None" is selected: the full graphs
+    // still render (every node neutral gray, no path emphasis), but the Selected
+    // Sequence graph has nothing to show. undefined means no data at all.
+    if (!selectedSequence || (justTopSequence && selectedSequence.length === 0)) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
     }
 

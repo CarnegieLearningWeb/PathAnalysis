@@ -35,6 +35,11 @@ interface HistoryItem {
 
 const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 
+// Default edge-visibility threshold for a graph: 8% of its max edge count,
+// floored at 1. Matches the Streamlit tool — given the thickness formula
+// (count / max * 10), 8% hides edges thinner than 0.8pt.
+const defaultMinVisits = (maxEdgeCount: number): number => Math.max(1, Math.round(maxEdgeCount * 0.08));
+
 // Helper function to compare arrays for exact equality
 const arraysEqual = (a: string[], b: string[]): boolean => {
     if (a.length !== b.length) return false;
@@ -185,7 +190,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 edgeCountsForGraph,
                 totalNodeEdges,
                 optimalThreshold, // Use calculated optimal threshold
-                minVisitsPerGraph['all_students'] ?? Math.round(maxEdgeCount * 0.1), // Use per-graph minVisits or 10% default
+                minVisitsPerGraph['all_students'] ?? defaultMinVisits(maxEdgeCount), // Use per-graph minVisits or 8% default
                 sequenceToUse,
                 false,
                 totalVisits,
@@ -203,6 +208,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // For the selected sequence graph, use progressive filtering
             // Only count students who completed the FULL sequence (if checkbox is enabled)
             const sequenceToUseForCounting = selectedSequence || topSequences[0]?.sequence || [];
+
+            // "None" selected (empty but defined sequence): skip the Selected
+            // Sequence graph entirely — there is no path to show. The full graphs
+            // still render (all nodes gray) via the main graph above.
+            if (sequenceToUseForCounting.length < 2) {
+                setTopDotString(null);
+                return;
+            }
+
             const sequenceResults = countEdgesForSelectedSequence(
                 mainGraphData.stepSequences,
                 mainGraphData.outcomeSequences,
@@ -296,7 +310,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             changed = true;
         }
         if (!('all_students' in minVisitsPerGraph)) {
-            newMinVisits['all_students'] = Math.round(mainGraphData.maxEdgeCount * 0.1);
+            newMinVisits['all_students'] = defaultMinVisits(mainGraphData.maxEdgeCount);
             changed = true;
         }
 
@@ -317,8 +331,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             const filteredData = filteredGraphDataMap[filter];
 
             if (filteredData && !(key in newMinVisits)) {
-                // Set to 10% of the filtered graph's maxEdgeCount
-                newMinVisits[key] = Math.round(filteredData.maxEdgeCount * 0.1);
+                // Set to 8% of the filtered graph's maxEdgeCount
+                newMinVisits[key] = defaultMinVisits(filteredData.maxEdgeCount);
                 changed = true;
             }
         });
@@ -360,7 +374,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     filteredEdgeCounts,
                     filteredTotalNodeEdges,
                     1,
-                    minVisitsPerGraph[graphKey] ?? Math.round(filteredMaxEdgeCount * 0.1), // Use per-graph minVisits or 10% default
+                    minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredMaxEdgeCount), // Use per-graph minVisits or 8% default
                     sequenceToUse,
                     false,
                     filteredTotalVisits,
@@ -1506,14 +1520,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
                                         maxValue={mainGraphData?.maxEdgeCount || 100}
-                                        value={minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1)}
+                                        value={minVisitsPerGraph['all_students'] ?? defaultMinVisits(mainGraphData?.maxEdgeCount || 100)}
                                         onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, 'all_students': value})}
                                         uniqueStudentMode={uniqueStudentMode}
                                     />
                                     <div ref={graphRefMain} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? Math.round((mainGraphData?.maxEdgeCount || 100) * 0.1), colorNodesBySequence)} />
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? defaultMinVisits(mainGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
                                 </div>
                             </div>
                         )}
@@ -1532,14 +1546,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
                                         <GraphMenu
                                             maxValue={filteredGraphData?.maxEdgeCount || 100}
-                                            value={minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1)}
+                                            value={minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredGraphData?.maxEdgeCount || 100)}
                                             onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, [graphKey]: value})}
                                             uniqueStudentMode={uniqueStudentMode}
                                         />
                                         <div ref={ref} className="w-full h-full"></div>
                                     </div>
                                     <div className="w-full flex justify-center mt-2">
-                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? Math.round((filteredGraphData?.maxEdgeCount || 100) * 0.1), colorNodesBySequence)} />
+                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
                                     </div>
                                 </div>
                             );
