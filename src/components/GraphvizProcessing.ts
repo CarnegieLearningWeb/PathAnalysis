@@ -958,6 +958,66 @@ export function calculateMaxMinEdgeCount(
 }
 
 /**
+ * Highest edge-count threshold at which the graph still forms a single
+ * connected component, floored at 1. Used to cap a per-graph min-visits slider
+ * so the user can't raise the threshold high enough to fragment the graph.
+ *
+ * Mirrors the `effective_max` computation in the Streamlit tool: thresholds are
+ * tested high→low and only the nodes that still appear in a surviving edge must
+ * remain reachable (an undirected BFS). This differs from
+ * calculateMaxMinEdgeCount, which requires every original node to stay
+ * connected and also pins the selected sequence — that is intentionally
+ * stricter and would cap the slider much lower.
+ */
+export function calculateConnectivityCap(countsToUse: { [key: string]: number }): number {
+    const positiveCounts = Object.values(countsToUse).filter(count => count > 0);
+    if (positiveCounts.length === 0) return 1;
+
+    const uniqueCounts = [...new Set(positiveCounts)].sort((a, b) => b - a);
+
+    for (const threshold of uniqueCounts) {
+        // Surviving subgraph at this threshold, as an undirected adjacency list.
+        const nodes = new Set<string>();
+        const adjacency = new Map<string, Set<string>>();
+
+        Object.entries(countsToUse).forEach(([edge, count]) => {
+            if (count < threshold) return;
+            const [from, to] = edge.split('->');
+            if (!from || !to) return;
+            nodes.add(from);
+            nodes.add(to);
+            if (!adjacency.has(from)) adjacency.set(from, new Set());
+            if (!adjacency.has(to)) adjacency.set(to, new Set());
+            adjacency.get(from)!.add(to);
+            adjacency.get(to)!.add(from);
+        });
+
+        if (nodes.size === 0) continue;
+
+        // BFS from an arbitrary surviving node; the subgraph is connected iff we
+        // reach every surviving node.
+        const start = nodes.values().next().value as string;
+        const visited = new Set<string>([start]);
+        const queue = [start];
+        while (queue.length > 0) {
+            const node = queue.shift()!;
+            adjacency.get(node)?.forEach(neighbor => {
+                if (!visited.has(neighbor)) {
+                    visited.add(neighbor);
+                    queue.push(neighbor);
+                }
+            });
+        }
+
+        if (visited.size === nodes.size) {
+            return Math.max(1, threshold);
+        }
+    }
+
+    return 1;
+}
+
+/**
  * Checks if the selected sequence remains connected with the given edges.
  * Validates that each consecutive pair of nodes in the sequence has a valid path.
  *

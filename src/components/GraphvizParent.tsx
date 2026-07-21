@@ -10,6 +10,7 @@ import {
     createOutcomeSequences,
     loadAndSortData,
     calculateMaxMinEdgeCount,
+    calculateConnectivityCap,
     analyzeEquationAnswerTransitions,
     formatEquationAnswerStats,
     computeSequenceFunnelCounts,
@@ -126,7 +127,70 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             ...results
         };
     }, [csvData, selfLoops, uniqueStudentMode]); // Depends on both selfLoops and uniqueStudentMode
-    
+
+    // Memoized filtered graph data for each filter
+    const filteredGraphDataMap = useMemo(() => {
+        if (!mainGraphData || filters.length === 0) return {};
+
+        const result: {[key: string]: any} = {};
+
+        filters.forEach(filter => {
+            const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
+            const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
+            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+
+            const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
+
+            result[filter] = {
+                filteredData,
+                filteredStepSequences,
+                filteredOutcomeSequences,
+                edgeCounts: results.edgeCounts,
+                totalNodeEdges: results.totalNodeEdges,
+                ratioEdges: results.ratioEdges,
+                edgeOutcomeCounts: results.edgeOutcomeCounts,
+                maxEdgeCount: results.maxEdgeCount,
+                totalVisits: results.totalVisits,
+                repeatVisits: results.repeatVisits,
+                firstAttemptOutcomes: results.firstAttemptOutcomes,
+                edgeErrorStudentCounts: results.edgeErrorStudentCounts
+            };
+        });
+
+        return result;
+    }, [filters, mainGraphData, selfLoops, uniqueStudentMode]);
+
+    // Highest min-visits threshold that keeps each graph in one connected
+    // component. Used to cap the per-graph slider so the user can't fragment the
+    // graph. Graph-only (independent of the selected sequence), so it is keyed
+    // on the data + mode, not on selectedSequence.
+    const connectivityCaps = useMemo(() => {
+        const caps: {[key: string]: number} = {};
+        if (mainGraphData) {
+            const counts = uniqueStudentMode ? mainGraphData.edgeCounts : mainGraphData.totalVisits;
+            caps['all_students'] = calculateConnectivityCap(counts);
+        }
+        Object.entries(filteredGraphDataMap).forEach(([filter, data]: [string, any]) => {
+            const counts = uniqueStudentMode ? data.edgeCounts : data.totalVisits;
+            caps[`filtered_graph_${filter}`] = calculateConnectivityCap(counts);
+        });
+        return caps;
+    }, [mainGraphData, filteredGraphDataMap, uniqueStudentMode]);
+
+    // 8% default clamped to the connectivity cap, so the initial threshold never
+    // exceeds what keeps the graph connected (matches the Streamlit tool).
+    const cappedDefault = (maxEdgeCount: number, cap: number | undefined): number =>
+        Math.min(defaultMinVisits(maxEdgeCount), Math.max(1, cap ?? maxEdgeCount));
+
+    // The min-visits threshold in effect for a graph: the user's stored value
+    // (or the capped 8% default), itself clamped to the connectivity cap so it
+    // can never exceed the slider max after a mode/data change desyncs them.
+    const effectiveMinVisits = (key: string, maxEdgeCount: number): number => {
+        const cap = connectivityCaps[key] ?? maxEdgeCount;
+        const value = minVisitsPerGraph[key] ?? cappedDefault(maxEdgeCount, connectivityCaps[key]);
+        return Math.min(value, cap);
+    };
+
     // Main graph calculation - STATIC (only responds to uniqueStudentMode)
     useEffect(() => {
         if (mainGraphData) {
@@ -190,7 +254,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 edgeCountsForGraph,
                 totalNodeEdges,
                 optimalThreshold, // Use calculated optimal threshold
-                minVisitsPerGraph['all_students'] ?? defaultMinVisits(maxEdgeCount), // Use per-graph minVisits or 8% default
+                effectiveMinVisits('all_students', maxEdgeCount), // Use per-graph minVisits (capped) or capped 8% default
                 sequenceToUse,
                 false,
                 totalVisits,
@@ -263,39 +327,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence and selectedSequence
-
-    // Memoized filtered graph data for each filter
-    const filteredGraphDataMap = useMemo(() => {
-        if (!mainGraphData || filters.length === 0) return {};
-
-        const result: {[key: string]: any} = {};
-
-        filters.forEach(filter => {
-            const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
-
-            const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
-
-            result[filter] = {
-                filteredData,
-                filteredStepSequences,
-                filteredOutcomeSequences,
-                edgeCounts: results.edgeCounts,
-                totalNodeEdges: results.totalNodeEdges,
-                ratioEdges: results.ratioEdges,
-                edgeOutcomeCounts: results.edgeOutcomeCounts,
-                maxEdgeCount: results.maxEdgeCount,
-                totalVisits: results.totalVisits,
-                repeatVisits: results.repeatVisits,
-                firstAttemptOutcomes: results.firstAttemptOutcomes,
-                edgeErrorStudentCounts: results.edgeErrorStudentCounts
-            };
-        });
-
-        return result;
-    }, [filters, mainGraphData, selfLoops, uniqueStudentMode]);
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps and selectedSequence
 
     // Initialize minVisits for main graphs when data loads
     React.useEffect(() => {
@@ -310,14 +342,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             changed = true;
         }
         if (!('all_students' in minVisitsPerGraph)) {
-            newMinVisits['all_students'] = defaultMinVisits(mainGraphData.maxEdgeCount);
+            newMinVisits['all_students'] = cappedDefault(mainGraphData.maxEdgeCount, connectivityCaps['all_students']);
             changed = true;
         }
 
         if (changed) {
             setMinVisitsPerGraph(newMinVisits);
         }
-    }, [mainGraphData]);
+    }, [mainGraphData, connectivityCaps]);
 
     // Initialize minVisits for filtered graphs when they load
     React.useEffect(() => {
@@ -331,8 +363,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             const filteredData = filteredGraphDataMap[filter];
 
             if (filteredData && !(key in newMinVisits)) {
-                // Set to 8% of the filtered graph's maxEdgeCount
-                newMinVisits[key] = defaultMinVisits(filteredData.maxEdgeCount);
+                // Set to 8% of the filtered graph's maxEdgeCount, clamped to cap
+                newMinVisits[key] = cappedDefault(filteredData.maxEdgeCount, connectivityCaps[key]);
                 changed = true;
             }
         });
@@ -340,7 +372,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         if (changed) {
             setMinVisitsPerGraph(newMinVisits);
         }
-    }, [filters, filteredGraphDataMap]);
+    }, [filters, filteredGraphDataMap, connectivityCaps]);
 
     // Filtered graphs calculation - runs when filters change
     useEffect(() => {
@@ -374,7 +406,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     filteredEdgeCounts,
                     filteredTotalNodeEdges,
                     1,
-                    minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredMaxEdgeCount), // Use per-graph minVisits or 8% default
+                    effectiveMinVisits(graphKey, filteredMaxEdgeCount), // Use per-graph minVisits (capped) or capped 8% default
                     sequenceToUse,
                     false,
                     filteredTotalVisits,
@@ -403,7 +435,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
         }
-    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode]);
+    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode, connectivityCaps]);
 
     // Cleanup all event listeners when component unmounts
     useEffect(() => {
@@ -1519,15 +1551,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
-                                        maxValue={mainGraphData?.maxEdgeCount || 100}
-                                        value={minVisitsPerGraph['all_students'] ?? defaultMinVisits(mainGraphData?.maxEdgeCount || 100)}
+                                        maxValue={connectivityCaps['all_students'] ?? (mainGraphData?.maxEdgeCount || 100)}
+                                        value={effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100)}
                                         onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, 'all_students': value})}
                                         uniqueStudentMode={uniqueStudentMode}
                                     />
                                     <div ref={graphRefMain} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', minVisitsPerGraph['all_students'] ?? defaultMinVisits(mainGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
+                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
                                 </div>
                             </div>
                         )}
@@ -1545,15 +1577,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <h2 className="text-lg font-semibold text-center mb-2">Filtered Graph: {titleCase(filter)}</h2>
                                     <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
                                         <GraphMenu
-                                            maxValue={filteredGraphData?.maxEdgeCount || 100}
-                                            value={minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredGraphData?.maxEdgeCount || 100)}
+                                            maxValue={connectivityCaps[graphKey] ?? (filteredGraphData?.maxEdgeCount || 100)}
+                                            value={effectiveMinVisits(graphKey, filteredGraphData?.maxEdgeCount || 100)}
                                             onChange={(value: number) => setMinVisitsPerGraph({...minVisitsPerGraph, [graphKey]: value})}
                                             uniqueStudentMode={uniqueStudentMode}
                                         />
                                         <div ref={ref} className="w-full h-full"></div>
                                     </div>
                                     <div className="w-full flex justify-center mt-2">
-                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, minVisitsPerGraph[graphKey] ?? defaultMinVisits(filteredGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
+                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, effectiveMinVisits(graphKey, filteredGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
                                     </div>
                                 </div>
                             );
