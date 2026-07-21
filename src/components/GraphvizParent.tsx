@@ -11,7 +11,9 @@ import {
     loadAndSortData,
     calculateMaxMinEdgeCount,
     analyzeEquationAnswerTransitions,
-    formatEquationAnswerStats
+    formatEquationAnswerStats,
+    computeSequenceFunnelCounts,
+    computeSequenceErrorCounts
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
@@ -192,6 +194,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 mainGraphData.firstAttemptOutcomes,
                 uniqueStudentMode,
                 colorNodesBySequence,
+                maxCountForThickness,
+                mainGraphData.edgeErrorStudentCounts,
             );
 
             setDotString(dotString);
@@ -211,6 +215,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             const sequenceMaxCount = uniqueStudentMode ? sequenceResults.maxEdgeCount : Math.max(...Object.values(sequenceResults.totalVisits), 1);
             const sequenceNormalizedThicknesses = normalizeThicknesses(sequenceCountsForThickness, sequenceMaxCount, 10);
 
+            // When "only students on this path" is on, show funnel-style counts
+            // (monotonically non-increasing along the path) and path-scoped error
+            // counts for the error overlay. Off → raw per-edge counts, no funnel.
+            const funnelCounts = showOnlySequenceStudents
+                ? computeSequenceFunnelCounts(mainGraphData.stepSequences, sequenceToUseForCounting)
+                : null;
+            const seqErrorCounts = showOnlySequenceStudents
+                ? computeSequenceErrorCounts(mainGraphData.stepSequences, mainGraphData.outcomeSequences, sequenceToUseForCounting)
+                : null;
+
             setTopDotString(
                 generateDotString(
                     sequenceNormalizedThicknesses,
@@ -224,10 +238,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     true,
                     sequenceResults.totalVisits,
                     sequenceResults.repeatVisits,
-                    false, // Force errorMode to false for static top graph
+                    errorMode, // Honor Error Mode; overlays are path-scoped for this graph
                     sequenceResults.firstAttemptOutcomes,
                     uniqueStudentMode,
                     colorNodesBySequence,
+                    sequenceMaxCount,
+                    sequenceResults.edgeErrorStudentCounts,
+                    funnelCounts,
+                    seqErrorCounts,
                 )
             );
         }
@@ -257,7 +275,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 maxEdgeCount: results.maxEdgeCount,
                 totalVisits: results.totalVisits,
                 repeatVisits: results.repeatVisits,
-                firstAttemptOutcomes: results.firstAttemptOutcomes
+                firstAttemptOutcomes: results.firstAttemptOutcomes,
+                edgeErrorStudentCounts: results.edgeErrorStudentCounts
             };
         });
 
@@ -350,6 +369,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     filteredGraphData.firstAttemptOutcomes,
                     uniqueStudentMode,
                     colorNodesBySequence,
+                    filteredMaxCountForThickness,
+                    filteredGraphData.edgeErrorStudentCounts,
                 );
 
                 newFilteredDotStrings[filter] = filteredDotString;

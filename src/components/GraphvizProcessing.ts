@@ -44,6 +44,9 @@ type EdgeTrackingMaps = {
     studentEdgeCounts: Map<string, Set<string>>;
     repeatVisits: Map<string, Map<string, number>>;
     firstAttemptOutcomes: Map<string, Map<string, number>>;
+    // Unique students who hit an ERROR on each edge — drives the dashed red
+    // error overlay rendered in Error Mode.
+    edgeErrorUsers: Map<string, Set<string>>;
 };
 
 // ============================================================================
@@ -90,7 +93,10 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         'Session Id': row['Session Id'],
         'Time': row['Time'],
         'Step Name': row['Step Name'] || 'DoneButton',
-        'Outcome': row['Outcome'],
+        // Normalize the "correct" outcome key to CORRECT so it matches the
+        // Okabe-Ito outcome palette used for edge/node coloring. The raw CSV
+        // uses 'OK'; every downstream consumer keys on 'CORRECT'.
+        'Outcome': row['Outcome'] === 'OK' ? 'CORRECT' : row['Outcome'],
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
         'Problem Name': row['Problem Name'],
         'Anon Student Id': row['Anon Student Id'],
@@ -334,7 +340,8 @@ const initializeTrackingMaps = (): EdgeTrackingMaps => ({
     totalVisits: new Map<string, number>(),
     studentEdgeCounts: new Map<string, Set<string>>(),
     repeatVisits: new Map<string, Map<string, number>>(),
-    firstAttemptOutcomes: new Map<string, Map<string, number>>()
+    firstAttemptOutcomes: new Map<string, Map<string, number>>(),
+    edgeErrorUsers: new Map<string, Set<string>>()
 });
 
 /**
@@ -355,6 +362,7 @@ const initializeEdgeTracking = (
         maps.totalVisits.set(edgeKey, 0);
         maps.repeatVisits.set(edgeKey, new Map());
         maps.edgeOutcomeCounts.set(edgeKey, new Map());
+        maps.edgeErrorUsers.set(edgeKey, new Set());
     }
 
     if (!maps.totalNodeEdges.has(currentStep)) {
@@ -405,6 +413,13 @@ const updateEdgeMetrics = (
 
     const outcomeMap = maps.edgeOutcomeCounts.get(edgeKey)!;
     outcomeMap.set(outcome, (outcomeMap.get(outcome) || 0) + 1);
+
+    // Remember this student once if they errored on the edge (used to size the
+    // dashed red error overlay). Uses the same outcome attribution as the edge
+    // outcome counts above, so the overlay stays consistent with edge color.
+    if (outcome === 'ERROR') {
+        maps.edgeErrorUsers.get(edgeKey)!.add(studentId);
+    }
 
     return newMaxEdgeCount;
 };
@@ -503,6 +518,11 @@ const convertMapsToObjects = (
         });
     });
 
+    const edgeErrorStudentCountsObj: { [key: string]: number } = {};
+    maps.edgeErrorUsers.forEach((students, edge) => {
+        edgeErrorStudentCountsObj[edge] = students.size;
+    });
+
     return {
         edgeCounts: edgeCountsObj,
         totalNodeEdges: totalNodeEdgesCounts,
@@ -513,6 +533,7 @@ const convertMapsToObjects = (
         repeatVisits: repeatVisitsObj,
         topSequences,
         firstAttemptOutcomes: firstAttemptOutcomesObj,
+        edgeErrorStudentCounts: edgeErrorStudentCountsObj,
     };
 };
 
@@ -550,6 +571,7 @@ export const countEdges = (
     repeatVisits: { [key: string]: { [studentId: string]: number } };
     topSequences: SequenceCount[];
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
+    edgeErrorStudentCounts: { [key: string]: number };
 } => {
     const combinations = prepareStudentProblemCombinations(stepSequences, outcomeSequences);
     const trackingMaps = initializeTrackingMaps();
@@ -599,6 +621,7 @@ export const countEdgesForSelectedSequence = (
     totalVisits: { [key: string]: number };
     repeatVisits: { [key: string]: { [studentId: string]: number } };
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
+    edgeErrorStudentCounts: { [key: string]: number };
 } => {
     const trackingMaps = initializeTrackingMaps();
     let maxEdgeCount = 0;
@@ -745,6 +768,114 @@ function containsSequence(sequence: string[], subsequence: string[]): boolean {
     }
 
     return false;
+}
+
+/**
+ * Deepest contiguous prefix of `selectedSequence` that appears anywhere in a
+ * single student's step list. Returns { deepest, start } where `deepest` is the
+ * matched length (K means the student completed edges 0..K-2) and `start` is the
+ * path index where that match began (used to align outcomes).
+ */
+function deepestSequencePrefix(steps: string[], selectedSequence: string[]): { deepest: number; start: number } {
+    const seqLen = selectedSequence.length;
+    const n = steps.length;
+    let deepest = 0;
+    let bestStart = 0;
+    for (let start = 0; start < n; start++) {
+        if (steps[start] !== selectedSequence[0]) continue;
+        let length = 1;
+        while (start + length < n && length < seqLen && steps[start + length] === selectedSequence[length]) {
+            length++;
+        }
+        if (length > deepest) {
+            deepest = length;
+            bestStart = start;
+            if (deepest === seqLen) break;
+        }
+    }
+    return { deepest, start: bestStart };
+}
+
+/**
+ * Funnel-style edge counts along `selectedSequence`: for each edge
+ * selected[i]->selected[i+1], the number of unique students whose journey
+ * contains the contiguous prefix selected[0..i+1]. Counts are monotonically
+ * non-increasing along the path (a later edge requires every earlier one).
+ * Each student is counted once (deepest match across their problem sequences).
+ * Mirrors compute_sequence_funnel_counts in the Streamlit version.
+ */
+export function computeSequenceFunnelCounts(
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    selectedSequence: string[]
+): { [key: string]: number } {
+    if (!selectedSequence || selectedSequence.length < 2) return {};
+    const seqLen = selectedSequence.length;
+    const counts = new Array(seqLen - 1).fill(0);
+
+    for (const problems of Object.values(stepSequences)) {
+        let studentDeepest = 0;
+        for (const steps of Object.values(problems)) {
+            if (!steps || steps.length < 2) continue;
+            const { deepest } = deepestSequencePrefix(steps, selectedSequence);
+            if (deepest > studentDeepest) studentDeepest = deepest;
+        }
+        for (let i = 0; i < Math.min(studentDeepest, seqLen) - 1; i++) counts[i]++;
+    }
+
+    const result: { [key: string]: number } = {};
+    for (let i = 0; i < seqLen - 1; i++) {
+        result[`${selectedSequence[i]}->${selectedSequence[i + 1]}`] = counts[i];
+    }
+    return result;
+}
+
+/**
+ * Path-scoped error counts along `selectedSequence`: for each edge
+ * selected[i]->selected[i+1], the number of unique students who errored at that
+ * transition *while traversing the selected sequence*. Uses the same deepest-
+ * contiguous-prefix match as the funnel, and the same outcome attribution as the
+ * dataset-wide edge-error tally (the outcome recorded at the target index), so
+ * the overlay reflects only students actually on the path. Each student counted
+ * once. Mirrors compute_sequence_error_counts in the Streamlit version.
+ */
+export function computeSequenceErrorCounts(
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    outcomeSequences: { [key: string]: { [key: string]: string[] } },
+    selectedSequence: string[]
+): { [key: string]: number } {
+    if (!selectedSequence || selectedSequence.length < 2) return {};
+    const seqLen = selectedSequence.length;
+    const counts = new Array(seqLen - 1).fill(0);
+
+    for (const [studentId, problems] of Object.entries(stepSequences)) {
+        const outProblems = outcomeSequences[studentId] || {};
+        // Find this student's deepest match and where it started, so edges align
+        // with their own outcomes.
+        let bestDeepest = 0;
+        let bestStart = 0;
+        let bestOutcomes: string[] = [];
+        for (const [problemName, steps] of Object.entries(problems)) {
+            if (!steps || steps.length < 2) continue;
+            const { deepest, start } = deepestSequencePrefix(steps, selectedSequence);
+            if (deepest > bestDeepest) {
+                bestDeepest = deepest;
+                bestStart = start;
+                bestOutcomes = outProblems[problemName] || [];
+            }
+        }
+        for (let i = 0; i < Math.min(bestDeepest, seqLen) - 1; i++) {
+            const pos = bestStart + i;
+            // Edge outcome is attributed to the target index (pos + 1), matching
+            // the dataset-wide edgeErrorStudentCounts tally.
+            if (pos + 1 < bestOutcomes.length && bestOutcomes[pos + 1] === 'ERROR') counts[i]++;
+        }
+    }
+
+    const result: { [key: string]: number } = {};
+    for (let i = 0; i < seqLen - 1; i++) {
+        result[`${selectedSequence[i]}->${selectedSequence[i + 1]}`] = counts[i];
+    }
+    return result;
 }
 
 // ============================================================================
@@ -1022,17 +1153,15 @@ export function normalizeThicknesses(
     maxThickness: number
 ): { [key: string]: number } {
     const normalized: { [key: string]: number } = {};
-    const minThickness = 0.5;
+    const minThickness = 1;
 
-    const maxSqrt = Math.sqrt(maxEdgeCount);
-
+    // Linear scaling (count / maxEdgeCount * maxThickness), floored at 1 —
+    // matches the Streamlit version so the two tools produce identical edge
+    // weights. (Previously sqrt-scaled, which compressed high-traffic edges.)
     Object.keys(edgeCounts).forEach((edge) => {
         const count = edgeCounts[edge];
-        const sqrtCount = Math.sqrt(count);
-        let thickness = (sqrtCount / maxSqrt) * maxThickness;
-
+        let thickness = maxEdgeCount > 0 ? (count / maxEdgeCount) * maxThickness : minThickness;
         thickness = Math.max(thickness, minThickness);
-
         normalized[edge] = thickness;
     });
 
@@ -1045,11 +1174,17 @@ export function normalizeThicknesses(
  * @param totalSteps - The total number of steps in the sequence.
  * @returns A hex color representing the node's color.
  */
+// Fill for a node that is not part of the selected sequence.
+export const NON_SEQUENCE_NODE_COLOR = '#CCCCCC';
+
 export function calculateColor(rank: number, totalSteps: number): string {
-    const ratio = rank / totalSteps;
+    // Interpolation factor across the sequence: position 0 (start) = white,
+    // last position = full blue. Spread over (length - 1) so both endpoints are
+    // reached exactly (matches the Streamlit implementation).
+    const ratio = totalSteps > 1 ? rank / (totalSteps - 1) : 1;
 
     const white = {r: 255, g: 255, b: 255};
-    const lightBlue = {r: 0, g: 166, b: 255};
+    const lightBlue = {r: 28, g: 176, b: 255}; // #1cb0ff
 
     const r = Math.round(white.r * (1 - ratio) + lightBlue.r * ratio);
     const g = Math.round(white.g * (1 - ratio) + lightBlue.g * ratio);
@@ -1058,63 +1193,101 @@ export function calculateColor(rank: number, totalSteps: number): string {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+// ============================================================================
+// EDGE COLORING — Okabe-Ito colorblind-safe palette (matches Streamlit version)
+// ============================================================================
+
+// Alpha suffix on the dominant-outcome edge color so overlapping/parallel edges
+// stay legible where they cross. 0x99 ≈ 60% opacity.
+const EDGE_FILL_ALPHA = '99';
+// Neutral "flow only" edge color used when an edge has no recognized outcome,
+// so an edge is never invisible. Carries its own alpha.
+const FLOW_EDGE_COLOR = '#5f6368cc';
+
+// Okabe-Ito outcome palette — single source of truth for edge coloring and the
+// legend. CVD-distinguishable (WCAG 1.4.1).
+export const OUTCOME_COLORS: { [outcome: string]: string } = {
+    'CORRECT': '#009E73',            // bluish green
+    'ERROR': '#D55E00',              // vermilion
+    'INITIAL_HINT': '#56B4E9',       // sky blue
+    'HINT_LEVEL_CHANGE': '#56B4E9',
+    'JIT': '#E69F00',                // orange
+    'FREEBIE_JIT': '#E69F00',
+};
+
+// Stable tie-break order when two outcomes are equally common.
+const OUTCOME_STRIPE_ORDER = [
+    'CORRECT', 'ERROR', 'INITIAL_HINT', 'HINT_LEVEL_CHANGE', 'JIT', 'FREEBIE_JIT'
+];
+
 /**
- * Calculates the color of an edge based on the most frequent outcome.
- * @param outcomes - A dictionary of outcomes and their counts.
- * @param errorMode
- * @returns A color representing the most frequent outcome.
+ * Color for an edge: its single most common recognized outcome, as a discrete
+ * palette color (plus alpha). An RGB blend of several outcomes produces muddy
+ * hues that match no legend entry; picking the dominant outcome keeps every
+ * edge on a validated palette anchor. Ties break by canonical stripe order.
+ * Returns the neutral flow color when no recognized outcome is present.
  */
-function calculateEdgeColors(outcomes: { [outcome: string]: number }, errorMode: boolean): string {
-    const colorMap: { [key: string]: string } = errorMode ? {
-        'ERROR': '#ff0000',
-        'INITIAL_HINT': '#0000ff',
-        'HINT_LEVEL_CHANGE': '#0000ff',
-        'JIT': '#ffff00',
-        'FREEBIE_JIT': '#ffff00'
-    } : {
-        'ERROR': '#ff0000',
-        'OK': '#00ff00',
-        'INITIAL_HINT': '#0000ff',
-        'HINT_LEVEL_CHANGE': '#0000ff',
-        'JIT': '#ffff00',
-        'FREEBIE_JIT': '#ffff00'
+function dominantOutcomeColor(outcomes: { [outcome: string]: number }): string {
+    const recognized = Object.entries(outcomes).filter(
+        ([outcome, count]) => OUTCOME_COLORS[outcome] && count > 0
+    );
+    if (recognized.length === 0) return FLOW_EDGE_COLOR;
+
+    const stripeRank = (name: string): number => {
+        const i = OUTCOME_STRIPE_ORDER.indexOf(name);
+        return i === -1 ? OUTCOME_STRIPE_ORDER.length : i;
     };
 
-    if (Object.keys(outcomes).length === 0) {
-        return '#00000000';
+    let best = recognized[0];
+    for (const cur of recognized) {
+        if (cur[1] > best[1] || (cur[1] === best[1] && stripeRank(cur[0]) < stripeRank(best[0]))) {
+            best = cur;
+        }
     }
+    return `${OUTCOME_COLORS[best[0]]}${EDGE_FILL_ALPHA}`;
+}
 
-    let weightedR = 0, weightedG = 0, weightedB = 0;
-    let totalCount = 0;
-    let contributingOutcomes = 0;
+/**
+ * Color for a solid edge.
+ * - dashedError (the edge is itself a dashed red error arrow — a fully-error
+ *   edge or an error self-loop): error red, so a dashed edge is never green.
+ * - Error-arrow mode otherwise: the error share is carried by a separate dashed
+ *   overlay, so the solid edge is colored by its dominant NON-error outcome.
+ * - Plain mode: the dominant outcome.
+ */
+function solidEdgeColor(
+    outcomes: { [outcome: string]: number },
+    errorMode: boolean,
+    dashedError: boolean
+): string {
+    if (dashedError) return OUTCOME_COLORS['ERROR'];
+    const considered = errorMode
+        ? Object.fromEntries(Object.entries(outcomes).filter(([k]) => k !== 'ERROR'))
+        : outcomes;
+    return dominantOutcomeColor(considered);
+}
 
-    Object.entries(outcomes).forEach(([outcome, count]) => {
-        if (errorMode && outcome === 'OK') return;
-
-        const color = colorMap[outcome];
-        if (!color) return;
-
-        const [r, g, b] = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
-        weightedR += r * count;
-        weightedG += g * count;
-        weightedB += b * count;
-        totalCount += count;
-        contributingOutcomes++;
-    });
-
-    if (contributingOutcomes === 0 && errorMode && outcomes['OK']) {
-        return '#00000090';
-    }
-
-    if (totalCount === 0) {
-        return '#00000000';
-    }
-
-    const rHex = Math.round(weightedR / totalCount).toString(16).padStart(2, '0');
-    const gHex = Math.round(weightedG / totalCount).toString(16).padStart(2, '0');
-    const bHex = Math.round(weightedB / totalCount).toString(16).padStart(2, '0');
-
-    return `#${rHex}${gHex}${bHex}90`;
+/**
+ * Emit a parallel dashed red overlay edge whose thickness encodes how many
+ * unique students hit an error on this transition. Returns '' when there are no
+ * error students or the edge is a self-loop (a parallel dashed self-loop would
+ * stack a confusing second loop). The overlay is constrained (no constraint=false)
+ * so it bundles tightly against its solid partner instead of wandering.
+ */
+function formatErrorOverlay(
+    source: string,
+    target: string,
+    errorStudents: number,
+    edgeStudents: number,
+    maxEdgeCount: number
+): string {
+    if (errorStudents <= 0 || maxEdgeCount <= 0 || source === target) return '';
+    const overlayThickness = Math.max(0.5, (errorStudents / maxEdgeCount) * 10);
+    const errorRate = edgeStudents ? (errorStudents / edgeStudents) * 100 : 0;
+    const tooltip = `${source} → ${target}\nError students: ${errorStudents.toLocaleString()}\n`
+        + `Error rate: ${errorRate.toFixed(1)}%`;
+    return `    "${source}" -> "${target}" [style=dashed, color="${OUTCOME_COLORS['ERROR']}cc", `
+        + `penwidth=${overlayThickness.toFixed(1)}, tooltip="${tooltip}"];\n`;
 }
 
 // ============================================================================
@@ -1255,7 +1428,7 @@ const createEdgeTooltip = (
  */
 const generateTopSequenceVisualization = (
     selectedSequence: string[],
-    normalizedThicknesses: { [key: string]: number },
+    _normalizedThicknesses: { [key: string]: number },
     edgeOutcomeCounts: { [key: string]: { [outcome: string]: number } },
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
     edgeCounts: { [key: string]: number },
@@ -1265,16 +1438,30 @@ const generateTopSequenceVisualization = (
     repeatVisits: { [key: string]: { [studentId: string]: number } },
     minVisits: number,
     errorMode: boolean,
+    maxEdgeCount: number,
+    edgeErrorStudentCounts: { [key: string]: number },
     uniqueStudentMode: boolean = false,
-    colorNodesBySequence: boolean = true
+    colorNodesBySequence: boolean = true,
+    sequenceFunnelCounts: { [key: string]: number } | null = null,
+    sequenceErrorCounts: { [key: string]: number } | null = null
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
+    const funnelOn = sequenceFunnelCounts !== null;
 
     for (let rank = 0; rank < totalSteps; rank++) {
         const currentStep = selectedSequence[rank];
         const color = colorNodesBySequence ? calculateColor(rank, totalSteps) : '#ffffff';
-        const studentCount = totalNodeEdges[currentStep] || 0;
+        // With the funnel on, a node shows the funnel of the edge leaving it
+        // (students still on the path here) so node counts line up with the edge
+        // values rather than the dataset-wide unique-student total.
+        let studentCount = totalNodeEdges[currentStep] || 0;
+        if (funnelOn && totalSteps > 1) {
+            const fk = rank < totalSteps - 1
+                ? `${selectedSequence[rank]}->${selectedSequence[rank + 1]}`
+                : `${selectedSequence[rank - 1]}->${selectedSequence[rank]}`;
+            studentCount = sequenceFunnelCounts![fk] ?? (totalNodeEdges[currentStep] || 0);
+        }
         const nodeTooltip = createNodeTooltip(rank, color, studentCount);
 
         dotContent += `    "${currentStep}" [rank=${rank + 1}, style=filled, fillcolor="${color}", tooltip="${nodeTooltip}"];\n`;
@@ -1282,23 +1469,55 @@ const generateTopSequenceVisualization = (
         if (rank < totalSteps - 1) {
             const nextStep = selectedSequence[rank + 1];
             const edgeKey = `${currentStep}->${nextStep}`;
-            const thickness = normalizedThicknesses[edgeKey] || 1;
             const outcomes = edgeOutcomeCounts[edgeKey] || {};
             const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
-            const edgeCount = edgeCounts[edgeKey] || 0;
+            const rawEdgeCount = edgeCounts[edgeKey] || 0;
             const visits = totalVisits[edgeKey] || 0;
-            const visitsForFiltering = uniqueStudentMode ? edgeCount : visits;
+            const visitsForFiltering = uniqueStudentMode ? rawEdgeCount : visits;
             const totalCount = totalNodeEdges[currentStep] || 0;
-            const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
             if (visitsForFiltering >= minVisits) {
+                // Displayed count is the funnel value (monotonic along the path)
+                // when supplied, else the unique-students-per-edge count.
+                const displayCount = funnelOn
+                    ? (sequenceFunnelCounts![edgeKey] ?? rawEdgeCount)
+                    : rawEdgeCount;
+
+                // Error-arrow rendering: a fully-error edge (or error self-loop)
+                // becomes the dashed red arrow itself; a partial-error edge keeps
+                // the neutral edge (sized by non-error count) plus a dashed
+                // overlay for the error share. Error counts are path-scoped when
+                // sequenceErrorCounts is supplied.
+                const isSelfLoop = currentStep === nextStep;
+                const err = errorMode
+                    ? (sequenceErrorCounts ? (sequenceErrorCounts[edgeKey] || 0) : (edgeErrorStudentCounts[edgeKey] || 0))
+                    : 0;
+                // Path total on this edge is the error-rate denominator and the
+                // fully-error test, so both stay path-scoped when the funnel is on.
+                const edgeTotal = funnelOn ? (sequenceFunnelCounts![edgeKey] ?? rawEdgeCount) : rawEdgeCount;
+                const fullError = err > 0 && err >= edgeTotal;
+                const dashedError = err > 0 && (fullError || isSelfLoop);
+                const solidCount = (err > 0 && err < edgeTotal && !dashedError) ? displayCount - err : displayCount;
+                const edgeColor = solidEdgeColor(outcomes, errorMode, dashedError);
+
+                let thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
+                // Selected-sequence edges are emphasized when highlighting is on.
+                if (colorNodesBySequence) thickness *= 1.2;
+
                 const tooltip = createEdgeTooltip(
-                    currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
+                    currentStep, nextStep, edgeKey, displayCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor,
                     thickness, minVisits, uniqueStudentMode
                 );
 
-                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
+                const styleAttr = dashedError ? ', style=dashed' : '';
+                // Leading spaces nudge the count off the vertical edge line.
+                const labelAttr = `, label="   ${displayCount.toLocaleString()}"`;
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${labelAttr}${styleAttr}];\n`;
+
+                if (err > 0 && !fullError && !isSelfLoop) {
+                    dotContent += formatErrorOverlay(currentStep, nextStep, err, edgeTotal, maxEdgeCount);
+                }
             }
         }
     }
@@ -1338,11 +1557,22 @@ const generateFullGraphVisualization = (
     threshold: number,
     minVisits: number,
     errorMode: boolean,
+    maxEdgeCount: number,
+    edgeErrorStudentCounts: { [key: string]: number },
     uniqueStudentMode: boolean = false,
     colorNodesBySequence: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
+
+    // Edges that belong to the selected sequence — emphasized (thicker) when
+    // highlighting is enabled.
+    const seqEdges = new Set<string>();
+    if (selectedSequence.length > 1) {
+        for (let i = 0; i < selectedSequence.length - 1; i++) {
+            seqEdges.add(`${selectedSequence[i]}->${selectedSequence[i + 1]}`);
+        }
+    }
 
     const allNodesInEdges = new Set<string>();
     for (const edgeKey of Object.keys(normalizedThicknesses)) {
@@ -1364,7 +1594,11 @@ const generateFullGraphVisualization = (
 
     for (const nodeName of allNodesInEdges) {
         const sequenceRank = selectedSequence.indexOf(nodeName);
-        const color = (colorNodesBySequence && sequenceRank >= 0) ? calculateColor(sequenceRank, totalSteps) : '#ffffff';
+        // Nodes on the selected sequence get the white→blue gradient (when
+        // highlighting is on); everything else is neutral gray.
+        const color = (colorNodesBySequence && sequenceRank >= 0)
+            ? calculateColor(sequenceRank, totalSteps)
+            : NON_SEQUENCE_NODE_COLOR;
         const rank = sequenceRank >= 0 ? sequenceRank + 1 : 0;
         const studentCount = totalNodeEdges[nodeName] || 0;
         const nodeTooltip = createNodeTooltip(sequenceRank, color, studentCount);
@@ -1373,9 +1607,9 @@ const generateFullGraphVisualization = (
     }
 
     for (const edgeKey of Object.keys(normalizedThicknesses)) {
-        const thickness = normalizedThicknesses[edgeKey];
+        const gateThickness = normalizedThicknesses[edgeKey];
 
-        if (thickness >= threshold) {
+        if (gateThickness >= threshold) {
             const [currentStep, nextStep] = edgeKey.split('->');
             const outcomes = edgeOutcomeCounts[edgeKey] || {};
             const firstAttempts = firstAttemptOutcomes[edgeKey] || {};
@@ -1383,16 +1617,33 @@ const generateFullGraphVisualization = (
             const visits = totalVisits[edgeKey] || 0;
             const visitsForFiltering = uniqueStudentMode ? edgeCount : visits;
             const totalCount = totalNodeEdges[currentStep] || 0;
-            const edgeColor = calculateEdgeColors(outcomes, errorMode);
 
             if (visitsForFiltering >= minVisits) {
+                // Error-arrow rendering: fully-error edge (or error self-loop)
+                // becomes the dashed red arrow; a partial-error edge keeps the
+                // neutral edge (sized by non-error count) + a dashed overlay.
+                const isSelfLoop = currentStep === nextStep;
+                const err = errorMode ? (edgeErrorStudentCounts[edgeKey] || 0) : 0;
+                const fullError = err > 0 && err >= edgeCount;
+                const dashedError = err > 0 && (fullError || isSelfLoop);
+                const solidCount = (err > 0 && err < edgeCount && !dashedError) ? edgeCount - err : edgeCount;
+                const edgeColor = solidEdgeColor(outcomes, errorMode, dashedError);
+
+                let thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
+                if (seqEdges.has(edgeKey) && colorNodesBySequence) thickness *= 1.2;
+
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
                     ratioEdges, outcomes, firstAttempts, repeatVisits, edgeColor,
                     thickness, minVisits, uniqueStudentMode
                 );
 
-                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness}, color="${edgeColor}", tooltip="${tooltip}"];\n`;
+                const styleAttr = dashedError ? ', style=dashed' : '';
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${styleAttr}];\n`;
+
+                if (err > 0 && !fullError && !isSelfLoop) {
+                    dotContent += formatErrorOverlay(currentStep, nextStep, err, edgeCount, maxEdgeCount);
+                }
             }
         }
     }
@@ -1445,7 +1696,11 @@ export function generateDotString(
     errorMode: boolean,
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } },
     uniqueStudentMode: boolean = false,
-    colorNodesBySequence: boolean = true
+    colorNodesBySequence: boolean = true,
+    maxEdgeCount: number = 0,
+    edgeErrorStudentCounts: { [key: string]: number } = {},
+    sequenceFunnelCounts: { [key: string]: number } | null = null,
+    sequenceErrorCounts: { [key: string]: number } | null = null
 ): string {
     if (!selectedSequence || selectedSequence.length === 0) {
         return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
@@ -1475,8 +1730,12 @@ export function generateDotString(
             repeatVisits,
             minVisits,
             errorMode,
+            maxEdgeCount,
+            edgeErrorStudentCounts,
             uniqueStudentMode,
-            colorNodesBySequence
+            colorNodesBySequence,
+            sequenceFunnelCounts,
+            sequenceErrorCounts
         );
     } else {
         dotString += generateFullGraphVisualization(
@@ -1492,6 +1751,8 @@ export function generateDotString(
             threshold,
             minVisits,
             errorMode,
+            maxEdgeCount,
+            edgeErrorStudentCounts,
             uniqueStudentMode,
             colorNodesBySequence
         );
