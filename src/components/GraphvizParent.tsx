@@ -22,6 +22,7 @@ import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
 import { Download } from 'lucide-react';
 import GraphMenu from './GraphMenu';
+import VisNetworkGraph from './VisNetworkGraph';
 
 // History item interface
 interface HistoryItem {
@@ -89,6 +90,8 @@ interface GraphvizParentProps {
     showSelectedSequence: boolean;
     showAllStudents: boolean;
     colorNodesBySequence: boolean;
+    useVisNetworkSpike: boolean;
+    showEdgeLabels: boolean;
     problemName: string;
 }
 
@@ -105,6 +108,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     showSelectedSequence,
     showAllStudents,
     colorNodesBySequence,
+    useVisNetworkSpike,
+    showEdgeLabels,
     problemName
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
@@ -340,6 +345,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 null, // sequenceErrorCounts (full graph)
                 nodeOutcomeMode,
                 mainGraphData.nodeOutcomeCounts,
+                showEdgeLabels,
             );
 
             setDotString(dotString);
@@ -401,10 +407,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     seqErrorCounts,
                     nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
+                    showEdgeLabels,
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps and selectedSequence
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, showEdgeLabels, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, showEdgeLabels, connectivityCaps and selectedSequence
 
     // Initialize minVisits for main graphs when data loads
     React.useEffect(() => {
@@ -498,6 +505,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     null, // sequenceErrorCounts (full graph)
                     nodeOutcomeMode,
                     filteredGraphData.nodeOutcomeCounts,
+                    showEdgeLabels,
                 );
 
                 newFilteredDotStrings[filter] = filteredDotString;
@@ -516,7 +524,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
         }
-    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, nodeOutcomeMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode, connectivityCaps]);
+    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, nodeOutcomeMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode, showEdgeLabels, connectivityCaps]);
 
     // Cleanup all event listeners when component unmounts
     useEffect(() => {
@@ -1698,6 +1706,33 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
                                     <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
+                                </div>
+                            </div>
+                        )}
+                        {/* EXPERIMENTAL: vis-network render of the All Students graph, for side-by-side layout comparison */}
+                        {useVisNetworkSpike && mainGraphData && (
+                            <div
+                                className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-dashed border-purple-500 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
+                                <h2 className="text-lg font-semibold text-center mb-1">All Students <span className="text-purple-600">(vis-network)</span></h2>
+                                <p className="text-sm text-gray-500 text-center mb-2">
+                                    👥 {(summaryMetrics?.totalStudents ?? 0).toLocaleString()} students · experimental layout
+                                </p>
+                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
+                                    <VisNetworkGraph
+                                        edgeCounts={mainGraphData.edgeCounts}
+                                        totalVisits={mainGraphData.totalVisits}
+                                        totalNodeEdges={mainGraphData.totalNodeEdges}
+                                        edgeOutcomeCounts={mainGraphData.edgeOutcomeCounts}
+                                        firstAttemptOutcomes={mainGraphData.firstAttemptOutcomes}
+                                        ratioEdges={mainGraphData.ratioEdges}
+                                        maxEdgeCount={mainGraphData.maxEdgeCount}
+                                        selectedSequence={selectedSequence || []}
+                                        uniqueStudentMode={uniqueStudentMode}
+                                        colorNodesBySequence={colorNodesBySequence}
+                                        minVisits={effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100)}
+                                        showEdgeLabels={showEdgeLabels}
+                                        stepSequences={mainGraphData.stepSequences}
+                                    />
                                 </div>
                             </div>
                         )}

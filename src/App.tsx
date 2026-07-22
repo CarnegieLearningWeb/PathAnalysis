@@ -79,6 +79,8 @@ function App() {
     const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(true);
     const [nodeOutcomeMode, setNodeOutcomeMode] = useState<boolean>(false);
     const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
+    const [useVisNetworkSpike, setUseVisNetworkSpike] = useState<boolean>(false);
+    const [showEdgeLabels, setShowEdgeLabels] = useState<boolean>(true);
     const [fileInfo, setFileInfo] = useState<{filename: string, source: string} | null>(null);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
@@ -185,6 +187,10 @@ function App() {
     const handleToggleNodeOutcomeMode = () => setNodeOutcomeMode(!nodeOutcomeMode);
 
     const handleToggleColorNodesBySequence = () => setColorNodesBySequence(!colorNodesBySequence);
+
+    const handleToggleVisNetworkSpike = () => setUseVisNetworkSpike(!useVisNetworkSpike);
+
+    const handleToggleShowEdgeLabels = () => setShowEdgeLabels(!showEdgeLabels);
 
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
@@ -342,6 +348,22 @@ function App() {
                                         </div>
 
                                         <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Show Edge Labels</label>
+                                            <Switch isOn={showEdgeLabels} handleToggle={handleToggleShowEdgeLabels}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Show the student/visit count on each edge
+                                            </p>
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">⚗️ vis-network layout (experimental)</label>
+                                            <Switch isOn={useVisNetworkSpike} handleToggle={handleToggleVisNetworkSpike}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Adds a vis-network render of the All Students graph next to the Graphviz one, for layout comparison
+                                            </p>
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
                                             <label className="text-sm font-medium text-gray-700">
                                                 {uniqueStudentMode ? 'Unique Students Only (First Attempts)' : 'Total Visits (All Attempts)'}
                                             </label>
@@ -383,6 +405,8 @@ function App() {
                                             showSelectedSequence={showSelectedSequence}
                                             showAllStudents={showAllStudents}
                                             colorNodesBySequence={colorNodesBySequence}
+                                            useVisNetworkSpike={useVisNetworkSpike}
+                                            showEdgeLabels={showEdgeLabels}
                                             problemName={fileInfo?.filename.replace(/\.(csv|CSV)$/, '') || 'unknown'}
                                         />
                                     </div>
