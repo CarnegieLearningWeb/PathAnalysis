@@ -1363,7 +1363,7 @@ function formatErrorOverlay(
  * @returns Formatted tooltip string for node display
  */
 const createNodeTooltip = (rank: number, color: string, studentCount: number): string => {
-    return `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${studentCount}`;
+    return `Rank:\n\t\t${rank + 1}\nColor:\n\t\t${color}\nTotal Students:\n\t\t${studentCount.toLocaleString()}`;
 };
 
 /**
@@ -1415,11 +1415,11 @@ const createEdgeTooltip = (
     const ratioPercentage = ((ratioEdges[edgeKey] || 0) * 100).toFixed(1);
 
     let tooltip = `${modeLabel} Flow:\n`
-        + `    • ${pathLabel}: ${pathCount}\n`
-        + `    • ${startLabel}: ${totalAtStart}\n`
-        + `    • ${notTakingLabel}: ${notTakingPath}\n`
+        + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
+        + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
+        + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
         + `    • Transition Probability: ${ratioPercentage}%\n`
-        + `      (${pathCount} of ${totalAtStart} ${modeLabel.toLowerCase()})\n\n`;
+        + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`;
 
     if (progressStats) {
         const graduatedPercentage = progressStats.total > 0 ? ((progressStats.graduated / progressStats.total) * 100).toFixed(1) : '0';
@@ -1427,10 +1427,10 @@ const createEdgeTooltip = (
         const otherPercentage = progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0';
 
         tooltip += `Student Progress Status:\n`
-            + `    • Graduated: ${progressStats.graduated} (${graduatedPercentage}%)\n`
-            + `    • Promoted: ${progressStats.promoted} (${promotedPercentage}%)\n`
-            + `    • Other: ${progressStats.other} (${otherPercentage}%)\n`
-            + `    • Total students tracked: ${progressStats.total}\n\n`;
+            + `    • Graduated: ${progressStats.graduated.toLocaleString()} (${graduatedPercentage}%)\n`
+            + `    • Promoted: ${progressStats.promoted.toLocaleString()} (${promotedPercentage}%)\n`
+            + `    • Other: ${progressStats.other.toLocaleString()} (${otherPercentage}%)\n`
+            + `    • Total students tracked: ${progressStats.total.toLocaleString()}\n\n`;
     }
 
     const totalOutcomes = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
@@ -1438,7 +1438,7 @@ const createEdgeTooltip = (
         .sort(([,a], [,b]) => b - a)
         .map(([outcome, count]) => {
             const percentage = totalOutcomes > 0 ? ((count / totalOutcomes) * 100).toFixed(1) : '0';
-            return `${outcome}: ${count} (${percentage}%)`;
+            return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
         })
         .join('\n      ');
 
@@ -1447,7 +1447,7 @@ const createEdgeTooltip = (
         .sort(([,a], [,b]) => b - a)
         .map(([outcome, count]) => {
             const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
-            return `${outcome}: ${count} (${percentage}%)`;
+            return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
         })
         .join('\n      ');
 
@@ -1458,8 +1458,8 @@ const createEdgeTooltip = (
         + `      ${firstAttemptOutcomes || 'No first attempt data'}\n\n`
         + `Visual Properties:\n`
         + `    • Edge Thickness: ${normalizedThickness.toFixed(1)} (normalized)\n`
-        + `    • Path Frequency: ${pathCount} ${modeLabel.toLowerCase()}\n`
-        + `    • Min ${modeLabel} Threshold: ${minVisits}`;
+        + `    • Path Frequency: ${pathCount.toLocaleString()} ${modeLabel.toLowerCase()}\n`
+        + `    • Min ${modeLabel} Threshold: ${minVisits.toLocaleString()}`;
 
     return tooltip;
 };

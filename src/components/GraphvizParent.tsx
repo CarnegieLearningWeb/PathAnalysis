@@ -733,7 +733,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
                 const percentage = totalOutcomes > 0 ? ((count / totalOutcomes) * 100).toFixed(1) : '0';
-                return `${outcome}: ${count} (${percentage}%)`;
+                return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
             })
             .slice(0, 5) // Show top 5 outcomes
             .join('\n      ');
@@ -742,7 +742,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
                 const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
-                return `${outcome}: ${count} (${percentage}%)`;
+                return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
             })
             .slice(0, 5) // Show top 5 first attempt outcomes
             .join('\n      ');
@@ -753,16 +753,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const otherPercentage = progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0';
         
         return `${activityLabel}:\n`
-            + `    • ${visitorsLabel}: ${totalVisitors}\n`
-            + `    • ${visitsLabel}: ${totalNodeVisits}\n`
-            + `    • Students with single visit: ${singleVisits}\n`
-            + `    • Students with multiple visits: ${multipleVisits}\n`
+            + `    • ${visitorsLabel}: ${totalVisitors.toLocaleString()}\n`
+            + `    • ${visitsLabel}: ${totalNodeVisits.toLocaleString()}\n`
+            + `    • Students with single visit: ${singleVisits.toLocaleString()}\n`
+            + `    • Students with multiple visits: ${multipleVisits.toLocaleString()}\n`
             + `    • Average visits per student: ${avgVisitsPerStudent}\n\n`
             + `Student Progress Status:\n`
-            + `    • Graduated: ${progressStats.graduated} (${graduatedPercentage}%)\n`
-            + `    • Promoted: ${progressStats.promoted} (${promotedPercentage}%)\n`
-            + `    • Other: ${progressStats.other} (${otherPercentage}%)\n`
-            + `    • Total students tracked: ${progressStats.total}\n\n`
+            + `    • Graduated: ${progressStats.graduated.toLocaleString()} (${graduatedPercentage}%)\n`
+            + `    • Promoted: ${progressStats.promoted.toLocaleString()} (${promotedPercentage}%)\n`
+            + `    • Other: ${progressStats.other.toLocaleString()} (${otherPercentage}%)\n`
+            + `    • Total students tracked: ${progressStats.total.toLocaleString()}\n\n`
             + `Learning Outcomes:\n`
             + `    • All Outcomes:\n`
             + `      ${outcomeSummary || 'No outcome data available'}\n\n`
@@ -892,7 +892,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
                 const percentage = totalOutcomes > 0 ? ((count / totalOutcomes) * 100).toFixed(1) : '0';
-                return `${outcome}: ${count} (${percentage}%)`;
+                return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
             })
             .join('\n      ');
         
@@ -904,7 +904,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
                 const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
-                return `${outcome}: ${count} (${percentage}%)`;
+                return `${outcome}: ${count.toLocaleString()} (${percentage}%)`;
             })
             .join('\n      ');
         
@@ -919,16 +919,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
         
         return `${modeLabel} Flow:\n`
-            + `    • ${pathLabel}: ${pathCount}\n`
-            + `    • ${startLabel}: ${totalAtStart}\n`
-            + `    • ${notTakingLabel}: ${notTakingPath}\n`
+            + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
+            + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
+            + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
             + `    • Transition Probability: ${ratioPercentage}%\n`
-            + `      (${pathCount} of ${totalAtStart} ${modeLabel.toLowerCase()})\n\n`
+            + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`
             + `Student Progress Status:\n`
-            + `    • Graduated: ${progressStats.graduated} (${progressStats.graduatedPercentage}%)\n`
-            + `    • Promoted: ${progressStats.promoted} (${progressStats.promotedPercentage}%)\n`
-            + `    • Other: ${progressStats.other} (${progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0'}%)\n`
-            + `    • Total students tracked: ${progressStats.total}\n\n`
+            + `    • Graduated: ${progressStats.graduated.toLocaleString()} (${progressStats.graduatedPercentage}%)\n`
+            + `    • Promoted: ${progressStats.promoted.toLocaleString()} (${progressStats.promotedPercentage}%)\n`
+            + `    • Other: ${progressStats.other.toLocaleString()} (${progressStats.total > 0 ? ((progressStats.other / progressStats.total) * 100).toFixed(1) : '0.0'}%)\n`
+            + `    • Total students tracked: ${progressStats.total.toLocaleString()}\n\n`
             + `Transition Outcomes:\n`
             + `    • All Outcomes:\n`
             + `      ${allOutcomes || 'No outcome data'}\n\n`
@@ -936,8 +936,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             + `      ${firstAttemptOutcomes || 'No first attempt data'}\n\n`
             + `Visual Properties:\n`
             + `    • Edge Thickness: ${thickness} (normalized)\n`
-            + `    • Path Frequency: ${pathCount} ${modeLabel.toLowerCase()}\n`
-            + `    • Min ${modeLabel} Threshold: ${minVisits}`;
+            + `    • Path Frequency: ${pathCount.toLocaleString()} ${modeLabel.toLowerCase()}\n`
+            + `    • Min ${modeLabel} Threshold: ${minVisits.toLocaleString()}`;
     };
 
     // Store references to attached event listeners for cleanup
