@@ -47,6 +47,35 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
     return a.every((val, index) => val === b[index]);
 };
 
+// Per-node outcome mix (all visits + first attempt) restricted to a set of
+// students. Same per-step attribution as computeNodeOutcomeTallies, used to
+// scope the Selected Sequence tooltip to exact-sequence students.
+const computeScopedNodeOutcomes = (
+    node: string,
+    students: Set<string>,
+    stepSequences: { [s: string]: { [p: string]: string[] } },
+    outcomeSequences: { [s: string]: { [p: string]: string[] } }
+): { all: { [o: string]: number }; firstAttempt: { [o: string]: number } } => {
+    const all: { [o: string]: number } = {};
+    const firstAttempt: { [o: string]: number } = {};
+    students.forEach(studentId => {
+        const problems = stepSequences[studentId] || {};
+        const outByProblem = outcomeSequences[studentId] || {};
+        let seen = false;
+        Object.keys(problems).forEach(problemName => {
+            const steps = problems[problemName];
+            const outs = outByProblem[problemName] || [];
+            for (let i = 0; i < steps.length && i < outs.length; i++) {
+                if (steps[i] === node) {
+                    all[outs[i]] = (all[outs[i]] || 0) + 1;
+                    if (!seen) { seen = true; firstAttempt[outs[i]] = (firstAttempt[outs[i]] || 0) + 1; }
+                }
+            }
+        });
+    });
+    return { all, firstAttempt };
+};
+
 interface GraphvizParentProps {
     csvData: string;
     filters: string[];
@@ -56,6 +85,10 @@ interface GraphvizParentProps {
     onMaxMinEdgeCountChange: (count: number) => void;
     errorMode: boolean;
     uniqueStudentMode: boolean;
+    nodeOutcomeMode: boolean;
+    showSelectedSequence: boolean;
+    showAllStudents: boolean;
+    colorNodesBySequence: boolean;
     problemName: string;
 }
 
@@ -68,6 +101,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     onMaxMinEdgeCountChange,
     errorMode,
     uniqueStudentMode,
+    nodeOutcomeMode,
+    showSelectedSequence,
+    showAllStudents,
+    colorNodesBySequence,
     problemName
 }) => {
     const [dotString, setDotString] = useState<string | null>(null);
@@ -81,8 +118,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     // State for selected sequence graph filtering
     const [showOnlySequenceStudents, setShowOnlySequenceStudents] = useState<boolean>(true);
 
-    // State for node coloring
-    const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
+    // Node coloring (color nodes by selected sequence) is a global control,
+    // lifted to App so it lives permanently in the controls panel.
 
     // History state management
     const [activeTab, setActiveTab] = useState<'graphs' | 'history'>('graphs');
@@ -147,6 +184,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return { totalStudents, avgPathLength };
     }, [mainGraphData]);
 
+    // Number of (student, problem) paths that exactly follow the selected
+    // sequence — the "N students followed this sequence" count (matches the
+    // Streamlit caption / getTopSequences count).
+    const selectedSequenceCount = useMemo(() => {
+        if (!mainGraphData || !selectedSequence || selectedSequence.length === 0) return 0;
+        let count = 0;
+        Object.values(mainGraphData.stepSequences).forEach((byProblem: { [problem: string]: string[] }) => {
+            Object.values(byProblem).forEach((seq) => {
+                if (arraysEqual(seq, selectedSequence)) count++;
+            });
+        });
+        return count;
+    }, [mainGraphData, selectedSequence]);
+
     // Memoized filtered graph data for each filter
     const filteredGraphDataMap = useMemo(() => {
         if (!mainGraphData || filters.length === 0) return {};
@@ -172,7 +223,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 totalVisits: results.totalVisits,
                 repeatVisits: results.repeatVisits,
                 firstAttemptOutcomes: results.firstAttemptOutcomes,
-                edgeErrorStudentCounts: results.edgeErrorStudentCounts
+                edgeErrorStudentCounts: results.edgeErrorStudentCounts,
+                nodeOutcomeCounts: results.nodeOutcomeCounts
             };
         });
 
@@ -284,6 +336,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 colorNodesBySequence,
                 maxCountForThickness,
                 mainGraphData.edgeErrorStudentCounts,
+                null, // sequenceFunnelCounts (full graph)
+                null, // sequenceErrorCounts (full graph)
+                nodeOutcomeMode,
+                mainGraphData.nodeOutcomeCounts,
             );
 
             setDotString(dotString);
@@ -343,10 +399,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     sequenceResults.edgeErrorStudentCounts,
                     funnelCounts,
                     seqErrorCounts,
+                    nodeOutcomeMode,
+                    mainGraphData.nodeOutcomeCounts,
                 )
             );
         }
-    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps and selectedSequence
+    }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, connectivityCaps and selectedSequence
 
     // Initialize minVisits for main graphs when data loads
     React.useEffect(() => {
@@ -436,6 +494,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     colorNodesBySequence,
                     filteredMaxCountForThickness,
                     filteredGraphData.edgeErrorStudentCounts,
+                    null, // sequenceFunnelCounts (full graph)
+                    null, // sequenceErrorCounts (full graph)
+                    nodeOutcomeMode,
+                    filteredGraphData.nodeOutcomeCounts,
                 );
 
                 newFilteredDotStrings[filter] = filteredDotString;
@@ -454,7 +516,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             }
         }
-    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode, connectivityCaps]);
+    }, [filteredGraphDataMap, minVisits, minVisitsPerGraph, selectedSequence, top5Sequences, errorMode, nodeOutcomeMode, mainGraphData, onMaxMinEdgeCountChange, uniqueStudentMode, connectivityCaps]);
 
     // Cleanup all event listeners when component unmounts
     useEffect(() => {
@@ -547,7 +609,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
     };
 
-    const numberOfGraphs = [topDotString, dotString, ...Object.values(filteredDotStrings)].filter(Boolean).length;
+    const numberOfGraphs = [
+        showSelectedSequence && topDotString,
+        showAllStudents && dotString,
+        ...Object.values(filteredDotStrings)
+    ].filter(Boolean).length;
 
     // Helper functions for history management
     const formatTime = (date: Date): string => {
@@ -577,8 +643,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return [currentStep, nextStep];
     };
 
-    // Helper function to calculate progress status statistics for students at a node
-    const calculateNodeProgressStats = (nodeName: string): { graduated: number; promoted: number; other: number; total: number } => {
+    // Helper function to calculate progress status statistics for students at a
+    // node. `restrictToStudents`, when given, limits the population to that set
+    // (used by the Selected Sequence graph to scope to exact-sequence students).
+    const calculateNodeProgressStats = (nodeName: string, restrictToStudents?: Set<string> | null): { graduated: number; promoted: number; other: number; total: number } => {
         if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0 };
 
         const { stepSequences, sortedData } = mainGraphData;
@@ -588,6 +656,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
+                if (restrictToStudents && !restrictToStudents.has(studentId)) return;
                 // studentProblems is { [problemName]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
@@ -599,22 +668,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             });
         }
 
-        // Count progress status for students who visited this node
-        // IMPORTANT: Filter by current problemName to get accurate progress status
+        // Each student's progress status is a per-student property, so we take it
+        // from any of their rows (last wins). We deliberately do NOT filter by
+        // the file-derived problemName — it rarely matches the CSV's internal
+        // Problem Name, which left every bucket at zero.
         let graduatedCount = 0;
         let promotedCount = 0;
         let otherCount = 0;
 
         if (sortedData && sortedData.length > 0) {
-            // Create a map of students and their progress status FOR THIS PROBLEM ONLY
             const studentProgressMap = new Map<string, string>();
             sortedData.forEach((row: any) => {
                 const studentId = row['Anon Student Id'];
-                const rowProblemName = row['Problem Name'];
                 const progressStatus = row['CF (Workspace Progress Status)'];
-
-                // Only use progress status from rows for the current problem
-                if (studentId && progressStatus && rowProblemName === problemName) {
+                if (studentId && progressStatus) {
                     studentProgressMap.set(studentId, progressStatus);
                 }
             });
@@ -632,11 +699,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             });
         }
 
+        // Total is the number of students with a known status (so the buckets
+        // always sum to the total, rather than a broader visitor count).
         return {
             graduated: graduatedCount,
             promoted: promotedCount,
             other: otherCount,
-            total: studentsAtNode.size
+            total: graduatedCount + promotedCount + otherCount
         };
     };
 
@@ -644,38 +713,40 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     const generateNodeTooltip = (nodeName: string, graphType: string): string => {
         if (!mainGraphData) return `Node: ${nodeName}`;
         
-        const { stepSequences, edgeCounts, edgeOutcomeCounts, firstAttemptOutcomes } = mainGraphData;
-        
-        // Find outgoing edges for outcome calculations
-        const outgoingEdges = Object.keys(edgeCounts).filter(edge => edge.startsWith(`${nodeName}->`));
-        
+        const { stepSequences, outcomeSequences, nodeOutcomeCounts, nodeFirstAttemptOutcomes } = mainGraphData;
+
         // Calculate statistics based on mode
         let totalVisitors = 0;
         let totalNodeVisits = 0;
         const visitCounts: { [studentId: string]: number } = {};
-        
+
         // Check if this is the selected sequence graph and we need to filter
         const isSelectedSequenceGraph = graphType === 'Selected Sequence';
         const sequenceToFilter = isSelectedSequenceGraph ? selectedSequence : null;
-        
+
+        // On the Selected Sequence graph, every stat (visits, outcomes, progress)
+        // is scoped to the students who followed the EXACT sequence, so the
+        // populations line up. Elsewhere sequenceStudents is null (all students).
+        const sequenceStudents: Set<string> | null = (isSelectedSequenceGraph && sequenceToFilter)
+            ? new Set<string>(
+                Object.entries(stepSequences)
+                    .filter(([, problems]) =>
+                        problems && typeof problems === 'object' &&
+                        Object.values(problems).some((seq: string[]) =>
+                            Array.isArray(seq) && arraysEqual(seq, sequenceToFilter)))
+                    .map(([studentId]) => studentId))
+            : null;
+
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
                 // studentProblems is { [problemName]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
-                    
-                    // For selected sequence graph, check if student took the exact path
-                    if (isSelectedSequenceGraph && sequenceToFilter) {
-                        let studentFollowedSequence = false;
-                        Object.values(studentProblems).forEach((problemSequence: string[]) => {
-                            if (Array.isArray(problemSequence) && arraysEqual(problemSequence, sequenceToFilter)) {
-                                studentFollowedSequence = true;
-                            }
-                        });
-                        if (!studentFollowedSequence) {
-                            return; // Skip this student if they didn't follow the exact sequence
-                        }
+
+                    // Skip students who didn't follow the exact selected sequence.
+                    if (sequenceStudents && !sequenceStudents.has(studentId)) {
+                        return;
                     }
-                    
+
                     let studentNodeVisits = 0;
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
                         if (Array.isArray(problemSequence)) {
@@ -722,32 +793,32 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         
         // Note: Removed graph connectivity section to match history tab format
         
-        // Calculate progress status statistics
-        const progressStats = calculateNodeProgressStats(nodeName);
+        // Calculate progress status statistics (scoped to the exact-sequence
+        // students on the Selected Sequence graph).
+        const progressStats = calculateNodeProgressStats(nodeName, sequenceStudents);
         const graduatedPercentage = progressStats.total > 0 ? ((progressStats.graduated / progressStats.total) * 100).toFixed(1) : '0';
         const promotedPercentage = progressStats.total > 0 ? ((progressStats.promoted / progressStats.total) * 100).toFixed(1) : '0';
-        
-        // Calculate outcome statistics for this node (from outgoing edges)
-        const nodeOutcomes: { [outcome: string]: number } = {};
-        const nodeFirstAttemptOutcomes: { [outcome: string]: number } = {};
-        
-        outgoingEdges.forEach(edge => {
-            // All outcomes (including repeat attempts)
-            const outcomes = edgeOutcomeCounts[edge] || {};
-            Object.entries(outcomes).forEach(([outcome, count]) => {
-                nodeOutcomes[outcome] = (nodeOutcomes[outcome] || 0) + count;
-            });
-            
-            // First attempt outcomes only
-            const firstAttempts = firstAttemptOutcomes[edge] || {};
-            Object.entries(firstAttempts).forEach(([outcome, count]) => {
-                nodeFirstAttemptOutcomes[outcome] = (nodeFirstAttemptOutcomes[outcome] || 0) + count;
-            });
-        });
-        
+
+        // Outcome statistics for THIS node — each step's own outcome (per-node
+        // tally), not its successors'. This colors/labels terminal nodes like
+        // FinalAnswer correctly, matching the striped node-outcome fills. On the
+        // Selected Sequence graph these are scoped to exact-sequence students so
+        // they line up with the visit counts above; elsewhere the precomputed
+        // full-dataset tally is used.
+        let nodeOutcomes: { [outcome: string]: number };
+        let nodeFirstAttempts: { [outcome: string]: number };
+        if (sequenceStudents) {
+            const scoped = computeScopedNodeOutcomes(nodeName, sequenceStudents, stepSequences, outcomeSequences);
+            nodeOutcomes = scoped.all;
+            nodeFirstAttempts = scoped.firstAttempt;
+        } else {
+            nodeOutcomes = nodeOutcomeCounts[nodeName] || {};
+            nodeFirstAttempts = nodeFirstAttemptOutcomes[nodeName] || {};
+        }
+
         const totalOutcomes = Object.values(nodeOutcomes).reduce((sum, count) => sum + count, 0);
-        const totalFirstAttempts = Object.values(nodeFirstAttemptOutcomes).reduce((sum, count) => sum + count, 0);
-        
+        const totalFirstAttempts = Object.values(nodeFirstAttempts).reduce((sum, count) => sum + count, 0);
+
         const outcomeSummary = Object.entries(nodeOutcomes)
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
@@ -757,7 +828,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .slice(0, 5) // Show top 5 outcomes
             .join('\n      ');
         
-        const firstAttemptSummary = Object.entries(nodeFirstAttemptOutcomes)
+        const firstAttemptSummary = Object.entries(nodeFirstAttempts)
             .sort(([,a], [,b]) => b - a)
             .map(([outcome, count]) => {
                 const percentage = totalFirstAttempts > 0 ? ((count / totalFirstAttempts) * 100).toFixed(1) : '0';
@@ -827,22 +898,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             });
         }
         
-        // Count exact progress status for students who took this transition
-        // IMPORTANT: Filter by current problemName to get accurate progress status
+        // Count progress status for students who took this transition. As in
+        // calculateNodeProgressStats, status is a per-student property taken from
+        // any of their rows (last wins); we do NOT filter by the file-derived
+        // problemName, which rarely matches the CSV's Problem Name.
         let graduatedCount = 0;
         let promotedCount = 0;
         let otherCount = 0;
 
         if (sortedData && sortedData.length > 0 && studentsOnEdge.size > 0) {
-            // Create a map of student progress status FOR THIS PROBLEM ONLY
             const studentProgressMap = new Map<string, string>();
             sortedData.forEach((row: any) => {
                 const studentId = row['Anon Student Id'];
-                const rowProblemName = row['Problem Name'];
                 const progressStatus = row['CF (Workspace Progress Status)'];
-
-                // Only use progress status from rows for the current problem
-                if (studentId && progressStatus && rowProblemName === problemName) {
+                if (studentId && progressStatus) {
                     studentProgressMap.set(studentId, progressStatus);
                 }
             });
@@ -858,8 +927,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 }
             });
         }
-        
-        const total = studentsOnEdge.size;
+
+        // Total is the number of students with a known status, so buckets sum to it.
+        const total = graduatedCount + promotedCount + otherCount;
         const graduatedPercentage = total > 0 ? ((graduatedCount / total) * 100).toFixed(1) : '0';
         const promotedPercentage = total > 0 ? ((promotedCount / total) * 100).toFixed(1) : '0';
         
@@ -959,8 +1029,17 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             + `    • Min ${modeLabel} Threshold: ${minVisits.toLocaleString()}`;
     };
 
-    // Store references to attached event listeners for cleanup
-    const eventListenersRef = useRef<Map<string, { elements: Element[], handlers: ((e: Event) => void)[] }>>(new Map());
+    // Store references to attached event listeners for cleanup. `elements`/
+    // `handlers` are the per-node/edge click handlers; `svg`/`svgHandlers` are
+    // the graph-level zoom/pan handlers, which MUST also be removed on re-render
+    // (d3-graphviz reuses the same <svg>, so otherwise they stack and every
+    // wheel/drag fires N times — erratic, compounding zoom/pan).
+    const eventListenersRef = useRef<Map<string, {
+        elements: Element[];
+        handlers: ((e: Event) => void)[];
+        svg?: SVGSVGElement;
+        svgHandlers?: Array<{ type: string; handler: EventListener }>;
+    }>>(new Map());
 
     // Store transform states for each graph to persist across tab switches
     const transformStates = useRef<{[key: string]: {
@@ -985,6 +1064,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     element.removeEventListener('click', handler);
                 }
             });
+            // Remove the graph-level zoom/pan listeners so they don't accumulate.
+            if (listeners.svg && listeners.svgHandlers) {
+                listeners.svgHandlers.forEach(({ type, handler }) => {
+                    listeners.svg!.removeEventListener(type, handler);
+                });
+            }
             eventListenersRef.current.delete(filename);
         }
     };
@@ -1042,38 +1127,35 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 const bbox = gElement.getBBox();
                                 
                                 if (bbox.width > 0 && bbox.height > 0) {
-                                    // Only scale down if the graph is actually too large
-                                    const padding = 60;
-                                    const availableWidth = width - padding * 2;
-                                    const availableHeight = height - padding * 2;
+                                    // Center within the SVG's ACTUAL coordinate space. d3-graphviz
+                                    // gives the <svg> a viewBox, so the visible drawing area is the
+                                    // viewBox (same user-space getBBox reports in) — NOT the pixel
+                                    // width/height we requested. Centering in the real space (and a
+                                    // proportional margin so it's unit-independent) removes the
+                                    // vertical offset that previously needed a hand-tuned nudge.
+                                    const vb = svg.viewBox && svg.viewBox.baseVal;
+                                    const viewW = (vb && vb.width) ? vb.width : (svg.width.baseVal.value || width);
+                                    const viewH = (vb && vb.height) ? vb.height : (svg.height.baseVal.value || height);
 
-                                    // Only scale if graph is larger than available space
+                                    const marginFrac = 0.06; // 6% breathing room on every side
+                                    const availableWidth = viewW * (1 - 2 * marginFrac);
+                                    const availableHeight = viewH * (1 - 2 * marginFrac);
+
+                                    // Scale down to fit; never scale up past 1:1.
                                     if (bbox.width > availableWidth || bbox.height > availableHeight) {
-                                        const scaleX = availableWidth / bbox.width;
-                                        const scaleY = availableHeight / bbox.height;
-                                        initialScale = Math.min(scaleX, scaleY);
+                                        initialScale = Math.min(availableWidth / bbox.width, availableHeight / bbox.height);
                                     } else {
-                                        // Graph fits fine, use normal scale
                                         initialScale = 1.0;
                                     }
 
-                                    // Calculate scaled dimensions
                                     const scaledWidth = bbox.width * initialScale;
                                     const scaledHeight = bbox.height * initialScale;
-
-                                    // Calculate top-left position for the scaled graph
                                     const scaledBboxTopLeftX = bbox.x * initialScale;
                                     const scaledBboxTopLeftY = bbox.y * initialScale;
 
-                                    // Calculate proper centering
-                                    initialTranslateX = (width - scaledWidth) / 2 - scaledBboxTopLeftX;
-                                    initialTranslateY = (height - scaledHeight) / 2 - scaledBboxTopLeftY;
-
-                                    // Add upward bias to prevent bottom nodes from being cut off
-                                    initialTranslateY -= 60;
-
-                                    // Add leftward bias to center graphs better
-                                    initialTranslateX -= 50;
+                                    // Center in the SVG's coordinate space — no magic nudge.
+                                    initialTranslateX = (viewW - scaledWidth) / 2 - scaledBboxTopLeftX;
+                                    initialTranslateY = (viewH - scaledHeight) / 2 - scaledBboxTopLeftY;
 
                                     console.log(`Centering calculation for ${filename}:`, {
                                         containerSize: { width, height },
@@ -1220,16 +1302,33 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 resetView();
                             };
 
-                            // Add zoom and pan event listeners
+                            // Add zoom and pan event listeners. Track each so
+                            // cleanupEventListeners can remove them on the next
+                            // render (the <svg> persists across d3-graphviz
+                            // updates, so untracked listeners would stack).
+                            const svgHandlers: Array<{ type: string; handler: EventListener }> = [
+                                { type: 'wheel', handler: wheelHandler as EventListener },
+                                { type: 'dblclick', handler: doubleClickHandler as EventListener },
+                                { type: 'mousedown', handler: mouseDownHandler as EventListener },
+                                { type: 'mousemove', handler: mouseMoveHandler as EventListener },
+                                { type: 'mouseup', handler: mouseUpHandler as EventListener },
+                            ];
                             svg.addEventListener('wheel', wheelHandler, { passive: false });
                             svg.addEventListener('dblclick', doubleClickHandler);
                             svg.addEventListener('mousedown', mouseDownHandler);
                             svg.addEventListener('mousemove', mouseMoveHandler);
                             svg.addEventListener('mouseup', mouseUpHandler);
 
-                            const newListeners: { elements: Element[], handlers: ((e: Event) => void)[] } = {
+                            const newListeners: {
+                                elements: Element[];
+                                handlers: ((e: Event) => void)[];
+                                svg?: SVGSVGElement;
+                                svgHandlers?: Array<{ type: string; handler: EventListener }>;
+                            } = {
                                 elements: [],
-                                handlers: []
+                                handlers: [],
+                                svg,
+                                svgHandlers
                             };
 
                             // Add node click handlers - use Set to avoid duplicates more efficiently
@@ -1480,16 +1579,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
 
     useEffect(() => {
-        if (topDotString && graphRefTop.current) {
+        if (showSelectedSequence && topDotString && graphRefTop.current) {
             renderGraph(topDotString, graphRefTop, 'selected_sequence', numberOfGraphs);
         }
-    }, [topDotString, numberOfGraphs]);
+    }, [topDotString, numberOfGraphs, showSelectedSequence]);
 
     useEffect(() => {
-        if (dotString && graphRefMain.current) {
+        if (showAllStudents && dotString && graphRefMain.current) {
             renderGraph(dotString, graphRefMain, 'all_students', numberOfGraphs);
         }
-    }, [dotString, numberOfGraphs]);
+    }, [dotString, numberOfGraphs, showAllStudents]);
 
     useEffect(() => {
         filters.forEach(filter => {
@@ -1556,10 +1655,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         </div>
                     )}
                     <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
-                        {topDotString && (
+                        {showSelectedSequence && topDotString && (
                             <div
                                 className={`graph-item flex flex-col items-center w-[350px] border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-2">Selected Sequence</h2>
+                                <h2 className="text-lg font-semibold text-center mb-1">Selected Sequence</h2>
+                                <p className="text-sm text-gray-500 text-center mb-2">
+                                    👥 {selectedSequenceCount.toLocaleString()} students followed this sequence
+                                </p>
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
                                         maxValue={mainGraphData?.maxEdgeCount || 100}
@@ -1570,9 +1672,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         showSequenceFilter={true}
                                         showOnlySequenceStudents={showOnlySequenceStudents}
                                         onSequenceFilterChange={(value: boolean) => setShowOnlySequenceStudents(value)}
-                                        showNodeColoringOption={true}
-                                        colorNodesBySequence={colorNodesBySequence}
-                                        onNodeColoringChange={(value: boolean) => setColorNodesBySequence(value)}
                                     />
                                     <div ref={graphRefTop} className="w-full h-full"></div>
                                 </div>
@@ -1581,10 +1680,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 </div>
                             </div>
                         )}
-                        {dotString && (
+                        {showAllStudents && dotString && (
                             <div
                                 className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-2">All Students, All Paths</h2>
+                                <h2 className="text-lg font-semibold text-center mb-1">All Students, All Paths</h2>
+                                <p className="text-sm text-gray-500 text-center mb-2">
+                                    👥 {(summaryMetrics?.totalStudents ?? 0).toLocaleString()} students attempted this problem
+                                </p>
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
                                         maxValue={connectivityCaps['all_students'] ?? (mainGraphData?.maxEdgeCount || 100)}
@@ -1606,11 +1708,20 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             const filteredGraphData = filteredGraphDataMap[filter];
                             if (!dotString || !ref) return null;
 
+                            // Unique students in this status subset, plus a Streamlit-style phrase.
+                            const subsetCount = Object.keys(filteredGraphData?.filteredStepSequences || {}).length;
+                            const statusPhrase = filter === 'GRADUATED' ? 'graduated'
+                                : filter === 'PROMOTED' ? 'were promoted'
+                                : `matched ${titleCase(filter)}`;
+
                             return (
                                 <div
                                     key={filter}
                                     className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                    <h2 className="text-lg font-semibold text-center mb-2">Filtered Graph: {titleCase(filter)}</h2>
+                                    <h2 className="text-lg font-semibold text-center mb-1">Filtered Graph: {titleCase(filter)}</h2>
+                                    <p className="text-sm text-gray-500 text-center mb-2">
+                                        👥 {subsetCount.toLocaleString()} students who completed this problem {statusPhrase}
+                                    </p>
                                     <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
                                         <GraphMenu
                                             maxValue={connectivityCaps[graphKey] ?? (filteredGraphData?.maxEdgeCount || 100)}

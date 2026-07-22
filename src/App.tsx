@@ -69,10 +69,16 @@ function App() {
     // const [csvData, setCsvData] = useState<string>('');
     // State to manage the filter values for filtering the graph data (can show multiple)
     const [filters, setFilters] = useState<string[]>([]);
+
+    // Which of the always-available graphs to display (independent of status filters)
+    const [showSelectedSequence, setShowSelectedSequence] = useState<boolean>(true);
+    const [showAllStudents, setShowAllStudents] = useState<boolean>(true);
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [errorMode, setErrorMode] = useState<boolean>(false);
     const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(true);
+    const [nodeOutcomeMode, setNodeOutcomeMode] = useState<boolean>(false);
+    const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
     const [fileInfo, setFileInfo] = useState<{filename: string, source: string} | null>(null);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
@@ -176,6 +182,10 @@ function App() {
      */
     const handleToggleUniqueStudentMode = () => setUniqueStudentMode(!uniqueStudentMode);
 
+    const handleToggleNodeOutcomeMode = () => setNodeOutcomeMode(!nodeOutcomeMode);
+
+    const handleToggleColorNodesBySequence = () => setColorNodesBySequence(!colorNodesBySequence);
+
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
      *
@@ -265,8 +275,15 @@ function App() {
                                 <div className="flex flex-col space-y-6">
                                     {/* Filter Section */}
                                     <div className="space-y-2">
-                                        <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                                        <FilterComponent onFilterChange={setFilters} currentFilters={filters}/>
+                                        <h3 className="text-lg font-semibold text-gray-900">Graphs</h3>
+                                        <FilterComponent
+                                            onFilterChange={setFilters}
+                                            currentFilters={filters}
+                                            showSelectedSequence={showSelectedSequence}
+                                            showAllStudents={showAllStudents}
+                                            onShowSelectedSequenceChange={setShowSelectedSequence}
+                                            onShowAllStudentsChange={setShowAllStudents}
+                                        />
                                     </div>
 
                                     {/* Sequence Section */}
@@ -298,7 +315,30 @@ function App() {
 
                                         <div className="pb-2 border-b border-gray-200">
                                             <label className="text-sm font-medium text-gray-700">Error Mode</label>
-                                            <Switch isOn={errorMode} handleToggle={handleToggleError}/>
+                                            <Switch isOn={errorMode} handleToggle={handleToggleError} disabled={nodeOutcomeMode}/>
+                                            {nodeOutcomeMode && (
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Disabled while nodes show the outcome mix
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Color Nodes by Outcome</label>
+                                            <Switch isOn={nodeOutcomeMode} handleToggle={handleToggleNodeOutcomeMode}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Fill each node with a 100% bar of its outcome mix; edges become neutral flow lines
+                                            </p>
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Color Nodes by Selected Sequence</label>
+                                            <Switch isOn={colorNodesBySequence} handleToggle={handleToggleColorNodesBySequence}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {nodeOutcomeMode
+                                                    ? 'Highlights sequence nodes with a bold border'
+                                                    : 'Shade sequence nodes white→blue by position; off = all nodes gray'}
+                                            </p>
                                         </div>
 
                                         <div className="pb-2 border-b border-gray-200">
@@ -339,6 +379,10 @@ function App() {
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
                                             errorMode={errorMode}
                                             uniqueStudentMode={uniqueStudentMode}
+                                            nodeOutcomeMode={nodeOutcomeMode}
+                                            showSelectedSequence={showSelectedSequence}
+                                            showAllStudents={showAllStudents}
+                                            colorNodesBySequence={colorNodesBySequence}
                                             problemName={fileInfo?.filename.replace(/\.(csv|CSV)$/, '') || 'unknown'}
                                         />
                                     </div>
@@ -346,6 +390,14 @@ function App() {
                                 {/* Legend component */}
                                 <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-white">
                                     <h3 className="text-lg font-semibold mb-2">Graph Legend</h3>
+                                    {nodeOutcomeMode && (
+                                        <div className="mb-3 p-2 rounded bg-gray-50 border border-gray-200 text-sm text-gray-700">
+                                            <span className="font-medium">Color Nodes by Outcome is on:</span> each node is a
+                                            100% bar of its outcome mix (same Correct / Error / Hint / JIT / Other colors as
+                                            the edge palette below); a bold black border marks nodes on the selected sequence.
+                                            Edges are drawn as neutral gray flow lines.
+                                        </div>
+                                    )}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <h4 className="font-medium mb-2">Node Colors</h4>
