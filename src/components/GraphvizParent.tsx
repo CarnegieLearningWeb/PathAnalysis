@@ -128,6 +128,25 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         };
     }, [csvData, selfLoops, uniqueStudentMode]); // Depends on both selfLoops and uniqueStudentMode
 
+    // Dataset-level summary metrics for the whole unfiltered population.
+    // Total Students counts distinct student IDs; Avg Path Length is the mean
+    // length over every per-student-per-problem step sequence that feeds the
+    // graph. Mirrors the Streamlit tool's create_summary_metrics, minus its
+    // "Unique Paths" metric (dropped as low-signal — see decision notes).
+    const summaryMetrics = useMemo(() => {
+        if (!mainGraphData) return null;
+        const { stepSequences } = mainGraphData;
+        const totalStudents = Object.keys(stepSequences).length;
+        const pathLengths: number[] = [];
+        Object.values(stepSequences).forEach((byProblem: { [problem: string]: string[] }) => {
+            Object.values(byProblem).forEach((seq) => pathLengths.push(seq.length));
+        });
+        const avgPathLength = pathLengths.length
+            ? pathLengths.reduce((sum, n) => sum + n, 0) / pathLengths.length
+            : 0;
+        return { totalStudents, avgPathLength };
+    }, [mainGraphData]);
+
     // Memoized filtered graph data for each filter
     const filteredGraphDataMap = useMemo(() => {
         if (!mainGraphData || filters.length === 0) return {};
@@ -1516,9 +1535,26 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             <ErrorBoundary>
                 {/* Graphs Tab */}
                 <div 
-                    className="graphs-tab flex flex-col w-full h-full" 
+                    className="graphs-tab flex flex-col w-full h-full"
                     style={{ display: activeTab === 'graphs' ? 'flex' : 'none' }}
                 >
+                    {/* Dataset-level summary (whole unfiltered population) */}
+                    {summaryMetrics && (
+                        <div className="flex justify-center gap-10 mb-4">
+                            <div className="flex flex-col items-center">
+                                <span className="text-2xl font-semibold text-gray-800">
+                                    {summaryMetrics.totalStudents.toLocaleString()}
+                                </span>
+                                <span className="text-xs uppercase tracking-wide text-gray-500">Total Students</span>
+                            </div>
+                            <div className="flex flex-col items-center">
+                                <span className="text-2xl font-semibold text-gray-800">
+                                    {summaryMetrics.avgPathLength.toFixed(1)} steps
+                                </span>
+                                <span className="text-xs uppercase tracking-wide text-gray-500">Avg Path Length</span>
+                            </div>
+                        </div>
+                    )}
                     <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
                         {topDotString && (
                             <div
