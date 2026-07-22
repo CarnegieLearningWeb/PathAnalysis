@@ -1632,7 +1632,8 @@ const generateTopSequenceVisualization = (
     sequenceFunnelCounts: { [key: string]: number } | null = null,
     sequenceErrorCounts: { [key: string]: number } | null = null,
     nodeOutcomeMode: boolean = false,
-    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {}
+    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
+    showEdgeLabels: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -1714,7 +1715,7 @@ const generateTopSequenceVisualization = (
 
                 const styleAttr = dashedError ? ', style=dashed' : '';
                 // Leading spaces nudge the count off the vertical edge line.
-                const labelAttr = `, label="   ${displayCount.toLocaleString()}"`;
+                const labelAttr = showEdgeLabels ? `, label="   ${displayCount.toLocaleString()}"` : '';
                 dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${labelAttr}${styleAttr}];\n`;
 
                 if (err > 0 && !fullError && !isSelfLoop) {
@@ -1920,7 +1921,8 @@ export function generateDotString(
     sequenceFunnelCounts: { [key: string]: number } | null = null,
     sequenceErrorCounts: { [key: string]: number } | null = null,
     nodeOutcomeMode: boolean = false,
-    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {}
+    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
+    showEdgeLabels: boolean = true
 ): string {
     // An empty (but defined) sequence means "None" is selected: the full graphs
     // still render (every node neutral gray, no path emphasis), but the Selected
@@ -1972,7 +1974,8 @@ export function generateDotString(
             sequenceFunnelCounts,
             sequenceErrorCounts,
             nodeOutcomeMode,
-            nodeOutcomeCounts
+            nodeOutcomeCounts,
+            showEdgeLabels
         );
     } else {
         dotString += generateFullGraphVisualization(
