@@ -33,13 +33,22 @@ This tool visualizes student learning paths through educational content, showing
    - Export graph as high-quality PNG
    - Responsive design that works on different screen sizes
 
+## Installation
+
+1. Install `Node.js` (https://nodejs.org/en/download/) and `bun` (https://bun.sh/). This project uses `bun` for installing, running, and deploying (see `amplify.yml`) — prefer it over `npm`/`yarn` so your lockfile stays in sync with what's deployed.
+2. Clone the repo and install dependencies:
+   ```
+   git clone https://github.com/CarnegieLearningWeb/PathAnalysis.git
+   cd PathAnalysis
+   bun install
+   ```
+3. Create a `.env` file in the project root — see [Environment Variables](#environment-variables) below.
+
 ## How to Run Locally
 
-1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
-2. This project uses `bun` to run, build, and deploy (see `amplify.yml`). Install it from https://bun.sh/.
-3. Run ```bun install``` to download the necessary dependencies.
-4. Copy `.env.example` (if present) or create a `.env` file — see [Environment Variables](#environment-variables) below.
-5. Run ```bun run dev``` to start the Vite dev server only, or ```bun run dev:full``` to also run the local API server (needed for loading/uploading data files stored in GitHub — see below).
+- `bun run dev` — starts the Vite dev server only.
+- `bun run dev:full` — also starts the local API server, needed for loading/uploading data files stored in GitHub (see below).
+- `bun run build` — typechecks and builds a production bundle.
 
 ## Environment Variables
 
