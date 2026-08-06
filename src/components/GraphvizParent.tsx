@@ -22,7 +22,22 @@ import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
 import { Download } from 'lucide-react';
 import GraphMenu from './GraphMenu';
-import VisNetworkGraph from './VisNetworkGraph';
+import {
+    addExportTitle,
+    addTitleLabel,
+    buildExportReadme,
+    countStudentsOnEdges,
+    datasetDisplayTitle,
+    drawnEdgeKeys,
+    prepareExportDot,
+} from './graphExport';
+import {
+    downloadFile,
+    downloadZip,
+    renderDotToFiles,
+    type ExportFile,
+    type ExportFormat,
+} from './exportRender';
 
 // History item interface
 interface HistoryItem {
@@ -37,6 +52,44 @@ interface HistoryItem {
 
 const titleCase = (str: string | null) => str ? str.charAt(0).toUpperCase() + str.slice(1).toLowerCase() : '';
 
+// Outcome-coloring modes offered by the export, independent of what's on screen:
+// the same graph can be written out with node bars, edge colors, or both.
+const EXPORT_OUTCOME_MODES: Array<{ label: string; mode: 'node' | 'edge' }> = [
+    { label: 'Nodes', mode: 'node' },
+    { label: 'Edges', mode: 'edge' },
+];
+// Mode suffix for filenames, used only when an export covers both modes (a
+// single-mode export keeps the plain, unsuffixed stem).
+const MODE_FILE_SUFFIX: { [mode: string]: string } = {
+    node: 'node_outcomes',
+    edge: 'edge_outcomes',
+};
+const EXPORT_FORMATS: Array<{ label: string; format: ExportFormat }> = [
+    { label: 'PNG (image)', format: 'png' },
+    { label: 'SVG (vector)', format: 'svg' },
+    { label: 'DOT (source)', format: 'dot' },
+];
+
+/**
+ * Everything the export needs to re-render one graph. `buildDot` re-runs that
+ * graph's DOT generation with the outcome mode and sequence emphasis the export
+ * asks for, rather than the ones on screen — so a download can carry both
+ * coloring modes without the user toggling anything.
+ */
+interface ExportGraphEntry {
+    title: string;
+    baseFilename: string;
+    minVisits: number;
+    /** Unique students in this graph's population, before thresholding. */
+    totalStudents: number;
+    /** Selected Sequence view only: students who followed the path exactly. */
+    followedCount: number | null;
+    /** Full graphs: students of THIS graph who walked the sequence end to end. */
+    sequenceMatchCount: number | null;
+    stepSequences: { [student: string]: { [problem: string]: string[] } };
+    buildDot: (opts: { nodeOutcomeMode: boolean; highlightSelectedSequence: boolean }) => string;
+}
+
 // Default edge-visibility threshold for a graph: 8% of its max edge count,
 // floored at 1. Matches the Streamlit tool — given the thickness formula
 // (count / max * 10), 8% hides edges thinner than 0.8pt.
@@ -46,6 +99,24 @@ const defaultMinVisits = (maxEdgeCount: number): number => Math.max(1, Math.roun
 const arraysEqual = (a: string[], b: string[]): boolean => {
     if (a.length !== b.length) return false;
     return a.every((val, index) => val === b[index]);
+};
+
+/**
+ * Distinct students whose path through some problem is exactly `sequence` — the
+ * "took it end to end" count. Students, not paths, because it is always stated
+ * against a student population (this graph's students, or the ones its drawn
+ * edges represent). Returns null when there is no sequence to match.
+ */
+const countStudentsOnExactSequence = (
+    stepSequences: { [student: string]: { [problem: string]: string[] } },
+    sequence: string[] | null | undefined
+): number | null => {
+    if (!sequence || sequence.length === 0) return null;
+    let count = 0;
+    Object.values(stepSequences).forEach((byProblem) => {
+        if (Object.values(byProblem).some((steps) => arraysEqual(steps, sequence))) count++;
+    });
+    return count;
 };
 
 // Per-node outcome mix (all visits + first attempt) restricted to a set of
@@ -90,7 +161,6 @@ interface GraphvizParentProps {
     showSelectedSequence: boolean;
     showAllStudents: boolean;
     colorNodesBySequence: boolean;
-    useVisNetworkSpike: boolean;
     showEdgeLabels: boolean;
     problemName: string;
 }
@@ -108,7 +178,6 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     showSelectedSequence,
     showAllStudents,
     colorNodesBySequence,
-    useVisNetworkSpike,
     showEdgeLabels,
     problemName
 }) => {
@@ -132,6 +201,27 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
     // Track recent clicks to prevent duplicates
     const recentClicks = useRef<Set<string>>(new Set());
+
+    // Export descriptors for each rendered graph, filled in by the same effects
+    // that build the on-screen DOT. Held in a ref (not state): only the export
+    // handlers read it, at click time, so writing it must not re-render.
+    const exportRegistry = useRef<{ [graphKey: string]: ExportGraphEntry }>({});
+
+    // Export panel controls
+    const [exportOpen, setExportOpen] = useState<boolean>(false);
+    const [exportGraphKeys, setExportGraphKeys] = useState<string[] | null>(null);
+    const [exportModes, setExportModes] = useState<Array<'node' | 'edge'> | null>(null);
+    const [exportFormats, setExportFormats] = useState<ExportFormat[]>(['png']);
+    const [exportHighlightSequence, setExportHighlightSequence] = useState<boolean>(true);
+    const [exportTitled, setExportTitled] = useState<boolean>(true);
+    const [exportReadme, setExportReadme] = useState<boolean>(true);
+    const [exportBusy, setExportBusy] = useState<boolean>(false);
+    const [exportError, setExportError] = useState<string | null>(null);
+
+    // File stem for an exported graph. The `_min<N>` suffix records the edge
+    // threshold the graph was drawn at, which the README explains.
+    const exportStem = (graphKey: string, minVisits: number): string =>
+        `${problemName.replace(/[^a-zA-Z0-9]/g, '_')}_${graphKey}_min${minVisits}`;
 
     // Refs for rendering the Graphviz graphs
     const graphRefMain = useRef<HTMLDivElement>(null);
@@ -189,18 +279,29 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return { totalStudents, avgPathLength };
     }, [mainGraphData]);
 
-    // Number of (student, problem) paths that exactly follow the selected
-    // sequence — the "N students followed this sequence" count (matches the
-    // Streamlit caption / getTopSequences count).
-    const selectedSequenceCount = useMemo(() => {
-        if (!mainGraphData || !selectedSequence || selectedSequence.length === 0) return 0;
-        let count = 0;
-        Object.values(mainGraphData.stepSequences).forEach((byProblem: { [problem: string]: string[] }) => {
-            Object.values(byProblem).forEach((seq) => {
-                if (arraysEqual(seq, selectedSequence)) count++;
-            });
+    // Which workspace(s) and problem(s) the uploaded dataset covers. Only the
+    // export uses this — to headline an image with the problem it belongs to,
+    // and to say plainly when a file spans more than one.
+    const datasetIdentity = useMemo(() => {
+        const workspaceIds = new Set<string>();
+        const problemNames = new Set<string>();
+        (mainGraphData?.sortedData || []).forEach((row: any) => {
+            const workspace = row['Level (Workspace Id)'];
+            if (workspace) workspaceIds.add(workspace);
+            if (row['Problem Name']) problemNames.add(row['Problem Name']);
         });
-        return count;
+        const ids = Array.from(workspaceIds).sort();
+        const problems = Array.from(problemNames).sort();
+        const [heading, subheading] = datasetDisplayTitle(problemName, ids, problems);
+        return { workspaceIds: ids, problemNames: problems, heading, subheading };
+    }, [mainGraphData, problemName]);
+
+    // Distinct students who followed the selected sequence exactly — the
+    // "N students followed this sequence" caption, and the same number the
+    // export states, so the image and the screen never disagree.
+    const selectedSequenceCount = useMemo(() => {
+        if (!mainGraphData) return 0;
+        return countStudentsOnExactSequence(mainGraphData.stepSequences, selectedSequence) ?? 0;
     }, [mainGraphData, selectedSequence]);
 
     // Memoized filtered graph data for each filter
@@ -323,30 +424,51 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // Use simple fixed threshold for connectivity, but allow minVisits to control visibility
             const optimalThreshold = 1;
             
-            const dotString = generateDotString(
-                normalizedThicknesses,
-                ratioEdges,
-                edgeOutcomeCounts,
-                edgeCountsForGraph,
-                totalNodeEdges,
-                optimalThreshold, // Use calculated optimal threshold
-                effectiveMinVisits('all_students', maxEdgeCount), // Use per-graph minVisits (capped) or capped 8% default
-                sequenceToUse,
-                false,
-                totalVisits,
-                repeatVisits,
-                errorMode, // Use actual errorMode setting
-                mainGraphData.firstAttemptOutcomes,
-                uniqueStudentMode,
-                colorNodesBySequence,
-                maxCountForThickness,
-                mainGraphData.edgeErrorStudentCounts,
-                null, // sequenceFunnelCounts (full graph)
-                null, // sequenceErrorCounts (full graph)
+            // Everything about the DOT except which mode carries the outcome
+            // signal and whether the sequence is marked, so the export can
+            // re-render this exact graph either way without re-deriving inputs.
+            const mainMinVisits = effectiveMinVisits('all_students', maxEdgeCount);
+            const buildMainDot = (opts: { nodeOutcomeMode: boolean; highlightSelectedSequence: boolean }) =>
+                generateDotString(
+                    normalizedThicknesses,
+                    ratioEdges,
+                    edgeOutcomeCounts,
+                    edgeCountsForGraph,
+                    totalNodeEdges,
+                    optimalThreshold, // Use calculated optimal threshold
+                    mainMinVisits, // Use per-graph minVisits (capped) or capped 8% default
+                    sequenceToUse,
+                    false,
+                    totalVisits,
+                    repeatVisits,
+                    errorMode, // Use actual errorMode setting
+                    mainGraphData.firstAttemptOutcomes,
+                    uniqueStudentMode,
+                    opts.highlightSelectedSequence,
+                    maxCountForThickness,
+                    mainGraphData.edgeErrorStudentCounts,
+                    null, // sequenceFunnelCounts (full graph)
+                    null, // sequenceErrorCounts (full graph)
+                    opts.nodeOutcomeMode,
+                    mainGraphData.nodeOutcomeCounts,
+                    showEdgeLabels,
+                );
+
+            const dotString = buildMainDot({
                 nodeOutcomeMode,
-                mainGraphData.nodeOutcomeCounts,
-                showEdgeLabels,
-            );
+                highlightSelectedSequence: colorNodesBySequence,
+            });
+
+            exportRegistry.current['all_students'] = {
+                title: 'All Students, All Paths',
+                baseFilename: exportStem('all_students', mainMinVisits),
+                minVisits: mainMinVisits,
+                totalStudents: Object.keys(mainGraphData.stepSequences).length,
+                followedCount: null,
+                sequenceMatchCount: countStudentsOnExactSequence(mainGraphData.stepSequences, sequenceToUse),
+                stepSequences: mainGraphData.stepSequences,
+                buildDot: buildMainDot,
+            };
 
             setDotString(dotString);
 
@@ -359,6 +481,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             // still render (all nodes gray) via the main graph above.
             if (sequenceToUseForCounting.length < 2) {
                 setTopDotString(null);
+                delete exportRegistry.current['selected_sequence'];
                 return;
             }
 
@@ -384,7 +507,8 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 ? computeSequenceErrorCounts(mainGraphData.stepSequences, mainGraphData.outcomeSequences, sequenceToUseForCounting)
                 : null;
 
-            setTopDotString(
+            const seqMinVisits = minVisitsPerGraph['selected_sequence'] ?? 0;
+            const buildTopDot = (opts: { nodeOutcomeMode: boolean }) =>
                 generateDotString(
                     sequenceNormalizedThicknesses,
                     sequenceResults.ratioEdges,
@@ -392,7 +516,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     uniqueStudentMode ? sequenceResults.edgeCounts : sequenceResults.totalVisits,
                     sequenceResults.totalNodeEdges,
                     0, // Use threshold 0 to show ALL edges for static top graph
-                    minVisitsPerGraph['selected_sequence'] ?? 0, // Use per-graph minVisits or default to 0
+                    seqMinVisits, // Use per-graph minVisits or default to 0
                     selectedSequence || topSequences[0]?.sequence || [],
                     true,
                     sequenceResults.totalVisits,
@@ -405,11 +529,27 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     sequenceResults.edgeErrorStudentCounts,
                     funnelCounts,
                     seqErrorCounts,
-                    nodeOutcomeMode,
+                    opts.nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
                     showEdgeLabels,
-                )
-            );
+                );
+
+            exportRegistry.current['selected_sequence'] = {
+                title: 'Selected Sequence',
+                baseFilename: exportStem('selected_sequence', seqMinVisits),
+                minVisits: seqMinVisits,
+                totalStudents: Object.keys(mainGraphData.stepSequences).length,
+                // This view IS the path, so its honest population is the students
+                // who followed it — not everyone who used one of its transitions.
+                followedCount: countStudentsOnExactSequence(mainGraphData.stepSequences, sequenceToUseForCounting) ?? 0,
+                sequenceMatchCount: null,
+                stepSequences: mainGraphData.stepSequences,
+                // The sequence emphasis toggle is about the FULL graphs; this
+                // view is the sequence, so it ignores the override.
+                buildDot: buildTopDot,
+            };
+
+            setTopDotString(buildTopDot({ nodeOutcomeMode }));
         }
     }, [mainGraphData, selectedSequence, setTop5Sequences, top5Sequences, onMaxEdgeCountChange, onMaxMinEdgeCountChange, uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, showEdgeLabels, connectivityCaps]); // Responds to uniqueStudentMode, minVisits, errorMode, nodeOutcomeMode, minVisitsPerGraph, showOnlySequenceStudents, colorNodesBySequence, showEdgeLabels, connectivityCaps and selectedSequence
 
@@ -483,37 +623,58 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 const normalizedThicknesses = normalizeThicknesses(filteredCountsForThickness, filteredMaxCountForThickness, 10);
 
                 const graphKey = `filtered_graph_${filter}`;
-                const filteredDotString = generateDotString(
-                    normalizedThicknesses,
-                    filteredRatioEdges,
-                    filteredEdgeOutcomeCounts,
-                    filteredEdgeCounts,
-                    filteredTotalNodeEdges,
-                    1,
-                    effectiveMinVisits(graphKey, filteredMaxEdgeCount), // Use per-graph minVisits (capped) or capped 8% default
-                    sequenceToUse,
-                    false,
-                    filteredTotalVisits,
-                    filteredRepeatVisits,
-                    errorMode,
-                    filteredGraphData.firstAttemptOutcomes,
-                    uniqueStudentMode,
-                    colorNodesBySequence,
-                    filteredMaxCountForThickness,
-                    filteredGraphData.edgeErrorStudentCounts,
-                    null, // sequenceFunnelCounts (full graph)
-                    null, // sequenceErrorCounts (full graph)
-                    nodeOutcomeMode,
-                    filteredGraphData.nodeOutcomeCounts,
-                    showEdgeLabels,
-                );
+                const filteredMinVisits = effectiveMinVisits(graphKey, filteredMaxEdgeCount);
+                const buildFilteredDot = (opts: { nodeOutcomeMode: boolean; highlightSelectedSequence: boolean }) =>
+                    generateDotString(
+                        normalizedThicknesses,
+                        filteredRatioEdges,
+                        filteredEdgeOutcomeCounts,
+                        filteredEdgeCounts,
+                        filteredTotalNodeEdges,
+                        1,
+                        filteredMinVisits, // Use per-graph minVisits (capped) or capped 8% default
+                        sequenceToUse,
+                        false,
+                        filteredTotalVisits,
+                        filteredRepeatVisits,
+                        errorMode,
+                        filteredGraphData.firstAttemptOutcomes,
+                        uniqueStudentMode,
+                        opts.highlightSelectedSequence,
+                        filteredMaxCountForThickness,
+                        filteredGraphData.edgeErrorStudentCounts,
+                        null, // sequenceFunnelCounts (full graph)
+                        null, // sequenceErrorCounts (full graph)
+                        opts.nodeOutcomeMode,
+                        filteredGraphData.nodeOutcomeCounts,
+                        showEdgeLabels,
+                    );
 
-                newFilteredDotStrings[filter] = filteredDotString;
+                exportRegistry.current[graphKey] = {
+                    title: `Filtered Graph: ${titleCase(filter)}`,
+                    baseFilename: exportStem(graphKey, filteredMinVisits),
+                    minVisits: filteredMinVisits,
+                    totalStudents: Object.keys(filteredGraphData.filteredStepSequences || {}).length,
+                    followedCount: null,
+                    sequenceMatchCount: countStudentsOnExactSequence(
+                        filteredGraphData.filteredStepSequences || {}, sequenceToUse
+                    ),
+                    stepSequences: filteredGraphData.filteredStepSequences || {},
+                    buildDot: buildFilteredDot,
+                };
+
+                newFilteredDotStrings[filter] = buildFilteredDot({
+                    nodeOutcomeMode,
+                    highlightSelectedSequence: colorNodesBySequence,
+                });
             });
 
             setFilteredDotStrings(newFilteredDotStrings);
         } else {
             setFilteredDotStrings({});
+            Object.keys(exportRegistry.current)
+                .filter((key) => key.startsWith('filtered_graph_'))
+                .forEach((key) => delete exportRegistry.current[key]);
             // Reset max min edge count to the main graph's value
             if (mainGraphData) {
                 const sequenceToUse = selectedSequence || top5Sequences?.[0]?.sequence;
@@ -536,86 +697,194 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         };
     }, []);
 
-    // Export a graph as high-quality PNG with problem name
-    const exportGraphAsPNG = (graphRef: React.RefObject<HTMLDivElement>, graphName: string, minStudents?: number, isColored?: boolean) => {
-        if (!graphRef.current) return;
+    // Graphs currently on screen, in display order — the export's menu of what
+    // can be written out.
+    const exportableGraphs = useMemo(() => {
+        const keys: string[] = [];
+        if (showSelectedSequence && topDotString) keys.push('selected_sequence');
+        if (showAllStudents && dotString) keys.push('all_students');
+        filters.forEach((filter) => {
+            if (filteredDotStrings[filter]) keys.push(`filtered_graph_${filter}`);
+        });
+        return keys;
+    }, [showSelectedSequence, topDotString, showAllStudents, dotString, filters, filteredDotStrings]);
 
-        const svgElement = graphRef.current.querySelector('svg') as SVGSVGElement;
-        if (!svgElement) return;
+    // Default to every graph on screen and the outcome mode on screen, until the
+    // user picks otherwise (null = "follow the screen").
+    const effectiveExportGraphKeys = (exportGraphKeys ?? exportableGraphs)
+        .filter((key) => exportableGraphs.includes(key));
+    const effectiveExportModes: Array<'node' | 'edge'> =
+        exportModes ?? [nodeOutcomeMode ? 'node' : 'edge'];
 
-        // Build filename: problemName_graphName_minXX_colored
-        const sanitizedProblemName = problemName.replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedGraphName = graphName.replace(/[^a-zA-Z0-9]/g, '_');
-        let filename = `${sanitizedProblemName}_${sanitizedGraphName}`;
-        if (minStudents !== undefined) {
-            filename += `_min${minStudents}`;
+    /**
+     * The view, how many students the drawn graph represents, and — when the
+     * sequence is marked — how many of them walked it end to end. Thresholding
+     * drops low-traffic edges, so a graph can represent fewer students than its
+     * population; the gap is spelled out only when there actually is one.
+     */
+    const populationLines = (entry: ExportGraphEntry, dot: string, highlight: boolean): string[] => {
+        if (entry.followedCount !== null) {
+            return [`${entry.title} — ${entry.followedCount.toLocaleString()} students followed this path`];
         }
-        if (isColored) {
-            filename += '_colored';
+        const shown = countStudentsOnEdges(entry.stepSequences, drawnEdgeKeys(dot));
+        const lines = shown >= entry.totalStudents
+            ? [`${entry.title} — ${entry.totalStudents.toLocaleString()} students`]
+            : [`${entry.title} — ${shown.toLocaleString()} of ${entry.totalStudents.toLocaleString()} students represented`];
+        // The marked path only means something if the reader knows how much of
+        // this population actually walked it.
+        if (highlight && entry.sequenceMatchCount !== null) {
+            lines.push(
+                `Selected sequence marked — ${entry.sequenceMatchCount.toLocaleString()} of these students took it end to end`
+            );
         }
-        console.log('Export PNG - isColored:', isColored, 'filename:', filename);
-
-        // Get the actual content bounding box to capture the entire visible graph
-        const gElement = svgElement.querySelector('g') as SVGGElement;
-        if (!gElement) return;
-
-        const bbox = gElement.getBBox();
-
-        // Add padding around the content
-        const padding = 20;
-        const contentWidth = bbox.width + (padding * 2);
-        const contentHeight = bbox.height + (padding * 2);
-
-        // Clone the SVG and adjust its viewBox to match the content
-        const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
-        const clonedG = clonedSvg.querySelector('g') as SVGGElement;
-
-        // Remove any transforms from the cloned g element to get the raw content
-        if (clonedG) {
-            clonedG.removeAttribute('transform');
-        }
-
-        // Set viewBox to show all content with padding
-        clonedSvg.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${contentWidth} ${contentHeight}`);
-        clonedSvg.setAttribute('width', contentWidth.toString());
-        clonedSvg.setAttribute('height', contentHeight.toString());
-
-        // Create a high-resolution canvas
-        const scaleFactor = 3; // High quality export
-        const canvas = document.createElement('canvas');
-        canvas.width = contentWidth * scaleFactor;
-        canvas.height = contentHeight * scaleFactor;
-        const ctx = canvas.getContext('2d');
-
-        if (!ctx) return;
-
-        // Fill with white background
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Serialize the SVG
-        const svgData = new XMLSerializer().serializeToString(clonedSvg);
-
-        // Convert SVG to an image
-        const img = new Image();
-        img.onload = () => {
-            // Scale the canvas content for higher resolution
-            ctx.scale(scaleFactor, scaleFactor);
-            ctx.drawImage(img, 0, 0, contentWidth, contentHeight);
-
-            // Export as PNG
-            const link = document.createElement('a');
-            link.download = `${filename}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-        };
-
-        img.onerror = (err) => {
-            console.error('Failed to load SVG for export:', err);
-        };
-
-        img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+        return lines;
     };
+
+    /** Bottom-right note: the coloring mode and the edge threshold in force. */
+    const exportFootnote = (entry: ExportGraphEntry, mode: 'node' | 'edge'): string => {
+        const coloring = mode === 'node' ? 'Node-outcome coloring' : 'Edge-outcome coloring';
+        const threshold = entry.minVisits > 1
+            ? `edges shown require at least ${entry.minVisits.toLocaleString()} ${uniqueStudentMode ? 'students' : 'transitions'}`
+            : 'all transitions shown';
+        return [coloring, threshold].join(' · ');
+    };
+
+    /**
+     * Render the requested graphs, in the requested outcome modes and formats,
+     * into files. Exports re-render their own DOT rather than screenshotting the
+     * live SVG — that's what lets an image carry a masthead, an opaque canvas,
+     * and the outcome mode that isn't currently on screen.
+     */
+    const buildExportFiles = async (
+        graphKeys: string[],
+        modes: Array<'node' | 'edge'>,
+        formats: ExportFormat[],
+        opts: { titled: boolean; highlight: boolean; readme: boolean }
+    ): Promise<{ files: ExportFile[]; errors: string[] }> => {
+        const files: ExportFile[] = [];
+        const errors: string[] = [];
+        // Only tag names with the mode when both are in the bundle; a single-mode
+        // export keeps the plain stem.
+        const tagMode = modes.length > 1;
+        const stemFor = (entry: ExportGraphEntry, mode: 'node' | 'edge') =>
+            tagMode ? `${entry.baseFilename}_${MODE_FILE_SUFFIX[mode]}` : entry.baseFilename;
+
+        // Which attempts the paths were built from is always stated: unique
+        // students and all visits produce different paths, and an image passed
+        // around otherwise gives no way to tell them apart.
+        const attemptsNote = uniqueStudentMode ? 'Unique students (first attempts)' : 'All visits';
+        const subheading = datasetIdentity.subheading
+            ? `${datasetIdentity.subheading} · ${attemptsNote}`
+            : attemptsNote;
+
+        for (const mode of modes) {
+            for (const graphKey of graphKeys) {
+                const entry = exportRegistry.current[graphKey];
+                if (!entry) continue;
+                const stem = stemFor(entry, mode);
+                try {
+                    const body = prepareExportDot(
+                        entry.buildDot({ nodeOutcomeMode: mode === 'node', highlightSelectedSequence: opts.highlight })
+                    );
+                    const dot = opts.titled
+                        ? addExportTitle(body, {
+                            heading: datasetIdentity.heading,
+                            subheading,
+                            caption: populationLines(entry, body, opts.highlight),
+                            footnote: exportFootnote(entry, mode),
+                        })
+                        : addTitleLabel(body, entry.title + (tagMode ? ` — ${mode} outcomes` : ''));
+                    files.push(...(await renderDotToFiles(dot, stem, formats)));
+                } catch (err) {
+                    errors.push(`${stem}: ${err instanceof Error ? err.message : String(err)}`);
+                }
+            }
+        }
+
+        // A README describes one outcome mode, so a both-modes export gets one
+        // per mode. Only bundled if at least one graph made it out.
+        if (opts.readme && files.length) {
+            modes.forEach((mode) => {
+                const readme = buildExportReadme({
+                    datasetName: problemName,
+                    workspaceIds: datasetIdentity.workspaceIds,
+                    problemNames: datasetIdentity.problemNames,
+                    firstAttemptOnly: uniqueStudentMode,
+                    includeSelfLoops: selfLoops && !uniqueStudentMode,
+                    errorMode,
+                    outcomeMode: mode,
+                    highlightSelectedSequence: opts.highlight,
+                    thresholdLabel: 'Per-graph slider (8% of the busiest edge by default)',
+                    graphs: graphKeys
+                        .map((key) => exportRegistry.current[key])
+                        .filter(Boolean)
+                        .map((entry) => ({
+                            title: entry.title,
+                            baseFilename: stemFor(entry, mode),
+                            // The Selected Sequence view's population is the
+                            // students who followed that path, which is what its
+                            // own masthead states — not everyone in the dataset.
+                            totalStudents: entry.followedCount ?? entry.totalStudents,
+                        })),
+                    generatedOn: new Date().toISOString().slice(0, 10),
+                });
+                files.push({
+                    name: tagMode ? `README_${MODE_FILE_SUFFIX[mode]}.md` : 'README.md',
+                    data: readme,
+                });
+            });
+        }
+        return { files, errors };
+    };
+
+    /** Export one graph in the mode on screen — the per-graph download button. */
+    const exportSingleGraph = async (graphKey: string) => {
+        setExportBusy(true);
+        setExportError(null);
+        try {
+            const { files, errors } = await buildExportFiles(
+                [graphKey],
+                [nodeOutcomeMode ? 'node' : 'edge'],
+                ['png'],
+                { titled: true, highlight: colorNodesBySequence, readme: false }
+            );
+            if (files.length === 1) downloadFile(files[0]);
+            else if (files.length > 1) await downloadZip(files, `${exportStem(graphKey, exportRegistry.current[graphKey]?.minVisits ?? 0)}.zip`);
+            if (errors.length) setExportError(errors.join('; '));
+        } catch (err) {
+            setExportError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setExportBusy(false);
+        }
+    };
+
+    /** Export panel: the chosen graphs × outcome modes × formats, plus READMEs. */
+    const prepareExport = async () => {
+        setExportBusy(true);
+        setExportError(null);
+        try {
+            const { files, errors } = await buildExportFiles(
+                effectiveExportGraphKeys,
+                effectiveExportModes,
+                exportFormats,
+                { titled: exportTitled, highlight: exportHighlightSequence, readme: exportReadme }
+            );
+            if (files.length === 1) downloadFile(files[0]);
+            else if (files.length > 1) {
+                await downloadZip(files, `${problemName.replace(/[^a-zA-Z0-9]/g, '_')}_path_analysis.zip`);
+            }
+            setExportError(errors.length ? errors.join('; ') : null);
+        } catch (err) {
+            setExportError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setExportBusy(false);
+        }
+    };
+
+    // Number of files the current selection will produce — one per graph × mode
+    // × format, plus one README per mode.
+    const exportFileCount = effectiveExportGraphKeys.length * effectiveExportModes.length * exportFormats.length
+        + (exportReadme && effectiveExportGraphKeys.length && exportFormats.length ? effectiveExportModes.length : 0);
 
     const numberOfGraphs = [
         showSelectedSequence && topDotString,
@@ -1212,8 +1481,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             // Apply current transform
                             updateTransform();
 
-                            // Zoom constraints
-                            const minScale = 0.1;
+                            // Zoom constraints. The floor is relative to the
+                            // initial fit-to-container scale: 0.6x fit stops the
+                            // graph from being shrunk into an unreadable speck
+                            // (an absolute floor let a large graph, already fit
+                            // to a small scale, zoom out far past useful).
+                            const minScale = 0.6 * (transformStates.current[filename].initialScale || 1);
                             const maxScale = 3.0;
 
                             // Reset view function
@@ -1684,7 +1957,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <div ref={graphRefTop} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefTop, 'selected_sequence', minVisitsPerGraph['selected_sequence'], colorNodesBySequence)} />
+                                    <ExportButton onClick={() => exportSingleGraph('selected_sequence')} disabled={exportBusy} />
                                 </div>
                             </div>
                         )}
@@ -1705,34 +1978,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     <div ref={graphRefMain} className="w-full h-full"></div>
                                 </div>
                                 <div className="w-full flex justify-center mt-2">
-                                    <ExportButton onClick={() => exportGraphAsPNG(graphRefMain, 'all_students', effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
-                                </div>
-                            </div>
-                        )}
-                        {/* EXPERIMENTAL: vis-network render of the All Students graph, for side-by-side layout comparison */}
-                        {useVisNetworkSpike && mainGraphData && (
-                            <div
-                                className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-dashed border-purple-500 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-1">All Students <span className="text-purple-600">(vis-network)</span></h2>
-                                <p className="text-sm text-gray-500 text-center mb-2">
-                                    👥 {(summaryMetrics?.totalStudents ?? 0).toLocaleString()} students · experimental layout
-                                </p>
-                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
-                                    <VisNetworkGraph
-                                        edgeCounts={mainGraphData.edgeCounts}
-                                        totalVisits={mainGraphData.totalVisits}
-                                        totalNodeEdges={mainGraphData.totalNodeEdges}
-                                        edgeOutcomeCounts={mainGraphData.edgeOutcomeCounts}
-                                        firstAttemptOutcomes={mainGraphData.firstAttemptOutcomes}
-                                        ratioEdges={mainGraphData.ratioEdges}
-                                        maxEdgeCount={mainGraphData.maxEdgeCount}
-                                        selectedSequence={selectedSequence || []}
-                                        uniqueStudentMode={uniqueStudentMode}
-                                        colorNodesBySequence={colorNodesBySequence}
-                                        minVisits={effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100)}
-                                        showEdgeLabels={showEdgeLabels}
-                                        stepSequences={mainGraphData.stepSequences}
-                                    />
+                                    <ExportButton onClick={() => exportSingleGraph('all_students')} disabled={exportBusy} />
                                 </div>
                             </div>
                         )}
@@ -1767,12 +2013,162 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         <div ref={ref} className="w-full h-full"></div>
                                     </div>
                                     <div className="w-full flex justify-center mt-2">
-                                        <ExportButton onClick={() => exportGraphAsPNG(ref, `filtered_graph_${filter}`, effectiveMinVisits(graphKey, filteredGraphData?.maxEdgeCount || 100), colorNodesBySequence)} />
+                                        <ExportButton onClick={() => exportSingleGraph(graphKey)} disabled={exportBusy} />
                                     </div>
                                 </div>
                             );
                         })}
                     </div>
+
+                    {/* Export panel — writes out the graphs on screen, in either
+                        or both outcome modes, with a README describing them. */}
+                    {exportableGraphs.length > 0 && (
+                        <div className="mt-4 border border-gray-300 rounded-lg bg-white">
+                            <button
+                                onClick={() => setExportOpen(!exportOpen)}
+                                className="w-full flex items-center justify-between px-4 py-2 text-left font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                <span>💾 Export Graphs</span>
+                                <span className="text-gray-400 text-sm">{exportOpen ? '▲' : '▼'}</span>
+                            </button>
+                            {exportOpen && (
+                                <div className="px-4 pb-4 pt-1 border-t border-gray-200">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                                        <div>
+                                            <h4 className="text-sm font-medium mb-1">Graphs</h4>
+                                            {exportableGraphs.map((key) => (
+                                                <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={effectiveExportGraphKeys.includes(key)}
+                                                        onChange={(e) => {
+                                                            const next = new Set(effectiveExportGraphKeys);
+                                                            if (e.target.checked) next.add(key);
+                                                            else next.delete(key);
+                                                            setExportGraphKeys(exportableGraphs.filter((k) => next.has(k)));
+                                                        }}
+                                                    />
+                                                    {exportRegistry.current[key]?.title ?? key}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-medium mb-1">Outcome coloring</h4>
+                                            {EXPORT_OUTCOME_MODES.map(({ label, mode }) => (
+                                                <label key={mode} className="flex items-center gap-2 text-sm text-gray-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={effectiveExportModes.includes(mode)}
+                                                        onChange={(e) => {
+                                                            const next = new Set(effectiveExportModes);
+                                                            if (e.target.checked) next.add(mode);
+                                                            else next.delete(mode);
+                                                            setExportModes(
+                                                                EXPORT_OUTCOME_MODES.filter((m) => next.has(m.mode)).map((m) => m.mode)
+                                                            );
+                                                        }}
+                                                    />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Pick both to get the node-bar and edge-color version of every selected
+                                                graph in one download — the mode on screen doesn't limit what you export.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-sm font-medium mb-1">Formats</h4>
+                                            {EXPORT_FORMATS.map(({ label, format }) => (
+                                                <label key={format} className="flex items-center gap-2 text-sm text-gray-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={exportFormats.includes(format)}
+                                                        onChange={(e) => {
+                                                            const next = new Set(exportFormats);
+                                                            if (e.target.checked) next.add(format);
+                                                            else next.delete(format);
+                                                            setExportFormats(
+                                                                EXPORT_FORMATS.filter((f) => next.has(f.format)).map((f) => f.format)
+                                                            );
+                                                        }}
+                                                    />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 space-y-1">
+                                        <label className="flex items-start gap-2 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportTitled}
+                                                onChange={(e) => setExportTitled(e.target.checked)}
+                                                className="mt-1"
+                                            />
+                                            <span>
+                                                Label images with the problem name
+                                                <span className="block text-xs text-gray-500">
+                                                    Prints a heading on each image: the workspace and problem, the view and
+                                                    how many students it represents, and the edge threshold as a corner note.
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <label className="flex items-start gap-2 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportHighlightSequence}
+                                                onChange={(e) => setExportHighlightSequence(e.target.checked)}
+                                                disabled={!selectedSequence || selectedSequence.length === 0}
+                                                className="mt-1"
+                                            />
+                                            <span>
+                                                Mark the selected sequence in the full graphs
+                                                <span className="block text-xs text-gray-500">
+                                                    A white→blue tint by position in edge mode, a bold outline in node mode,
+                                                    and its transitions drawn at full strength. Arrow width still means
+                                                    students per transition either way. The Selected Sequence graph is
+                                                    unaffected.
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <label className="flex items-start gap-2 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportReadme}
+                                                onChange={(e) => setExportReadme(e.target.checked)}
+                                                className="mt-1"
+                                            />
+                                            <span>
+                                                Include a README (data processing &amp; specifications)
+                                                <span className="block text-xs text-gray-500">
+                                                    A Markdown file explaining what the graphs show, how the data is
+                                                    processed, and how to read them — one per exported outcome mode.
+                                                </span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div className="mt-3 flex items-center gap-3">
+                                        <Button
+                                            onClick={prepareExport}
+                                            disabled={
+                                                exportBusy
+                                                || effectiveExportGraphKeys.length === 0
+                                                || effectiveExportModes.length === 0
+                                                || exportFormats.length === 0
+                                            }
+                                        >
+                                            {exportBusy
+                                                ? 'Preparing…'
+                                                : `Download${exportFileCount > 1 ? ` (${exportFileCount} files → .zip)` : ''}`}
+                                        </Button>
+                                        {exportError && (
+                                            <span className="text-sm text-red-600">{exportError}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* History Tab */}
@@ -1855,13 +2251,15 @@ export default GraphvizParent;
 interface ExportButtonProps {
     onClick: () => void;
     label?: string;
+    disabled?: boolean;
 }
 
-function ExportButton({ onClick, label = "Export as PNG" }: ExportButtonProps) {
+function ExportButton({ onClick, label = "Export as PNG", disabled = false }: ExportButtonProps) {
     return (
         <Button
             variant={'outline'}
             onClick={onClick}
+            disabled={disabled}
             className="flex h-2 items-center gap-1 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 shadow-sm text-xs"
         >
             <Download className="h-3 w-3" />

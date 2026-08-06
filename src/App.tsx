@@ -14,6 +14,7 @@ import {
 
 import Loading from './components/Loading.tsx';
 import Switch from "./components/switch.tsx";
+import { OUTCOME_LEGEND, NODE_FILL_LEGEND } from "@/components/GraphvizProcessing.ts";
 import { useSearchParams } from 'react-router-dom';
 
 // Helper function to parse and format filename for display
@@ -79,7 +80,6 @@ function App() {
     const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(true);
     const [nodeOutcomeMode, setNodeOutcomeMode] = useState<boolean>(false);
     const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
-    const [useVisNetworkSpike, setUseVisNetworkSpike] = useState<boolean>(false);
     const [showEdgeLabels, setShowEdgeLabels] = useState<boolean>(true);
     const [fileInfo, setFileInfo] = useState<{filename: string, source: string} | null>(null);
     // State to manage the minimum number of visits for displaying edges in the graph
@@ -187,8 +187,6 @@ function App() {
     const handleToggleNodeOutcomeMode = () => setNodeOutcomeMode(!nodeOutcomeMode);
 
     const handleToggleColorNodesBySequence = () => setColorNodesBySequence(!colorNodesBySequence);
-
-    const handleToggleVisNetworkSpike = () => setUseVisNetworkSpike(!useVisNetworkSpike);
 
     const handleToggleShowEdgeLabels = () => setShowEdgeLabels(!showEdgeLabels);
 
@@ -356,14 +354,6 @@ function App() {
                                         </div>
 
                                         <div className="pb-2 border-b border-gray-200">
-                                            <label className="text-sm font-medium text-gray-700">⚗️ vis-network layout (experimental)</label>
-                                            <Switch isOn={useVisNetworkSpike} handleToggle={handleToggleVisNetworkSpike}/>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Adds a vis-network render of the All Students graph next to the Graphviz one, for layout comparison
-                                            </p>
-                                        </div>
-
-                                        <div className="pb-2 border-b border-gray-200">
                                             <label className="text-sm font-medium text-gray-700">
                                                 {uniqueStudentMode ? 'Unique Students Only (First Attempts)' : 'Total Visits (All Attempts)'}
                                             </label>
@@ -405,7 +395,6 @@ function App() {
                                             showSelectedSequence={showSelectedSequence}
                                             showAllStudents={showAllStudents}
                                             colorNodesBySequence={colorNodesBySequence}
-                                            useVisNetworkSpike={useVisNetworkSpike}
                                             showEdgeLabels={showEdgeLabels}
                                             problemName={fileInfo?.filename.replace(/\.(csv|CSV)$/, '') || 'unknown'}
                                         />
@@ -417,14 +406,37 @@ function App() {
                                     {nodeOutcomeMode && (
                                         <div className="mb-3 p-2 rounded bg-gray-50 border border-gray-200 text-sm text-gray-700">
                                             <span className="font-medium">Color Nodes by Outcome is on:</span> each node is a
-                                            100% bar of its outcome mix (same Correct / Error / Hint / JIT / Other colors as
-                                            the edge palette below); a bold black border marks nodes on the selected sequence.
-                                            Edges are drawn as neutral gray flow lines.
+                                            100% bar of its outcome mix, in the fill colors shown below (a lighter green than
+                                            the line palette — the same value reads much heavier over a large filled area);
+                                            a bold black border marks nodes on the selected sequence. Edges are drawn as
+                                            neutral gray flow lines.
                                         </div>
                                     )}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <h4 className="font-medium mb-2">Node Colors</h4>
+                                            <h4 className="font-medium mb-2">
+                                                {nodeOutcomeMode ? 'Sequence Marking' : 'Node Colors'}
+                                            </h4>
+                                            {nodeOutcomeMode ? (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 mr-2 bg-white border-2 border-black"></div>
+                                                        <span>On the selected sequence</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 mr-2 bg-white border border-gray-300"></div>
+                                                        <span>Not in Selected Sequence</span>
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">
+                                                        In this mode a node's fill is its outcome mix, so sequence membership
+                                                        is marked with a bold border instead of the white→blue gradient.
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">
+                                                        Selected-sequence transitions are drawn in a solid (not translucent)
+                                                        gray; edge thickness still means students per transition.
+                                                    </div>
+                                                </div>
+                                            ) : (
                                             <div className="space-y-2">
                                                 <div className="flex items-center">
                                                     <div className="w-4 h-4 bg-white border border-gray-300 mr-2"></div>
@@ -444,37 +456,33 @@ function App() {
                                                 <div className="text-sm text-gray-600">
                                                     Note: Gray nodes are steps that are not part of the selected sequence.
                                                 </div>
+                                                <div className="text-sm text-gray-600">
+                                                    The sequence's own transitions are drawn in a solid, fully saturated
+                                                    version of their outcome color; thickness always means students per
+                                                    transition.
+                                                </div>
                                             </div>
+                                            )}
                                         </div>
                                         <div>
-                                            <h4 className="font-medium mb-2">Edge Colors (most common outcome)</h4>
+                                            <h4 className="font-medium mb-2">
+                                                {nodeOutcomeMode
+                                                    ? 'Node Bar Colors (outcomes recorded at the step)'
+                                                    : 'Edge Colors (most common outcome)'}
+                                            </h4>
                                             <div className="space-y-2">
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 mr-2" style={{ backgroundColor: '#009E73' }}></div>
-                                                    <span>Correct</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 mr-2" style={{ backgroundColor: '#D55E00' }}></div>
-                                                    <span>Error</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 mr-2" style={{ backgroundColor: '#56B4E9' }}></div>
-                                                    <span>Hint (Initial / Level Change)</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 mr-2" style={{ backgroundColor: '#E69F00' }}></div>
-                                                    <span>JIT / Freebie JIT</span>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <div className="w-4 h-4 mr-2" style={{ backgroundColor: '#5f6368' }}></div>
-                                                    <span>Other / no recognized outcome</span>
-                                                </div>
+                                                {(nodeOutcomeMode ? NODE_FILL_LEGEND : OUTCOME_LEGEND).map(([label, color]) => (
+                                                    <div className="flex items-center" key={label}>
+                                                        <div className="w-4 h-4 mr-2" style={{ backgroundColor: color }}></div>
+                                                        <span>{label}</span>
+                                                    </div>
+                                                ))}
                                                 <div className="text-sm text-gray-600">
-                                                    Each edge is colored by its single most common outcome
-                                                    (colorblind-safe Okabe-Ito palette); its thickness grows with the
-                                                    number of students who took it.
+                                                    {nodeOutcomeMode
+                                                        ? 'Each node’s bar is its outcome mix (colorblind-safe Okabe-Ito palette, lightened for fills); edge thickness grows with the number of students who took the transition.'
+                                                        : 'Each edge is colored by its single most common outcome (colorblind-safe Okabe-Ito palette); its thickness grows with the number of students who took it.'}
                                                 </div>
-                                                {errorMode && (
+                                                {errorMode && !nodeOutcomeMode && (
                                                     <>
                                                         <div className="flex items-center">
                                                             <div className="w-4 h-0 mr-2 border-t-2 border-dashed" style={{ borderColor: '#D55E00' }}></div>

@@ -5,7 +5,7 @@ import {SequenceCount} from "@/Context";
 // TYPE DEFINITIONS
 // ============================================================================
 
-interface CSVRow {
+export interface CSVRow {
     'Session Id'?: string;
     'Time': string;
     'Step Name': string;
@@ -14,6 +14,9 @@ interface CSVRow {
     'Problem Name': string;
     'Anon Student Id': string;
     'CF (Is Autofilled)': string;
+    // Kept for the export masthead/README, which name the workspace and problem
+    // an exported graph belongs to. Not used by any graph computation.
+    'Level (Workspace Id)'?: string;
 }
 
 interface EdgeCounts {
@@ -100,7 +103,8 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
         'Problem Name': row['Problem Name'],
         'Anon Student Id': row['Anon Student Id'],
-        'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)']
+        'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)'],
+        'Level (Workspace Id)': row['Level (Workspace Id)']
     }));
 
     // Cache Date objects to avoid repeated parsing during sort
@@ -1335,6 +1339,16 @@ const OUTCOME_STRIPE_ORDER = [
 // bold black border; off-sequence nodes get a thin light-gray border.
 const OUTCOME_OTHER_COLOR = '#999999';
 const NODE_NO_OUTCOME_COLOR = '#EEEEEE';
+// Node-mode stripe fills use a lighter tint of the palette green. A node's
+// 100%-bar is a large filled area, where the darker Okabe-Ito green reads much
+// heavier than the same value drawn as a thin edge; the line palette keeps the
+// darker value because an edge has to clear 3:1 against white (WCAG 1.4.11),
+// and black node labels stay well above 4.5:1 on the lighter tint.
+const NODE_FILL_CORRECT_COLOR = '#59C0A4';
+export const NODE_FILL_COLORS: { [outcome: string]: string } = {
+    ...OUTCOME_COLORS,
+    'CORRECT': NODE_FILL_CORRECT_COLOR,
+};
 const NODE_BORDER_COLOR = '#bbbbbb';
 const SEQ_BORDER_COLOR = '#000000';
 const SEQ_BORDER_PENWIDTH = 2;
@@ -1365,6 +1379,39 @@ function dominantOutcomeColor(outcomes: { [outcome: string]: number }): string {
     }
     return `${OUTCOME_COLORS[best[0]]}${EDGE_FILL_ALPHA}`;
 }
+
+/**
+ * Strip the alpha byte off a `#RRGGBBAA` color, leaving other forms alone.
+ *
+ * Full opacity is how a selected-sequence edge is emphasized in the full graphs:
+ * it keeps the edge's own hue (the outcome color, or the neutral flow gray) and —
+ * unlike widening the line — leaves penwidth free to mean what it always means,
+ * the number of students on that transition.
+ */
+function opaqueColor(color: string): string {
+    return color.startsWith('#') && color.length === 9 ? color.slice(0, -2) : color;
+}
+
+// Legend rows as [label, outcome key]; a null key is the "other" bucket. Both
+// legends below derive from these rows so a label can never pick up a color the
+// graph doesn't actually draw — the two modes differ in both the green (node
+// bars use the lighter tint) and the "other" color (an unrecognized outcome
+// makes an edge neutral flow gray, but a node bar a plain gray segment).
+const LEGEND_ROWS: Array<[string, string | null]> = [
+    ['Correct', 'CORRECT'],
+    ['Error', 'ERROR'],
+    ['Hint (Initial / Level Change)', 'INITIAL_HINT'],
+    ['JIT / Freebie JIT', 'JIT'],
+    ['Other / no recognized outcome', null],
+];
+/** Legend swatches for edge coloring (the Okabe-Ito line palette). */
+export const OUTCOME_LEGEND: Array<[string, string]> = LEGEND_ROWS.map(
+    ([label, key]) => [label, key ? OUTCOME_COLORS[key] : opaqueColor(FLOW_EDGE_COLOR)]
+);
+/** Same rows, but with the colors node mode actually fills its bars with. */
+export const NODE_FILL_LEGEND: Array<[string, string]> = LEGEND_ROWS.map(
+    ([label, key]) => [label, key ? NODE_FILL_COLORS[key] : OUTCOME_OTHER_COLOR]
+);
 
 /**
  * Color for a solid edge.
@@ -1401,7 +1448,7 @@ function outcomeSegments(outcomes: { [outcome: string]: number }): Array<[string
     for (const key of OUTCOME_STRIPE_ORDER) {
         const count = outcomes[key] || 0;
         if (count > 0) {
-            const color = OUTCOME_COLORS[key];
+            const color = NODE_FILL_COLORS[key];
             colorCounts.set(color, (colorCounts.get(color) || 0) + count);
             accounted += count;
         }
@@ -1703,9 +1750,10 @@ const generateTopSequenceVisualization = (
                 // Node mode: edges are neutral flow lines (outcome lives on nodes).
                 const edgeColor = nodeOutcomeMode ? FLOW_EDGE_COLOR : solidEdgeColor(outcomes, effErrorMode, dashedError);
 
-                let thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
-                // Selected-sequence edges are emphasized when highlighting is on.
-                if (colorNodesBySequence) thickness *= 1.2;
+                // Width encodes students per transition and nothing else — this
+                // view is entirely the selected sequence, so there is no
+                // off-sequence edge here to emphasize against.
+                const thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
 
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, displayCount, totalCount, visits,
@@ -1846,10 +1894,15 @@ const generateFullGraphVisualization = (
                 const dashedError = err > 0 && (fullError || isSelfLoop);
                 const solidCount = (err > 0 && err < edgeCount && !dashedError) ? edgeCount - err : edgeCount;
                 // Node mode: edges are neutral flow lines (outcome lives on nodes).
-                const edgeColor = nodeOutcomeMode ? FLOW_EDGE_COLOR : solidEdgeColor(outcomes, effErrorMode, dashedError);
+                let edgeColor = nodeOutcomeMode ? FLOW_EDGE_COLOR : solidEdgeColor(outcomes, effErrorMode, dashedError);
 
-                let thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
-                if (seqEdges.has(edgeKey) && colorNodesBySequence) thickness *= 1.2;
+                const thickness = maxEdgeCount > 0 ? Math.max(1, (solidCount / maxEdgeCount) * 10) : 1;
+                // Emphasize selected-sequence edges by drawing them at full
+                // opacity. Width is left alone deliberately: it encodes students
+                // per transition, so nudging it for emphasis would make a marked
+                // edge look busier than an off-sequence edge carrying more
+                // students.
+                if (seqEdges.has(edgeKey) && colorNodesBySequence) edgeColor = opaqueColor(edgeColor);
 
                 const tooltip = createEdgeTooltip(
                     currentStep, nextStep, edgeKey, edgeCount, totalCount, visits,
@@ -1941,7 +1994,7 @@ export function generateDotString(
     // Node-outcome mode matches the Streamlit renderer: natural layout (no
     // forced `size`, which squishes the fixed-width striped nodes and makes the
     // label collide with its 100%-bar), Helvetica, and a label `margin` so the
-    // step name sits legibly over the fill. Edge mode is left exactly as-is.
+    // step name sits legibly over the fill.
     let dotString: string;
     if (nodeOutcomeMode) {
         dotString = 'digraph G {\n'
@@ -1949,7 +2002,13 @@ export function generateDotString(
             + '  node [shape=box, style="rounded,filled", fontsize=11, fontname="Helvetica", margin="0.14,0.07"];\n'
             + '  edge [fontsize=8, fontname="Helvetica", arrowsize=0.7];\n';
     } else {
-        dotString = 'digraph G {\ngraph [size="8,6!", dpi=150];\n';
+        // Edge mode keeps its own layout (the forced `size` fits the wider
+        // network into the panel) but shares node mode's sans-serif typeface and
+        // arrowhead size, so the two modes read as the same graph drawn two ways.
+        dotString = 'digraph G {\n'
+            + '  graph [size="8,6!", dpi=150, fontname="Helvetica"];\n'
+            + '  node [fontname="Helvetica"];\n'
+            + '  edge [fontname="Helvetica", arrowsize=0.7];\n';
     }
 
     const edgeCountsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
