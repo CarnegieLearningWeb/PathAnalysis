@@ -21,10 +21,11 @@ This tool visualizes student learning paths through educational content, showing
    - Node ranking based on step sequence
 
 2. **Filtering Options**
-   - Filter by student progress status (GRADUATED, PROMOTED, NOT_COMPLETED)
+   - Filter by student progress status (GRADUATED, PROMOTED) via multi-select checkboxes — multiple statuses render side by side simultaneously
    - Toggle self-loops (transitions back to the same step)
-   - Adjust minimum student threshold for edge visibility
-   - View top 5 most common student paths
+   - Per-graph minimum student/visit threshold, adjustable independently for each rendered graph via its own settings menu
+   - Select a specific student path to render as its own "Selected Sequence" graph, with progressive filtering to counts of only students who completed that full sequence
+   - Optional "color nodes by selected sequence" toggle to recolor nodes by their position in the selected sequence
 
 3. **Interactive Elements**
    - Hover over edges to see detailed statistics
@@ -35,10 +36,18 @@ This tool visualizes student learning paths through educational content, showing
 ## How to Run Locally
 
 1. Make sure you have `Node.js` installed. You can download it from https://nodejs.org/en/download/
-2. This uses `bun` to run, build, and deploy. You will need to have the `bun` command installed. You can install it by running ```npm install -g @bun/cli```. Docs: https://bun.sh/
+2. This project uses `bun` to run, build, and deploy (see `amplify.yml`). Install it from https://bun.sh/.
 3. Run ```bun install``` to download the necessary dependencies.
-4. You will need a local .env file with secret variables.
-5. Run ```bun run dev``` to start the development server.
+4. Copy `.env.example` (if present) or create a `.env` file — see [Environment Variables](#environment-variables) below.
+5. Run ```bun run dev``` to start the Vite dev server only, or ```bun run dev:full``` to also run the local API server (needed for loading/uploading data files stored in GitHub — see below).
+
+## Environment Variables
+
+- `VITE_ACCESS_KEY_ID`, `VITE_SECRET_ACCESS_KEY` — AWS credentials used client-side by `src/lib/dataFetchingHooks.ts`.
+- `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO` — used by the API routes in `api/` (and `start-api-server.js` locally) to list/fetch/upload CSV data files from a GitHub repo. `GITHUB_OWNER`/`GITHUB_REPO` default to `CarnegieLearningWeb/PathAnalysis`; `GITHUB_TOKEN` is required for uploads.
+- `PORT` — optional, port for the local Express API server (defaults to 3000).
+
+The GitHub-backed API server is only needed for the "load a data file from GitHub" feature — local file upload via drag-and-drop works without it.
 
 ## File Format Requirements
 
@@ -75,15 +84,15 @@ Time,Step Name,Outcome,CF (Workspace Progress Status),Problem Name,Anon Student 
    - Hover over edges to see detailed statistics
 
 3. **Filter and Adjust**
-   - Use the filter dropdown to view paths for specific student progress statuses
+   - Check one or more student progress status checkboxes to render a separate graph per status
    - Toggle self-loops on/off to include/exclude transitions back to the same step
-   - Adjust the minimum student threshold to show only paths followed by a certain number of students
-   - The threshold can be set as a percentage of total students or as an absolute number
+   - Open a graph's settings menu to adjust its own minimum student/visit threshold independently of the other graphs
+   - Click a path in the sequence list to render it as its own "Selected Sequence" graph, optionally restricting counts to only students who followed that exact path
 
 4. **Analyze Patterns**
-   - View the top 5 most common student paths
+   - View the most common student paths and select one to inspect
    - Click on nodes to see detailed statistics about student progression
-   - Export the graph as a PNG for sharing or documentation
+   - Export any graph as a PNG for sharing or documentation
 
 ## Technical Details
 
