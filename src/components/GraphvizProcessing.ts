@@ -155,10 +155,30 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
 /**
  * Creates outcome sequences from sorted data.
  * Excludes outcomes where CF_Autofill is "True".
+ *
+ * Takes the same `selfLoops` flag as createStepSequences and applies the same
+ * skip rule, because the two arrays are read positionally: processStudentPaths
+ * pairs `steps[i] -> steps[i + 1]` with `outcomes[i + 1]`. When self-loops are
+ * collapsed out of the step sequence but every row still contributes an
+ * outcome, the arrays drift apart at the first dropped row and every later
+ * outcome is attributed to the wrong transition — which silently corrupts edge
+ * colors, tooltip outcome percentages, and the node outcome bars. Collapsing a
+ * run keeps the run's FIRST outcome, matching createStepSequences (which keeps
+ * the first row of a run) and the "first attempt" reading of unique-student
+ * mode.
+ *
  * @param sortedData - The sorted CSV rows.
+ * @param selfLoops - Must match the value passed to createStepSequences.
  * @returns A dictionary mapping session IDs to sequences of outcomes.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: { [key: string]: string[] } } => {
+export const createOutcomeSequences = (
+    sortedData: CSVRow[],
+    selfLoops: boolean
+): { [key: string]: { [key: string]: string[] } } => {
+    // Last step pushed per (student, problem) — mirrors the array-tail check
+    // createStepSequences does, so the two stay index-for-index aligned.
+    const lastPushedStep = new Map<string, string>();
+
     return sortedData.reduce((acc, row) => {
         // Note: Autofilled rows are already filtered out in loadAndSortData
         const studentId = row['Anon Student Id'];
@@ -167,7 +187,15 @@ export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: {
         if (!acc[studentId]) acc[studentId] = {};
         if (!acc[studentId][problemName]) acc[studentId][problemName] = [];
 
-        acc[studentId][problemName].push(row['Outcome']);
+        const stepName = row['Step Name'];
+        // NUL separator: cannot occur in an id or a problem name, so two
+        // distinct pairs can never collide into the same key.
+        const key = `${studentId}\u0000${problemName}`;
+
+        if (selfLoops || !lastPushedStep.has(key) || lastPushedStep.get(key) !== stepName) {
+            acc[studentId][problemName].push(row['Outcome']);
+            lastPushedStep.set(key, stepName);
+        }
 
         return acc;
     }, {} as { [key: string]: { [key: string]: string[] } });
@@ -1580,20 +1608,39 @@ const createEdgeTooltip = (
 ): string => {
     const modeLabel = uniqueStudentMode ? 'Students' : 'Visits';
     const pathLabel = uniqueStudentMode ? 'Students taking this path' : 'Total visits on this path';
-    const startLabel = uniqueStudentMode ? `Students at ${currentStep}` : `Total visits to ${currentStep}`;
-    const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
+    // `totalCount` is a unique-student set size (totalNodeEdges) in both modes,
+    // so it is always a student count — labelling it "visits" was simply wrong.
+    const startLabel = `Students at ${currentStep}`;
 
     const pathCount = uniqueStudentMode ? edgeCount : visits;
     const totalAtStart = totalCount;
-    const notTakingPath = Math.max(0, totalAtStart - pathCount);
     const ratioPercentage = ((ratioEdges[edgeKey] || 0) * 100).toFixed(1);
 
     let tooltip = `${modeLabel} Flow:\n`
         + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
-        + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
-        + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
-        + `    • Transition Probability: ${ratioPercentage}%\n`
-        + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`;
+        + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`;
+
+    // Only in unique-student mode do these two share a unit and so admit
+    // subtraction. Edge students are a subset of the node's students, so the
+    // remainder is "left this node but never by this edge" — NOT "took one
+    // other edge instead". A student can sit on several outgoing edges of the
+    // same node (a separate problem, or a revisit), which is also why the
+    // outgoing counts from one node can sum past the node's own total and the
+    // transition probabilities can sum past 100%.
+    if (uniqueStudentMode) {
+        const neverTookPath = Math.max(0, totalAtStart - pathCount);
+        tooltip += `    • Students who never took this path: ${neverTookPath.toLocaleString()}\n`;
+    }
+
+    tooltip += `    • Transition Probability: ${ratioPercentage}%\n`;
+    // ratioEdges is always students/students. In visits mode no unique-student
+    // numerator survives this far (both `edgeCount` and `visits` arrive as
+    // totalVisits), so spelling out the fraction would pair a visit count with
+    // a student denominator. Show it only where it is truthful.
+    if (uniqueStudentMode) {
+        tooltip += `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} students)\n`;
+    }
+    tooltip += '\n';
 
     if (progressStats) {
         const graduatedPercentage = progressStats.total > 0 ? ((progressStats.graduated / progressStats.total) * 100).toFixed(1) : '0';
@@ -1793,6 +1840,10 @@ const generateTopSequenceVisualization = (
  * @param minVisits - Minimum visits required to show an edge
  * @param errorMode - Whether to use error-focused coloring
  * @param uniqueStudentMode - Whether in unique student mode
+ * @param showEdgeLabels - If true, label each node's busiest outgoing edge with
+ *   its count. Unlike the Selected Sequence graph (which labels every edge on
+ *   its single linear path), the full graphs label one edge per node to stay
+ *   readable at network density.
  * @returns DOT string for nodes and edges in full graph mode
  */
 const generateFullGraphVisualization = (
@@ -1813,7 +1864,8 @@ const generateFullGraphVisualization = (
     uniqueStudentMode: boolean = false,
     colorNodesBySequence: boolean = true,
     nodeOutcomeMode: boolean = false,
-    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {}
+    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
+    showEdgeLabels: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -1831,6 +1883,13 @@ const generateFullGraphVisualization = (
     }
 
     const allNodesInEdges = new Set<string>();
+    // The busiest outgoing edge per source node — the only edges that carry a
+    // count label on the full graphs. Labelling every edge here is unreadable
+    // (unlike the Selected Sequence graph, which is a single linear path), so
+    // one label per node answers "what did most students do next from here"
+    // while keeping the labels spread out instead of clustered in hot regions.
+    const busiestOutgoing: { [source: string]: { key: string; target: string; count: number } } = {};
+
     for (const edgeKey of Object.keys(normalizedThicknesses)) {
         const thickness = normalizedThicknesses[edgeKey];
         if (thickness >= threshold) {
@@ -1843,10 +1902,28 @@ const generateFullGraphVisualization = (
                 if (currentStep && nextStep) {
                     allNodesInEdges.add(currentStep);
                     allNodesInEdges.add(nextStep);
+
+                    // Ranked over edges that pass both gates, so raising
+                    // min-visits promotes the next-heaviest survivor rather than
+                    // leaving the node unlabelled. Ties break on target name to
+                    // keep the choice stable across renders (Object.keys order
+                    // is insertion order, which shifts with the data).
+                    const best = busiestOutgoing[currentStep];
+                    if (!best
+                        || visitsForFiltering > best.count
+                        || (visitsForFiltering === best.count && nextStep < best.target)) {
+                        busiestOutgoing[currentStep] = {
+                            key: edgeKey,
+                            target: nextStep,
+                            count: visitsForFiltering
+                        };
+                    }
                 }
             }
         }
     }
+
+    const labelledEdges = new Set(Object.values(busiestOutgoing).map(best => best.key));
 
     for (const nodeName of allNodesInEdges) {
         const sequenceRank = selectedSequence.indexOf(nodeName);
@@ -1911,7 +1988,14 @@ const generateFullGraphVisualization = (
                 );
 
                 const styleAttr = dashedError ? ', style=dashed' : '';
-                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${styleAttr}];\n`;
+                // Only the heaviest edge leaving this node is labelled; the
+                // dashed error overlays stay bare so a partial-error edge does
+                // not end up with two competing numbers on it.
+                // Leading spaces nudge the count off the edge line.
+                const labelAttr = (showEdgeLabels && labelledEdges.has(edgeKey))
+                    ? `, label="   ${visitsForFiltering.toLocaleString()}"`
+                    : '';
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${labelAttr}${styleAttr}];\n`;
 
                 if (err > 0 && !fullError && !isSelfLoop) {
                     dotContent += formatErrorOverlay(currentStep, nextStep, err, edgeCount, maxEdgeCount);
@@ -2055,7 +2139,8 @@ export function generateDotString(
             uniqueStudentMode,
             colorNodesBySequence,
             nodeOutcomeMode,
-            nodeOutcomeCounts
+            nodeOutcomeCounts,
+            showEdgeLabels
         );
     }
 

@@ -101,20 +101,35 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
     return a.every((val, index) => val === b[index]);
 };
 
+// Drop immediately-repeated steps: [A, A, B, A] -> [A, B, A]. Step sequences are
+// built with consecutive repeats either kept or collapsed depending on the
+// self-loop toggle, so any comparison between two step arrays has to normalize
+// first or it is comparing representations rather than paths.
+const collapseConsecutive = (steps: string[]): string[] =>
+    steps.filter((step, i) => i === 0 || step !== steps[i - 1]);
+
 /**
  * Distinct students whose path through some problem is exactly `sequence` — the
  * "took it end to end" count. Students, not paths, because it is always stated
  * against a student population (this graph's students, or the ones its drawn
  * edges represent). Returns null when there is no sequence to match.
+ *
+ * Both sides are collapsed before comparing. Without that, turning self-loops on
+ * makes every student's array carry consecutive repeats while `sequence` stays
+ * in its collapsed form, so equality never holds and the caption reads "0
+ * students followed this sequence" next to a fully populated graph. Collapsing
+ * also makes the count stable across the toggle, which it should be: repeating a
+ * step in place does not change which path you took.
  */
 const countStudentsOnExactSequence = (
     stepSequences: { [student: string]: { [problem: string]: string[] } },
     sequence: string[] | null | undefined
 ): number | null => {
     if (!sequence || sequence.length === 0) return null;
+    const target = collapseConsecutive(sequence);
     let count = 0;
     Object.values(stepSequences).forEach((byProblem) => {
-        if (Object.values(byProblem).some((steps) => arraysEqual(steps, sequence))) count++;
+        if (Object.values(byProblem).some((steps) => arraysEqual(collapseConsecutive(steps), target))) count++;
     });
     return count;
 };
@@ -244,7 +259,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // In unique student mode (first attempts), self-loops are logically impossible
         const includeLoops = selfLoops && !uniqueStudentMode;
         const stepSequences = createStepSequences(sortedData, includeLoops);
-        const outcomeSequences = createOutcomeSequences(sortedData);
+        // Same flag as the step sequences: the two arrays are read positionally,
+        // so they must drop the same rows or outcomes shift onto wrong edges.
+        const outcomeSequences = createOutcomeSequences(sortedData, includeLoops);
         
         // Add equation answer analysis
         const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
@@ -312,8 +329,9 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
         filters.forEach(filter => {
             const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+            const filteredIncludeLoops = selfLoops && !uniqueStudentMode;
+            const filteredStepSequences = createStepSequences(filteredData, filteredIncludeLoops);
+            const filteredOutcomeSequences = createOutcomeSequences(filteredData, filteredIncludeLoops);
 
             const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
 
@@ -1004,13 +1022,17 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // On the Selected Sequence graph, every stat (visits, outcomes, progress)
         // is scoped to the students who followed the EXACT sequence, so the
         // populations line up. Elsewhere sequenceStudents is null (all students).
-        const sequenceStudents: Set<string> | null = (isSelectedSequenceGraph && sequenceToFilter)
+        // Collapsed on both sides for the same reason as countStudentsOnExactSequence:
+        // with self-loops on, a raw comparison matches nobody and silently zeroes
+        // every stat on this graph.
+        const collapsedFilter = sequenceToFilter ? collapseConsecutive(sequenceToFilter) : null;
+        const sequenceStudents: Set<string> | null = (isSelectedSequenceGraph && collapsedFilter)
             ? new Set<string>(
                 Object.entries(stepSequences)
                     .filter(([, problems]) =>
                         problems && typeof problems === 'object' &&
                         Object.values(problems).some((seq: string[]) =>
-                            Array.isArray(seq) && arraysEqual(seq, sequenceToFilter)))
+                            Array.isArray(seq) && arraysEqual(collapseConsecutive(seq), collapsedFilter)))
                     .map(([studentId]) => studentId))
             : null;
 

@@ -349,7 +349,9 @@ function App() {
                                             <label className="text-sm font-medium text-gray-700">Show Edge Labels</label>
                                             <Switch isOn={showEdgeLabels} handleToggle={handleToggleShowEdgeLabels}/>
                                             <p className="text-xs text-gray-500 mt-1">
-                                                Show the student/visit count on each edge
+                                                Show student/visit counts on edges: every edge on the
+                                                Selected Sequence graph, and each node's busiest
+                                                outgoing edge on the full graphs
                                             </p>
                                         </div>
 
