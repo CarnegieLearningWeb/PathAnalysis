@@ -148,7 +148,15 @@ function CheckboxRow({
 }: CheckboxRowProps) {
   const hintId = `${id}-hint`
   return (
-    <div className={cn("flex items-start gap-2", className)}>
+    <div
+      className={cn(
+        "flex gap-2",
+        // Hintless rows are used inline in the toolbar, where centring reads
+        // better; rows with help text align to the label's first line.
+        hint ? "items-start" : "items-center",
+        className
+      )}
+    >
       <Checkbox
         id={id}
         checked={checked}
@@ -157,7 +165,7 @@ function CheckboxRow({
         onCheckedChange={(value: boolean | "indeterminate") =>
           onCheckedChange(value === true)
         }
-        className="mt-0.5"
+        className={cn(hint && "mt-0.5")}
       />
       <div className="min-w-0 space-y-1">
         <Label

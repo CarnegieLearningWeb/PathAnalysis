@@ -442,11 +442,13 @@ const initializeTrackingMaps = (): EdgeTrackingMaps => ({
  *
  * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
  * @param currentStep - The source node of the edge
+ * @param nextStep - The target node of the edge
  * @param maps - The tracking data structures
  */
 const initializeEdgeTracking = (
     edgeKey: string,
     currentStep: string,
+    nextStep: string,
     maps: EdgeTrackingMaps
 ): void => {
     if (!maps.studentEdgeCounts.has(edgeKey)) {
@@ -457,8 +459,13 @@ const initializeEdgeTracking = (
         maps.edgeErrorUsers.set(edgeKey, new Set());
     }
 
+    // Both endpoints: totalNodeEdges is "students who VISITED this node", which
+    // has to include the node a path arrives at, not only the one it leaves.
     if (!maps.totalNodeEdges.has(currentStep)) {
         maps.totalNodeEdges.set(currentStep, new Set());
+    }
+    if (!maps.totalNodeEdges.has(nextStep)) {
+        maps.totalNodeEdges.set(nextStep, new Set());
     }
 };
 
@@ -468,6 +475,7 @@ const initializeEdgeTracking = (
  *
  * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
  * @param currentStep - The source node of the edge
+ * @param nextStep - The target node of the edge
  * @param studentId - The student making the traversal
  * @param outcome - The outcome of this step attempt
  * @param maps - The tracking data structures
@@ -476,14 +484,20 @@ const initializeEdgeTracking = (
 const updateEdgeMetrics = (
     edgeKey: string,
     currentStep: string,
-    _nextStep: string,
+    nextStep: string,
     studentId: string,
     outcome: string,
     maps: EdgeTrackingMaps,
     currentMaxEdgeCount: number
 ): number => {
     maps.studentEdgeCounts.get(edgeKey)!.add(studentId);
+    // Credit the student to BOTH endpoints. Recording only the source counted a
+    // student at every node they left and at none they merely arrived at, so
+    // "Students at X" was 0 for a terminal node (nothing leaves it) and the
+    // ratioEdges denominator for a node whose visitors mostly stopped there was
+    // far too small — inflating every transition probability out of it.
     maps.totalNodeEdges.get(currentStep)!.add(studentId);
+    maps.totalNodeEdges.get(nextStep)!.add(studentId);
 
     maps.totalVisits.set(edgeKey, maps.totalVisits.get(edgeKey)! + 1);
 
@@ -537,7 +551,7 @@ const processStudentPaths = (
             const outcome = outcomes[i + 1];
             const edgeKey = `${currentStep}->${nextStep}`;
 
-            initializeEdgeTracking(edgeKey, currentStep, maps);
+            initializeEdgeTracking(edgeKey, currentStep, nextStep, maps);
 
             maxEdgeCount = updateEdgeMetrics(
                 edgeKey,
@@ -814,7 +828,7 @@ export const countEdgesForSelectedSequence = (
                             if (steps[i] === currentStep && steps[i + 1] === nextStep) {
                                 const outcome = outcomes[i + 1];
 
-                                initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+                                initializeEdgeTracking(edgeKey, currentStep, nextStep, trackingMaps);
 
                                 maxEdgeCount = updateEdgeMetrics(
                                     edgeKey,
@@ -861,7 +875,7 @@ export const countEdgesForSelectedSequence = (
                         if (steps[i] === currentStep && steps[i + 1] === nextStep) {
                             const outcome = outcomes[i + 1];
 
-                            initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+                            initializeEdgeTracking(edgeKey, currentStep, nextStep, trackingMaps);
 
                             maxEdgeCount = updateEdgeMetrics(
                                 edgeKey,
