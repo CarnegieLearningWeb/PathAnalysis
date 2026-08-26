@@ -20,6 +20,10 @@ export interface CSVRow {
     // Kept for the export masthead/README, which name the workspace and problem
     // an exported graph belongs to. Not used by any graph computation.
     'Level (Workspace Id)'?: string;
+    // Only read to identify a Done-button click, which is logged with no Step
+    // Name (see resolveStepName). Optional: not every export carries them.
+    'Selection'?: string;
+    'Action'?: string;
 }
 
 interface EdgeCounts {
@@ -101,8 +105,44 @@ export const pathKey = (problemName: string, sessionId: string | undefined | nul
 };
 
 /**
- * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by
- * student, problem and time. (Ordering within a path only has to be correct
+ * Node name for the Done-button click, which the tutor logs with no Step Name.
+ * Kept as the historical spelling so datasets that already have explicit
+ * 'DoneButton' rows land on the same node rather than splitting in two.
+ */
+const DONE_BUTTON_STEP = 'DoneButton';
+
+/**
+ * Node name for a row whose step genuinely cannot be identified. Labelled rather
+ * than silently folded into DoneButton, and deliberately not dropped: dropping
+ * the row would splice its neighbours together and invent a transition that
+ * never happened.
+ */
+const UNIDENTIFIED_STEP = '(no step name)';
+
+/**
+ * The node a row belongs to.
+ *
+ * `row['Step Name'] || 'DoneButton'` used to turn EVERY blank step name into a
+ * DoneButton node, merging unrelated rows into one busy hub and overstating a
+ * real UI element that some of those rows had nothing to do with. A blank Step
+ * Name means DoneButton only when the row says so — Selection "Done Button" or
+ * Action "Done", which is how the tutor logs that click. Every other blank is
+ * reported as unidentified.
+ */
+const resolveStepName = (row: CSVRow): string => {
+    const stepName = (row['Step Name'] || '').trim();
+    if (stepName) return stepName;
+
+    const selection = (row['Selection'] || '').replace(/\s+/g, '').toLowerCase();
+    const action = (row['Action'] || '').trim().toLowerCase();
+    if (selection === 'donebutton' || action === 'done') return DONE_BUTTON_STEP;
+
+    return UNIDENTIFIED_STEP;
+};
+
+/**
+ * Parses CSV data, resolves the node each row belongs to (see resolveStepName),
+ * and sorts by student, problem and time. (Ordering within a path only has to be correct
  * *inside* each (student, problem, session) bucket, which the time sort
  * guarantees regardless of how sessions interleave.)
  * @param csvData - The raw CSV data as a string.
@@ -139,20 +179,38 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
     console.log(`loadAndSortData: Filtered out ${parsedData.length - filteredData.length} autofilled rows (${parsedData.length} -> ${filteredData.length})`);
     console.log(`loadAndSortData: Percentage filtered: ${((parsedData.length - filteredData.length) / parsedData.length * 100).toFixed(1)}%`);
 
-    const transformedData = filteredData.map(row => ({
-        'Session Id': row['Session Id'],
-        'Time': row['Time'],
-        'Step Name': row['Step Name'] || 'DoneButton',
-        // Normalize the "correct" outcome key to CORRECT so it matches the
-        // Okabe-Ito outcome palette used for edge/node coloring. The raw CSV
-        // uses 'OK'; every downstream consumer keys on 'CORRECT'.
-        'Outcome': row['Outcome'] === 'OK' ? 'CORRECT' : row['Outcome'],
-        'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
-        'Problem Name': row['Problem Name'],
-        'Anon Student Id': row['Anon Student Id'],
-        'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)'],
-        'Level (Workspace Id)': row['Level (Workspace Id)']
-    }));
+    // Rows whose step could not be identified at all — surfaced as a count so a
+    // malformed or mis-mapped export is visible instead of quietly growing a
+    // synthetic node.
+    let unidentifiedSteps = 0;
+    const transformedData = filteredData.map(row => {
+        const stepName = resolveStepName(row);
+        if (stepName === UNIDENTIFIED_STEP) unidentifiedSteps++;
+        return {
+            'Session Id': row['Session Id'],
+            'Time': row['Time'],
+            'Step Name': stepName,
+            // Normalize the "correct" outcome key to CORRECT so it matches the
+            // Okabe-Ito outcome palette used for edge/node coloring. The raw CSV
+            // uses 'OK'; every downstream consumer keys on 'CORRECT'.
+            'Outcome': row['Outcome'] === 'OK' ? 'CORRECT' : row['Outcome'],
+            'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+            'Problem Name': row['Problem Name'],
+            'Anon Student Id': row['Anon Student Id'],
+            'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)'],
+            'Level (Workspace Id)': row['Level (Workspace Id)'],
+            'Selection': row['Selection'],
+            'Action': row['Action']
+        };
+    });
+
+    if (unidentifiedSteps > 0) {
+        console.warn(
+            `loadAndSortData: ${unidentifiedSteps} of ${filteredData.length} rows have no Step Name and no `
+            + `Done-button marker; they are grouped under "${UNIDENTIFIED_STEP}" rather than merged into `
+            + `"${DONE_BUTTON_STEP}".`
+        );
+    }
 
     // Cache Date objects to avoid repeated parsing during sort
     const dateCache = new Map<string, number>();
