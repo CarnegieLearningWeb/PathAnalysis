@@ -142,9 +142,15 @@ const resolveStepName = (row: CSVRow): string => {
 
 /**
  * Parses CSV data, resolves the node each row belongs to (see resolveStepName),
- * and sorts by student, problem and time. (Ordering within a path only has to be correct
- * *inside* each (student, problem, session) bucket, which the time sort
- * guarantees regardless of how sessions interleave.)
+ * and sorts by student, problem and time.
+ *
+ * Ordering only has to be correct *inside* each (student, problem, session)
+ * bucket, since that bucket is one path and consecutive rows in it become its
+ * transitions. It is NOT guaranteed: a row whose `Time` cannot be parsed keeps
+ * its file position (see parseTimestamp), so a path containing such rows may be
+ * mis-sequenced and its transitions invented. That case is counted and warned
+ * about rather than hidden — it is a data-quality property of the export, not
+ * something this function can establish.
  * @param csvData - The raw CSV data as a string.
  * @returns The transformed and sorted CSV rows.
  */
@@ -212,24 +218,69 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
         );
     }
 
-    // Cache Date objects to avoid repeated parsing during sort
-    const dateCache = new Map<string, number>();
-    const getTimestamp = (timeStr: string): number => {
-        if (!dateCache.has(timeStr)) {
-            dateCache.set(timeStr, new Date(timeStr).getTime());
+    // `Time` arrives in several shapes across exports: epoch milliseconds as a
+    // string ("1668670217694"), epoch seconds, an actual number (src/lib/types.ts
+    // types it that way for one of the Mathia shapes), or a parseable date
+    // string. `new Date(s).getTime()` is NaN for every epoch-number form — on the
+    // sample export that was ALL 21,813 distinct values — and a NaN comparator
+    // result gives Array.prototype.sort no ordering at all, so rows silently kept
+    // their CSV order. That happened to be right for that file and is right for
+    // no file by construction: order within a path decides every transition, so a
+    // mis-sorted group invents all of them.
+    const EPOCH_SECONDS_CEILING = 1e11; // ~1973-03 in ms; anything smaller is seconds
+    const timeCache = new Map<string, number>();
+    const parseTimestamp = (raw: unknown): number => {
+        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : NaN;
+        if (typeof raw !== 'string') return NaN;
+        const key = raw.trim();
+        if (key === '') return NaN;
+        if (!timeCache.has(key)) {
+            let parsed: number;
+            if (/^-?\d+$/.test(key)) {
+                const n = Number(key);
+                // Distinguish seconds from milliseconds by magnitude rather than
+                // by digit count, which breaks either side of the year 2286.
+                parsed = !Number.isFinite(n) ? NaN
+                    : Math.abs(n) < EPOCH_SECONDS_CEILING ? n * 1000
+                    : n;
+            } else {
+                parsed = new Date(key).getTime();
+            }
+            timeCache.set(key, parsed);
         }
-        return dateCache.get(timeStr)!;
+        return timeCache.get(key)!;
     };
 
-    return transformedData.sort((a, b) => {
+    const sorted = transformedData.sort((a, b) => {
         if (a['Anon Student Id'] === b['Anon Student Id']) {
             if (a['Problem Name'] === b['Problem Name']) {
-                return getTimestamp(a['Time']) - getTimestamp(b['Time']);
+                const ta = parseTimestamp(a['Time']);
+                const tb = parseTimestamp(b['Time']);
+                // Array.prototype.sort is stable, so returning 0 for an
+                // unparseable pair preserves their original file order — the same
+                // fallback as before, but now deliberate and reported rather than
+                // an accident of NaN arithmetic.
+                if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+                return ta - tb;
             }
-            return a['Problem Name'].localeCompare(b['Problem Name']);
+            return (a['Problem Name'] ?? '').localeCompare(b['Problem Name'] ?? '');
         }
-        return a['Anon Student Id'].localeCompare(b['Anon Student Id']);
+        return (a['Anon Student Id'] ?? '').localeCompare(b['Anon Student Id'] ?? '');
     });
+
+    const unparseableTimes = transformedData.reduce(
+        (n, row) => (Number.isNaN(parseTimestamp(row['Time'])) ? n + 1 : n),
+        0
+    );
+    if (unparseableTimes > 0) {
+        console.warn(
+            `loadAndSortData: ${unparseableTimes} of ${transformedData.length} rows have an unparseable `
+            + `Time; those rows keep their original file order, so any path containing them may be `
+            + `mis-sequenced and its transitions invented.`
+        );
+    }
+
+    return sorted;
 };
 
 /**
