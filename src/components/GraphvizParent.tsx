@@ -318,6 +318,24 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return { workspaceIds: ids, problemNames: problems, heading, subheading };
     }, [mainGraphData, problemName]);
 
+    /**
+     * Caption under the All Students graph. `summaryMetrics.totalStudents` is
+     * every distinct student in the FILE, so calling it "students attempted this
+     * problem" was only true of a single-problem upload — and multi-problem
+     * uploads are explicitly supported (graphExport's datasetDisplayTitle renders
+     * "N problems"). The wording now follows what the file actually holds, and
+     * says nothing about problems when there is no Problem Name to count.
+     */
+    const allStudentsCaption = useMemo(() => {
+        const students = (summaryMetrics?.totalStudents ?? 0).toLocaleString();
+        const problemCount = datasetIdentity.problemNames.length;
+        if (problemCount === 1) return `${students} students attempted this problem`;
+        if (problemCount > 1) {
+            return `${students} students across ${problemCount.toLocaleString()} problems`;
+        }
+        return `${students} students in this dataset`;
+    }, [summaryMetrics, datasetIdentity]);
+
     // Distinct students who followed the selected sequence exactly — the
     // "N students followed this sequence" caption, and the same number the
     // export states, so the image and the screen never disagree.
@@ -1997,7 +2015,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                 <h2 className="text-lg font-semibold text-center mb-1">All Students, All Paths</h2>
                                 <p className="text-sm text-gray-500 text-center mb-2">
-                                    👥 {(summaryMetrics?.totalStudents ?? 0).toLocaleString()} students attempted this problem
+                                    👥 {allStudentsCaption}
                                 </p>
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
@@ -2025,6 +2043,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             const statusPhrase = filter === 'GRADUATED' ? 'graduated'
                                 : filter === 'PROMOTED' ? 'were promoted'
                                 : `matched ${titleCase(filter)}`;
+                            // "this problem" only if the file is one problem —
+                            // the status is a workspace-level property, and a
+                            // multi-problem upload has no single "this problem".
+                            const subsetCaption = datasetIdentity.problemNames.length === 1
+                                ? `${subsetCount.toLocaleString()} students who completed this problem ${statusPhrase}`
+                                : `${subsetCount.toLocaleString()} students who ${statusPhrase}`;
 
                             return (
                                 <div
@@ -2032,7 +2056,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                     <h2 className="text-lg font-semibold text-center mb-1">Filtered Graph: {titleCase(filter)}</h2>
                                     <p className="text-sm text-gray-500 text-center mb-2">
-                                        👥 {subsetCount.toLocaleString()} students who completed this problem {statusPhrase}
+                                        👥 {subsetCaption}
                                     </p>
                                     <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
                                         <GraphMenu
