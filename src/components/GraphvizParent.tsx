@@ -300,9 +300,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return { totalStudents, avgPathLength };
     }, [mainGraphData]);
 
-    // Which workspace(s) and problem(s) the uploaded dataset covers. Only the
-    // export uses this — to headline an image with the problem it belongs to,
-    // and to say plainly when a file spans more than one.
+    // Which workspace(s) and problem(s) the uploaded dataset covers. Used by the
+    // export — to headline an image with the problem it belongs to, and to say
+    // plainly when a file spans more than one — and by the All Students caption,
+    // which must not claim a multi-problem file is one problem.
     const datasetIdentity = useMemo(() => {
         const workspaceIds = new Set<string>();
         const problemNames = new Set<string>();
