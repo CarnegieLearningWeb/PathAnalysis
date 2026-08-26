@@ -6,6 +6,9 @@ import {SequenceCount} from "@/Context";
 // ============================================================================
 
 export interface CSVRow {
+    // One learning session (one sitting at the software). Splits a student's
+    // repeated attempts at the same problem into separate paths — see pathKey.
+    // Optional, and often carries the literal placeholder 'no_session_tracking'.
     'Session Id'?: string;
     'Time': string;
     'Step Name': string;
@@ -27,11 +30,13 @@ interface EdgeCounts {
 }
 
 /**
- * Helper type for pre-calculated student-problem combinations to improve performance
+ * Helper type for pre-calculated student-path combinations to improve performance.
+ * `pathKey` is the second-level sequence key (problem, session-qualified where
+ * the data has sessions — see pathKey()).
  */
 type StudentProblemCombination = {
     studentId: string;
-    problemName: string;
+    pathKey: string;
     steps: string[];
     outcomes: string[];
 };
@@ -57,7 +62,49 @@ type EdgeTrackingMaps = {
 // ============================================================================
 
 /**
- * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
+ * Separator inside a composed sequence key. NUL cannot occur in a problem name
+ * or a session id, so two distinct (problem, session) pairs can never collide
+ * into the same key.
+ */
+const PATH_KEY_SEP = '\u0000';
+
+/**
+ * Session id values that mean "this dataset does not track sessions". The
+ * literal 'no_session_tracking' is what the Mathia exports carry (see
+ * src/lib/types.ts); the rest are the usual ways a blank lands in a CSV.
+ */
+const NON_SESSION_VALUES = new Set([
+    '', 'no_session_tracking', 'null', 'undefined', 'nan', 'na', 'n/a', '-'
+]);
+
+/**
+ * Second-level sequence key: one *path* through the content.
+ *
+ * A path is one student's run at one problem in one session. Grouping by
+ * (student, problem) alone concatenates every attempt a student ever made at a
+ * problem — across days — into a single path, which invents a transition at each
+ * attempt boundary (last step of attempt N -> first step of attempt N+1), lets
+ * one student sit on several outgoing edges of the same node, and makes "avg
+ * path length" a per-student-per-problem figure rather than a per-attempt one.
+ *
+ * Session is only added when the row actually has one: datasets that ship the
+ * 'no_session_tracking' placeholder (or a blank) fall back to the old
+ * problem-only key, which is the best available answer for them — never
+ * collapsing every row into one bucket, never splitting each row into its own.
+ * The check is per row, so a file with sessions on only some rows degrades
+ * row-by-row instead of all-or-nothing.
+ */
+export const pathKey = (problemName: string, sessionId: string | undefined | null): string => {
+    const session = (sessionId ?? '').trim();
+    if (!session || NON_SESSION_VALUES.has(session.toLowerCase())) return problemName;
+    return `${problemName}${PATH_KEY_SEP}${session}`;
+};
+
+/**
+ * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by
+ * student, problem and time. (Ordering within a path only has to be correct
+ * *inside* each (student, problem, session) bucket, which the time sort
+ * guarantees regardless of how sessions interleave.)
  * @param csvData - The raw CSV data as a string.
  * @returns The transformed and sorted CSV rows.
  */
@@ -130,22 +177,29 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
 /**
  * Creates step sequences from sorted data, optionally allowing self-loops.
  * Excludes steps where CF_Autofill is "True".
+ *
+ * Shape: studentId -> pathKey -> steps[], where pathKey is one attempt at one
+ * problem (see pathKey()). The top level stays keyed by student so every
+ * population count downstream — totalStudents, the "N students" captions,
+ * per-edge unique-student counts — keeps counting DISTINCT STUDENTS; only path
+ * identity is session-scoped.
+ *
  * @param sortedData - The sorted CSV rows.
  * @param selfLoops - A boolean to include self-loops.
- * @returns A dictionary mapping session IDs to sequences of step names.
+ * @returns studentId -> pathKey -> sequence of step names.
  */
 export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] } } => {
     return sortedData.reduce((acc, row) => {
         // Note: Autofilled rows are already filtered out in loadAndSortData
         const studentId: string = row['Anon Student Id'];
-        const problemName: string = row['Problem Name'];
+        const key: string = pathKey(row['Problem Name'], row['Session Id']);
 
         if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][problemName]) acc[studentId][problemName] = [];
+        if (!acc[studentId][key]) acc[studentId][key] = [];
 
         const stepName = row['Step Name'];
-        if (selfLoops || acc[studentId][problemName].length === 0 || acc[studentId][problemName][acc[studentId][problemName].length - 1] !== stepName) {
-            acc[studentId][problemName].push(stepName);
+        if (selfLoops || acc[studentId][key].length === 0 || acc[studentId][key][acc[studentId][key].length - 1] !== stepName) {
+            acc[studentId][key].push(stepName);
         }
 
         return acc;
@@ -169,31 +223,34 @@ export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): {
  *
  * @param sortedData - The sorted CSV rows.
  * @param selfLoops - Must match the value passed to createStepSequences.
- * @returns A dictionary mapping session IDs to sequences of outcomes.
+ * @returns studentId -> pathKey -> sequence of outcomes, keyed exactly like
+ *   createStepSequences so the two line up index for index.
  */
 export const createOutcomeSequences = (
     sortedData: CSVRow[],
     selfLoops: boolean
 ): { [key: string]: { [key: string]: string[] } } => {
-    // Last step pushed per (student, problem) — mirrors the array-tail check
+    // Last step pushed per (student, path) — mirrors the array-tail check
     // createStepSequences does, so the two stay index-for-index aligned.
     const lastPushedStep = new Map<string, string>();
 
     return sortedData.reduce((acc, row) => {
         // Note: Autofilled rows are already filtered out in loadAndSortData
         const studentId = row['Anon Student Id'];
-        const problemName = row['Problem Name'];
+        // Same key function as createStepSequences: both objects must be keyed
+        // identically or a path's steps and outcomes end up in different buckets.
+        const path = pathKey(row['Problem Name'], row['Session Id']);
 
         if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][problemName]) acc[studentId][problemName] = [];
+        if (!acc[studentId][path]) acc[studentId][path] = [];
 
         const stepName = row['Step Name'];
-        // NUL separator: cannot occur in an id or a problem name, so two
-        // distinct pairs can never collide into the same key.
-        const key = `${studentId}\u0000${problemName}`;
+        // NUL separator: cannot occur in an id or a path key, so two distinct
+        // pairs can never collide into the same tracking key.
+        const key = `${studentId}\u0000${path}`;
 
         if (selfLoops || !lastPushedStep.has(key) || lastPushedStep.get(key) !== stepName) {
-            acc[studentId][problemName].push(row['Outcome']);
+            acc[studentId][path].push(row['Outcome']);
             lastPushedStep.set(key, stepName);
         }
 
@@ -206,8 +263,11 @@ export const createOutcomeSequences = (
 // ============================================================================
 
 /**
- * Finds the top N most frequent step sequences.
- * @param stepSequences - The step sequences for all sessions.
+ * Finds the top N most frequent step sequences. One vote per path (one
+ * student's attempt at one problem in one session), so a student who repeats the
+ * same route on three separate attempts contributes three votes to it — the
+ * frequency of a route through the content, not of a student.
+ * @param stepSequences - The step sequences, studentId -> pathKey -> steps[].
  * @param topN - The number of top sequences to return (default is 5).
  * @returns An array of the top sequences and their counts.
  */
@@ -328,11 +388,11 @@ export function formatEquationAnswerStats(stats: {
 // ============================================================================
 
 /**
- * Pre-calculates all valid student-problem combinations to avoid nested object lookups.
- * Only includes problems with at least 2 steps (required for edge creation).
+ * Pre-calculates all valid student-path combinations to avoid nested object lookups.
+ * Only includes paths with at least 2 steps (required for edge creation).
  *
- * @param stepSequences - Student step sequences by studentId -> problemName -> steps[]
- * @param outcomeSequences - Student outcome sequences by studentId -> problemName -> outcomes[]
+ * @param stepSequences - Student step sequences by studentId -> pathKey -> steps[]
+ * @param outcomeSequences - Student outcome sequences by studentId -> pathKey -> outcomes[]
  * @returns Array of pre-calculated combinations for efficient processing
  */
 const prepareStudentProblemCombinations = (
@@ -344,13 +404,13 @@ const prepareStudentProblemCombinations = (
     for (const [studentId, innerStepSequences] of Object.entries(stepSequences)) {
         const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-        for (const [problemName, steps] of Object.entries(innerStepSequences)) {
+        for (const [key, steps] of Object.entries(innerStepSequences)) {
             if (steps.length >= 2) {
                 combinations.push({
                     studentId,
-                    problemName,
+                    pathKey: key,
                     steps,
-                    outcomes: innerOutcomeSequences[problemName] || []
+                    outcomes: innerOutcomeSequences[key] || []
                 });
             }
         }
@@ -586,8 +646,8 @@ const convertMapsToObjects = (
  * - Map/Set data structures for O(1) operations
  * - Lazy initialization of tracking structures
  *
- * @param stepSequences - Student learning paths: studentId -> problemName -> step[]
- * @param outcomeSequences - Student outcomes: studentId -> problemName -> outcome[]
+ * @param stepSequences - Student learning paths: studentId -> pathKey -> step[]
+ * @param outcomeSequences - Student outcomes: studentId -> pathKey -> outcome[]
  * @returns Comprehensive edge and node analytics including counts, ratios, and sequences
  */
 export const countEdges = (
@@ -640,11 +700,11 @@ function computeNodeOutcomeTallies(
 
     for (const studentId of Object.keys(stepSequences)) {
         const problems = stepSequences[studentId];
-        const outcomesByProblem = outcomeSequences[studentId] || {};
+        const outcomesByPath = outcomeSequences[studentId] || {};
         const seenNodes = new Set<string>(); // first-visit tracking, per student
-        for (const problemName of Object.keys(problems)) {
-            const steps = problems[problemName];
-            const outcomes = outcomesByProblem[problemName] || [];
+        for (const key of Object.keys(problems)) {
+            const steps = problems[key];
+            const outcomes = outcomesByPath[key] || [];
             for (let i = 0; i < steps.length && i < outcomes.length; i++) {
                 const node = steps[i];
                 const outcome = outcomes[i];
@@ -718,8 +778,8 @@ export const countEdgesForSelectedSequence = (
         Object.entries(stepSequences).forEach(([studentId, problems]) => {
             const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-            Object.entries(problems).forEach(([problemName, steps]) => {
-                const outcomes = innerOutcomeSequences[problemName] || [];
+            Object.entries(problems).forEach(([key, steps]) => {
+                const outcomes = innerOutcomeSequences[key] || [];
 
                 // Check if this student completed the full sequence
                 const fullSequenceMatch = containsSequence(steps, selectedSequence);
@@ -787,8 +847,8 @@ export const countEdgesForSelectedSequence = (
         Object.entries(stepSequences).forEach(([studentId, problems]) => {
             const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-            Object.entries(problems).forEach(([problemName, steps]) => {
-                const outcomes = innerOutcomeSequences[problemName] || [];
+            Object.entries(problems).forEach(([key, steps]) => {
+                const outcomes = innerOutcomeSequences[key] || [];
 
                 // For each edge in the selected sequence
                 for (let seqIndex = 0; seqIndex < selectedSequence.length - 1; seqIndex++) {
@@ -933,13 +993,13 @@ export function computeSequenceErrorCounts(
         let bestDeepest = 0;
         let bestStart = 0;
         let bestOutcomes: string[] = [];
-        for (const [problemName, steps] of Object.entries(problems)) {
+        for (const [key, steps] of Object.entries(problems)) {
             if (!steps || steps.length < 2) continue;
             const { deepest, start } = deepestSequencePrefix(steps, selectedSequence);
             if (deepest > bestDeepest) {
                 bestDeepest = deepest;
                 bestStart = start;
-                bestOutcomes = outProblems[problemName] || [];
+                bestOutcomes = outProblems[key] || [];
             }
         }
         for (let i = 0; i < Math.min(bestDeepest, seqLen) - 1; i++) {

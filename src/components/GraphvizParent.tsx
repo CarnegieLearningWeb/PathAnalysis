@@ -109,10 +109,12 @@ const collapseConsecutive = (steps: string[]): string[] =>
     steps.filter((step, i) => i === 0 || step !== steps[i - 1]);
 
 /**
- * Distinct students whose path through some problem is exactly `sequence` — the
- * "took it end to end" count. Students, not paths, because it is always stated
- * against a student population (this graph's students, or the ones its drawn
- * edges represent). Returns null when there is no sequence to match.
+ * Distinct students who walked exactly `sequence` on at least one of their paths
+ * (one attempt at one problem in one session) — the "took it end to end" count.
+ * Students, not paths, because it is always stated against a student population
+ * (this graph's students, or the ones its drawn edges represent). One student is
+ * counted once however many attempts matched. Returns null when there is no
+ * sequence to match.
  *
  * Both sides are collapsed before comparing. Without that, turning self-loops on
  * makes every student's array carry consecutive repeats while `sequence` stays
@@ -122,7 +124,7 @@ const collapseConsecutive = (steps: string[]): string[] =>
  * step in place does not change which path you took.
  */
 const countStudentsOnExactSequence = (
-    stepSequences: { [student: string]: { [problem: string]: string[] } },
+    stepSequences: { [student: string]: { [pathKey: string]: string[] } },
     sequence: string[] | null | undefined
 ): number | null => {
     if (!sequence || sequence.length === 0) return null;
@@ -278,17 +280,19 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [csvData, selfLoops, uniqueStudentMode]); // Depends on both selfLoops and uniqueStudentMode
 
     // Dataset-level summary metrics for the whole unfiltered population.
-    // Total Students counts distinct student IDs; Avg Path Length is the mean
-    // length over every per-student-per-problem step sequence that feeds the
-    // graph. Mirrors the Streamlit tool's create_summary_metrics, minus its
-    // "Unique Paths" metric (dropped as low-signal — see decision notes).
+    // Total Students counts distinct student IDs. Avg Path Length is the mean
+    // length over every path that feeds the graph — one path being one student's
+    // attempt at one problem in one session, so a student who attempts a problem
+    // three times contributes three paths rather than one 3x-long one. Mirrors
+    // the Streamlit tool's create_summary_metrics, minus its "Unique Paths"
+    // metric (dropped as low-signal — see decision notes).
     const summaryMetrics = useMemo(() => {
         if (!mainGraphData) return null;
         const { stepSequences } = mainGraphData;
         const totalStudents = Object.keys(stepSequences).length;
         const pathLengths: number[] = [];
-        Object.values(stepSequences).forEach((byProblem: { [problem: string]: string[] }) => {
-            Object.values(byProblem).forEach((seq) => pathLengths.push(seq.length));
+        Object.values(stepSequences).forEach((byPath: { [pathKey: string]: string[] }) => {
+            Object.values(byPath).forEach((seq) => pathLengths.push(seq.length));
         });
         const avgPathLength = pathLengths.length
             ? pathLengths.reduce((sum, n) => sum + n, 0) / pathLengths.length
@@ -422,7 +426,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
                 setTop5Sequences(topSequences);
-                if (topSequences && selectedSequence === undefined) {
+                // getTopSequences only returns paths of 5+ steps, so an empty
+                // list is a real outcome (short attempts) — not a "no data" one.
+                // Indexing [0] unguarded threw on such datasets.
+                if (topSequences.length > 0 && selectedSequence === undefined) {
                     setSelectedSequence(topSequences[0].sequence);
                 }
             }
@@ -948,11 +955,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const studentsAtNode = new Set<string>();
 
         // Find all students who visited this node
-        // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
+        // stepSequences has structure: { [studentId]: { [pathKey]: string[] } },
+        // one entry per attempt (problem + session) — see pathKey() in GraphvizProcessing.
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
                 if (restrictToStudents && !restrictToStudents.has(studentId)) return;
-                // studentProblems is { [problemName]: string[] }
+                // studentProblems is { [pathKey]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
                         if (Array.isArray(problemSequence) && problemSequence.includes(nodeName)) {
@@ -1038,7 +1046,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
-                // studentProblems is { [problemName]: string[] }
+                // studentProblems is { [pathKey]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
 
                     // Skip students who didn't follow the exact selected sequence.
