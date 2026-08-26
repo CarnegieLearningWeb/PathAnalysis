@@ -1994,7 +1994,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             </div>
                         </div>
                     )}
-                    <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
+                    {/* Centering via auto margins on the end children, NOT
+                        justify-center. On a scroll container, justify-center splits
+                        overflow to both sides and the leading half lands in negative
+                        scroll space: unreachable and visually clipped. With four
+                        graphs (350 + 475*3 = 1775px) that silently ate the left edge
+                        of the first panel. Auto margins collapse to 0 once free space
+                        runs out, so the row centers when it fits and scrolls from its
+                        true start when it does not. */}
+                    <div className="graphs flex w-full h-[650px] overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                         {showSelectedSequence && topDotString && (
                             <div
                                 className={`graph-item flex flex-col items-center w-[350px] border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
