@@ -86,7 +86,7 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
                             reading it as 47 people next to a caption saying 28.
                             Name the unit. */}
                         <span className="font-medium tabular-nums">
-                            {seq.count.toLocaleString()} paths
+                            Taken {seq.count.toLocaleString()}×
                         </span>
                         <span className="mx-1.5 text-muted-foreground">·</span>
                         <span className="text-muted-foreground">
