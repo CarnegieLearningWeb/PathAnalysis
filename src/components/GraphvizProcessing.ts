@@ -900,6 +900,14 @@ export const countEdgesForSelectedSequence = (
     const trackingMaps = initializeTrackingMaps();
     let maxEdgeCount = 0;
 
+    // Canonicalize the sequence the same way the paths it is matched against are
+    // canonicalized. A collapsed path can never contain a run that itself holds a
+    // consecutive repeat, so matching a raw sequence against collapsed paths would
+    // fail outright. Collapsing both makes the sequence's identity independent of
+    // which self-loop state it was picked in - which is the point: repeating a
+    // step in place does not change which path a student took.
+    selectedSequence = collapseConsecutive(selectedSequence);
+
     if (onlyStudentsOnSequence) {
         // MODE 1: Progressive filtering - only students who followed the sequence
         console.log(`countEdgesForSelectedSequence: Progressive filtering mode (students on sequence)`);
@@ -913,8 +921,16 @@ export const countEdgesForSelectedSequence = (
         Object.entries(stepSequences).forEach(([studentId, problems]) => {
             const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-            Object.entries(problems).forEach(([key, steps]) => {
-                const outcomes = innerOutcomeSequences[key] || [];
+            Object.entries(problems).forEach(([key, rawSteps]) => {
+                // Collapse the path (and its outcomes, together) before matching:
+                // the selected sequence was chosen in one self-loop state and may
+                // be matched against paths built in the other, and a raw compare
+                // then silently fails to find a contained run. Outcomes are read
+                // positionally below, so they must collapse in lockstep.
+                const { steps, outcomes } = collapseStepsAndOutcomes(
+                    rawSteps,
+                    innerOutcomeSequences[key] || []
+                );
 
                 // Check if this student completed the full sequence
                 const fullSequenceMatch = containsSequence(steps, selectedSequence);
@@ -1021,6 +1037,44 @@ export const countEdgesForSelectedSequence = (
 };
 
 /**
+ * Drop immediately-repeated steps: [A, A, B, A] -> [A, B, A].
+ *
+ * Step sequences keep or collapse consecutive repeats depending on the self-loop
+ * toggle, so any comparison between two step arrays must normalize first or it
+ * compares representations rather than paths. Declared as a hoisted `function`
+ * so the sequence functions above can call it.
+ */
+export function collapseConsecutive(steps: string[]): string[] {
+    return steps.filter((step, i) => i === 0 || step !== steps[i - 1]);
+}
+
+/**
+ * The same collapse, applied to a step array and its outcome array together so
+ * they stay index-aligned.
+ *
+ * Both sequence functions that consume outcomes read them positionally against
+ * steps (`outcomes[i + 1]` is the outcome at the edge's target). Collapsing only
+ * the steps would shift every later outcome onto the wrong transition — exactly
+ * the defect createSequences was restructured to make impossible at build time.
+ * This is the comparison-time equivalent, needed because a sequence selected in
+ * one toggle state gets matched against paths built in the other.
+ */
+export function collapseStepsAndOutcomes(
+    steps: string[],
+    outcomes: string[]
+): { steps: string[]; outcomes: string[] } {
+    const collapsedSteps: string[] = [];
+    const collapsedOutcomes: string[] = [];
+    steps.forEach((step, i) => {
+        if (i === 0 || step !== steps[i - 1]) {
+            collapsedSteps.push(step);
+            collapsedOutcomes.push(outcomes[i]);
+        }
+    });
+    return { steps: collapsedSteps, outcomes: collapsedOutcomes };
+}
+
+/**
  * Helper function to check if a sequence contains a subsequence
  * @param sequence - The full sequence to search in
  * @param subsequence - The subsequence to search for
@@ -1083,13 +1137,17 @@ export function computeSequenceFunnelCounts(
     selectedSequence: string[]
 ): { [key: string]: number } {
     if (!selectedSequence || selectedSequence.length < 2) return {};
+    // See countEdgesForSelectedSequence: both sides must collapse or the match
+    // silently depends on the self-loop toggle.
+    selectedSequence = collapseConsecutive(selectedSequence);
     const seqLen = selectedSequence.length;
     const counts = new Array(seqLen - 1).fill(0);
 
     for (const problems of Object.values(stepSequences)) {
         let studentDeepest = 0;
-        for (const steps of Object.values(problems)) {
-            if (!steps || steps.length < 2) continue;
+        for (const rawSteps of Object.values(problems)) {
+            if (!rawSteps || rawSteps.length < 2) continue;
+            const steps = collapseConsecutive(rawSteps);
             const { deepest } = deepestSequencePrefix(steps, selectedSequence);
             if (deepest > studentDeepest) studentDeepest = deepest;
         }
@@ -1118,6 +1176,9 @@ export function computeSequenceErrorCounts(
     selectedSequence: string[]
 ): { [key: string]: number } {
     if (!selectedSequence || selectedSequence.length < 2) return {};
+    // See countEdgesForSelectedSequence: both sides must collapse or the match
+    // silently depends on the self-loop toggle.
+    selectedSequence = collapseConsecutive(selectedSequence);
     const seqLen = selectedSequence.length;
     const counts = new Array(seqLen - 1).fill(0);
 
@@ -1128,13 +1189,17 @@ export function computeSequenceErrorCounts(
         let bestDeepest = 0;
         let bestStart = 0;
         let bestOutcomes: string[] = [];
-        for (const [key, steps] of Object.entries(problems)) {
-            if (!steps || steps.length < 2) continue;
+        for (const [key, rawSteps] of Object.entries(problems)) {
+            if (!rawSteps || rawSteps.length < 2) continue;
+            // Collapse steps and outcomes together: `bestStart + i` indexes
+            // bestOutcomes against step positions, so a steps-only collapse
+            // would shift every outcome onto the wrong transition.
+            const { steps, outcomes } = collapseStepsAndOutcomes(rawSteps, outProblems[key] || []);
             const { deepest, start } = deepestSequencePrefix(steps, selectedSequence);
             if (deepest > bestDeepest) {
                 bestDeepest = deepest;
                 bestStart = start;
-                bestOutcomes = outProblems[key] || [];
+                bestOutcomes = outcomes;
             }
         }
         for (let i = 0; i < Math.min(bestDeepest, seqLen) - 1; i++) {

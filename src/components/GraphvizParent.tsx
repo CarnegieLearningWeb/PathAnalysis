@@ -13,7 +13,8 @@ import {
     analyzeEquationAnswerTransitions,
     formatEquationAnswerStats,
     computeSequenceFunnelCounts,
-    computeSequenceErrorCounts
+    computeSequenceErrorCounts,
+    collapseConsecutive
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
@@ -99,13 +100,6 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
     if (a.length !== b.length) return false;
     return a.every((val, index) => val === b[index]);
 };
-
-// Drop immediately-repeated steps: [A, A, B, A] -> [A, B, A]. Step sequences are
-// built with consecutive repeats either kept or collapsed depending on the
-// self-loop toggle, so any comparison between two step arrays has to normalize
-// first or it is comparing representations rather than paths.
-const collapseConsecutive = (steps: string[]): string[] =>
-    steps.filter((step, i) => i === 0 || step !== steps[i - 1]);
 
 /**
  * Distinct students who walked exactly `sequence` on at least one of their paths
