@@ -724,10 +724,41 @@ export const countEdges = (
     const trackingMaps = initializeTrackingMaps();
     const topSequences = getTopSequences(stepSequences, 5);
     const maxEdgeCount = processStudentPaths(combinations, trackingMaps);
+    creditNodeVisitors(stepSequences, trackingMaps);
     const result = convertMapsToObjects(trackingMaps, maxEdgeCount, topSequences);
     const { all, firstAttempt } = computeNodeOutcomeTallies(stepSequences, outcomeSequences);
 
     return { ...result, nodeOutcomeCounts: all, nodeFirstAttemptOutcomes: firstAttempt };
+};
+
+/**
+ * Credits every student to every node they visited, from the step sequences
+ * directly rather than from traversed edges.
+ *
+ * Edge traversal alone misses a path of a single step: processStudentPaths only
+ * sees paths of 2+ steps (they are the only ones that can form an edge), so a
+ * student whose whole attempt was one step was counted nowhere. That was rare
+ * while a path meant "everything a student ever did at a problem"; now that a
+ * path is one attempt, one-step attempts are ordinary, and they were quietly
+ * shrinking the "Students at X" total — and the ratioEdges denominator — for
+ * exactly the entry nodes where such attempts land.
+ *
+ * This is the direct statement of what totalNodeEdges means: unique students who
+ * visited the node. Nodes that appear in no drawn edge may end up in the map;
+ * nothing renders them, since drawing iterates edges.
+ */
+const creditNodeVisitors = (
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    maps: EdgeTrackingMaps
+): void => {
+    for (const [studentId, paths] of Object.entries(stepSequences)) {
+        for (const steps of Object.values(paths)) {
+            for (const node of steps) {
+                if (!maps.totalNodeEdges.has(node)) maps.totalNodeEdges.set(node, new Set());
+                maps.totalNodeEdges.get(node)!.add(studentId);
+            }
+        }
+    }
 };
 
 /**
