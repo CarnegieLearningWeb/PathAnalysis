@@ -2256,11 +2256,17 @@ export function generateDotString(
     nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
     showEdgeLabels: boolean = true
 ): string {
-    // An empty (but defined) sequence means "None" is selected: the full graphs
-    // still render (every node neutral gray, no path emphasis), but the Selected
-    // Sequence graph has nothing to show. undefined means no data at all.
-    if (!selectedSequence || (justTopSequence && selectedSequence.length === 0)) {
-        return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
+    // Only the Selected Sequence graph actually needs a sequence — it IS the
+    // sequence. The full graphs use it for optional path emphasis alone, so they
+    // must still draw the whole network without one. Both "no sequence" states
+    // are therefore equivalent here: [] means the user picked "None", and
+    // undefined means nothing was auto-selected — reachable whenever no path
+    // clears getTopSequences' 5-step floor, which per-session paths hit far more
+    // often than per-problem ones did. Treating undefined as "no data at all"
+    // blacked out every graph for datasets that had plenty to show.
+    const sequence = selectedSequence ?? [];
+    if (justTopSequence && sequence.length === 0) {
+        return 'digraph G {\n"Error" [label="No sequence selected."];\n}';
     }
 
     const visitsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
@@ -2294,7 +2300,7 @@ export function generateDotString(
 
     if (justTopSequence) {
         dotString += generateTopSequenceVisualization(
-            selectedSequence,
+            sequence,
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
@@ -2317,7 +2323,7 @@ export function generateDotString(
         );
     } else {
         dotString += generateFullGraphVisualization(
-            selectedSequence,
+            sequence,
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
