@@ -1329,17 +1329,32 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const maxCount = Math.max(...Object.values(countsForThickness));
         const thickness = maxCount > 0 ? ((pathCount / maxCount) * 10).toFixed(1) : '1.0';
         
+        // Kept deliberately identical in wording to GraphvizProcessing's
+        // createEdgeTooltip: this is the CLICK tooltip and that one is the HOVER
+        // tooltip (baked into the DOT), and the same edge showing two different
+        // phrasings of the same quantity is its own bug. See that function for
+        // why these are shares rather than probabilities.
         const modeLabel = uniqueStudentMode ? 'Students' : 'Visits';
         const pathLabel = uniqueStudentMode ? 'Students taking this path' : 'Total visits on this path';
-        const startLabel = uniqueStudentMode ? `Students at ${currentStep}` : `Total visits to ${currentStep}`;
-        const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
-        
-        return `${modeLabel} Flow:\n`
+        // totalAtStart is a unique-student count in both modes, so never call it visits.
+        const startLabel = `Students at ${currentStep}`;
+
+        let flow = `${modeLabel} Flow:\n`
             + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
-            + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
-            + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
-            + `    • Transition Probability: ${ratioPercentage}%\n`
-            + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`
+            + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`;
+        // Subtraction only shares a unit in unique mode; and the remainder means
+        // "never used this edge", not "used a different one instead".
+        if (uniqueStudentMode) {
+            flow += `    • Students who never took this path: ${notTakingPath.toLocaleString()}\n`;
+        }
+        flow += `    • Used by ${ratioPercentage}% of students who reached ${currentStep}\n`;
+        if (uniqueStudentMode) {
+            flow += `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} students)\n`;
+        }
+        flow += `      Shares out of one step can total over 100%: a student who\n`
+            + `      reaches it more than once is counted on each route they took.\n`;
+
+        return flow + `\n`
             + `Student Progress Status:\n`
             + `    • Graduated: ${progressStats.graduated.toLocaleString()} (${progressStats.graduatedPercentage}%)\n`
             + `    • Promoted: ${progressStats.promoted.toLocaleString()} (${progressStats.promotedPercentage}%)\n`

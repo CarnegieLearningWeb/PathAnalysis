@@ -1827,7 +1827,17 @@ const createEdgeTooltip = (
         tooltip += `    • Students who never took this path: ${neverTookPath.toLocaleString()}\n`;
     }
 
-    tooltip += `    • Transition Probability: ${ratioPercentage}%\n`;
+    // NOT a transition probability, which is what this used to be called. A
+    // probability implies the outgoing shares of one step partition its
+    // students; they do not. The numerator is students who used this edge in ANY
+    // path, the denominator students who visited this step in ANY path, so a
+    // student who reaches this step in several paths — a different problem, a
+    // different session, or a revisit within one path — is counted on every
+    // successor they ever used and once in the denominator. Measured on the
+    // sample export, one step's outgoing shares total ~430%. Each share is still
+    // individually true, so state it as a share of the step's students rather
+    // than as a probability, and say plainly that they need not sum to 100%.
+    tooltip += `    • Used by ${ratioPercentage}% of students who reached ${currentStep}\n`;
     // ratioEdges is always students/students. In visits mode no unique-student
     // numerator survives this far (both `edgeCount` and `visits` arrive as
     // totalVisits), so spelling out the fraction would pair a visit count with
@@ -1835,6 +1845,8 @@ const createEdgeTooltip = (
     if (uniqueStudentMode) {
         tooltip += `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} students)\n`;
     }
+    tooltip += `      Shares out of one step can total over 100%: a student who\n`
+        + `      reaches it more than once is counted on each route they took.\n`;
     tooltip += '\n';
 
     if (progressStats) {
