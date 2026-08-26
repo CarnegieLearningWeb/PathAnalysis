@@ -14,6 +14,7 @@ import {
 
 import Loading from './components/Loading.tsx';
 import Switch from "./components/switch.tsx";
+import { OUTCOME_LEGEND, NODE_FILL_LEGEND } from "@/components/GraphvizProcessing.ts";
 import { useSearchParams } from 'react-router-dom';
 
 // Helper function to parse and format filename for display
@@ -69,10 +70,17 @@ function App() {
     // const [csvData, setCsvData] = useState<string>('');
     // State to manage the filter values for filtering the graph data (can show multiple)
     const [filters, setFilters] = useState<string[]>([]);
+
+    // Which of the always-available graphs to display (independent of status filters)
+    const [showSelectedSequence, setShowSelectedSequence] = useState<boolean>(true);
+    const [showAllStudents, setShowAllStudents] = useState<boolean>(true);
     // State to toggle whether self-loops (transitions back to the same node) should be included
     const [selfLoops, setSelfLoops] = useState<boolean>(true);
     const [errorMode, setErrorMode] = useState<boolean>(false);
     const [uniqueStudentMode, setUniqueStudentMode] = useState<boolean>(true);
+    const [nodeOutcomeMode, setNodeOutcomeMode] = useState<boolean>(false);
+    const [colorNodesBySequence, setColorNodesBySequence] = useState<boolean>(true);
+    const [showEdgeLabels, setShowEdgeLabels] = useState<boolean>(true);
     const [fileInfo, setFileInfo] = useState<{filename: string, source: string} | null>(null);
     // State to manage the minimum number of visits for displaying edges in the graph
     const [minVisitsPercentage, setMinVisitsPercentage] = useState<number>(0);
@@ -176,6 +184,12 @@ function App() {
      */
     const handleToggleUniqueStudentMode = () => setUniqueStudentMode(!uniqueStudentMode);
 
+    const handleToggleNodeOutcomeMode = () => setNodeOutcomeMode(!nodeOutcomeMode);
+
+    const handleToggleColorNodesBySequence = () => setColorNodesBySequence(!colorNodesBySequence);
+
+    const handleToggleShowEdgeLabels = () => setShowEdgeLabels(!showEdgeLabels);
+
     /**
      * Updates the `csvData` state with the uploaded CSV data when the file is processed.
      *
@@ -228,7 +242,9 @@ function App() {
                             <h2 className="text-lg font-semibold whitespace-nowrap">Selected Sequence:</h2>
                             {selectedSequence && (
                                 <h2 className="flex-1 text-sm break-words whitespace-normal ml-2">
-                                    {selectedSequence.toString().split(',').join(' → ')}
+                                    {selectedSequence.length === 0
+                                        ? <span className="italic text-gray-500">None — showing full graphs only</span>
+                                        : selectedSequence.toString().split(',').join(' → ')}
                                 </h2>
                             )}
                         </div>
@@ -263,8 +279,15 @@ function App() {
                                 <div className="flex flex-col space-y-6">
                                     {/* Filter Section */}
                                     <div className="space-y-2">
-                                        <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-                                        <FilterComponent onFilterChange={setFilters} currentFilters={filters}/>
+                                        <h3 className="text-lg font-semibold text-gray-900">Graphs</h3>
+                                        <FilterComponent
+                                            onFilterChange={setFilters}
+                                            currentFilters={filters}
+                                            showSelectedSequence={showSelectedSequence}
+                                            showAllStudents={showAllStudents}
+                                            onShowSelectedSequenceChange={setShowSelectedSequence}
+                                            onShowAllStudentsChange={setShowAllStudents}
+                                        />
                                     </div>
 
                                     {/* Sequence Section */}
@@ -296,7 +319,38 @@ function App() {
 
                                         <div className="pb-2 border-b border-gray-200">
                                             <label className="text-sm font-medium text-gray-700">Error Mode</label>
-                                            <Switch isOn={errorMode} handleToggle={handleToggleError}/>
+                                            <Switch isOn={errorMode} handleToggle={handleToggleError} disabled={nodeOutcomeMode}/>
+                                            {nodeOutcomeMode && (
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Disabled while nodes show the outcome mix
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Color Nodes by Outcome</label>
+                                            <Switch isOn={nodeOutcomeMode} handleToggle={handleToggleNodeOutcomeMode}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Fill each node with a 100% bar of its outcome mix; edges become neutral flow lines
+                                            </p>
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Color Nodes by Selected Sequence</label>
+                                            <Switch isOn={colorNodesBySequence} handleToggle={handleToggleColorNodesBySequence}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {nodeOutcomeMode
+                                                    ? 'Highlights sequence nodes with a bold border'
+                                                    : 'Shade sequence nodes white→blue by position; off = all nodes gray'}
+                                            </p>
+                                        </div>
+
+                                        <div className="pb-2 border-b border-gray-200">
+                                            <label className="text-sm font-medium text-gray-700">Show Edge Labels</label>
+                                            <Switch isOn={showEdgeLabels} handleToggle={handleToggleShowEdgeLabels}/>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Show the student/visit count on each edge
+                                            </p>
                                         </div>
 
                                         <div className="pb-2 border-b border-gray-200">
@@ -337,6 +391,11 @@ function App() {
                                             onMaxMinEdgeCountChange={setMaxMinEdgeCount}
                                             errorMode={errorMode}
                                             uniqueStudentMode={uniqueStudentMode}
+                                            nodeOutcomeMode={nodeOutcomeMode}
+                                            showSelectedSequence={showSelectedSequence}
+                                            showAllStudents={showAllStudents}
+                                            colorNodesBySequence={colorNodesBySequence}
+                                            showEdgeLabels={showEdgeLabels}
                                             problemName={fileInfo?.filename.replace(/\.(csv|CSV)$/, '') || 'unknown'}
                                         />
                                     </div>
@@ -344,132 +403,101 @@ function App() {
                                 {/* Legend component */}
                                 <div className="mt-4 p-4 border border-gray-300 rounded-lg bg-white">
                                     <h3 className="text-lg font-semibold mb-2">Graph Legend</h3>
+                                    {nodeOutcomeMode && (
+                                        <div className="mb-3 p-2 rounded bg-gray-50 border border-gray-200 text-sm text-gray-700">
+                                            <span className="font-medium">Color Nodes by Outcome is on:</span> each node is a
+                                            100% bar of its outcome mix, in the fill colors shown below (a lighter green than
+                                            the line palette — the same value reads much heavier over a large filled area);
+                                            a bold black border marks nodes on the selected sequence. Edges are drawn as
+                                            neutral gray flow lines.
+                                        </div>
+                                    )}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <h4 className="font-medium mb-2">Node Colors</h4>
+                                            <h4 className="font-medium mb-2">
+                                                {nodeOutcomeMode ? 'Sequence Marking' : 'Node Colors'}
+                                            </h4>
+                                            {nodeOutcomeMode ? (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 mr-2 bg-white border-2 border-black"></div>
+                                                        <span>On the selected sequence</span>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <div className="w-4 h-4 mr-2 bg-white border border-gray-300"></div>
+                                                        <span>Not in Selected Sequence</span>
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">
+                                                        In this mode a node's fill is its outcome mix, so sequence membership
+                                                        is marked with a bold border instead of the white→blue gradient.
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">
+                                                        Selected-sequence transitions are drawn in a solid (not translucent)
+                                                        gray; edge thickness still means students per transition.
+                                                    </div>
+                                                </div>
+                                            ) : (
                                             <div className="space-y-2">
                                                 <div className="flex items-center">
                                                     <div className="w-4 h-4 bg-white border border-gray-300 mr-2"></div>
                                                     <span>Start of Sequence</span>
                                                 </div>
                                                 <div className="flex items-center">
-                                                    <div className="w-4 h-4 bg-[#00A6FF] mr-2"></div>
+                                                    <div className="w-4 h-4 bg-[#1cb0ff] mr-2"></div>
                                                     <span>End of Sequence</span>
                                                 </div>
-                                                <div className="text-sm text-gray-600">Nodes in between are colored with a
-                                                    gradient from white to light blue based on their position in the
-                                                    selected sequence.
+                                                <div className="flex items-center">
+                                                    <div className="w-4 h-4 bg-[#CCCCCC] mr-2"></div>
+                                                    <span>Not in Selected Sequence</span>
+                                                </div>
+                                                <div className="text-sm text-gray-600">Nodes on the selected sequence are colored with a
+                                                    gradient from white (start) to blue (end) based on their position.
                                                 </div>
                                                 <div className="text-sm text-gray-600">
-                                                    Note: If a white node (that is not the first node in the selected
-                                                    sequence) appears in a graph,
-                                                    that node is not in the selected sequence.
+                                                    Note: Gray nodes are steps that are not part of the selected sequence.
                                                 </div>
+                                                <div className="text-sm text-gray-600">
+                                                    The sequence's own transitions are drawn in a solid, fully saturated
+                                                    version of their outcome color; thickness always means students per
+                                                    transition.
+                                                </div>
+                                            </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium mb-2">
+                                                {nodeOutcomeMode
+                                                    ? 'Node Bar Colors (outcomes recorded at the step)'
+                                                    : 'Edge Colors (most common outcome)'}
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {(nodeOutcomeMode ? NODE_FILL_LEGEND : OUTCOME_LEGEND).map(([label, color]) => (
+                                                    <div className="flex items-center" key={label}>
+                                                        <div className="w-4 h-4 mr-2" style={{ backgroundColor: color }}></div>
+                                                        <span>{label}</span>
+                                                    </div>
+                                                ))}
+                                                <div className="text-sm text-gray-600">
+                                                    {nodeOutcomeMode
+                                                        ? 'Each node’s bar is its outcome mix (colorblind-safe Okabe-Ito palette, lightened for fills); edge thickness grows with the number of students who took the transition.'
+                                                        : 'Each edge is colored by its single most common outcome (colorblind-safe Okabe-Ito palette); its thickness grows with the number of students who took it.'}
+                                                </div>
+                                                {errorMode && !nodeOutcomeMode && (
+                                                    <>
+                                                        <div className="flex items-center">
+                                                            <div className="w-4 h-0 mr-2 border-t-2 border-dashed" style={{ borderColor: '#D55E00' }}></div>
+                                                            <span>Error share (dashed red)</span>
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">
+                                                            In Error Mode a dashed red arrow carries the error signal: an
+                                                            overlay whose thickness reflects how many students errored on
+                                                            a transition, or the whole edge drawn dashed when every
+                                                            student errored.
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
-                                        {errorMode ? (
-                                            <div>
-                                                <h4 className="font-medium mb-2">Edge Colors (Error Mode)</h4>
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
-                                                        <span>ERROR</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
-                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
-                                                        <span>JIT / FREEBIE_JIT</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-black mr-2"></div>
-                                                        <span>Only OK → Black</span>
-                                                    </div>
-                                                    <Popover>
-                                                        <PopoverTrigger>
-                                                            <div
-                                                                className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
-                                                                How are edge colors calculated?
-                                                            </div>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="w-80">
-                                                            <div className="space-y-2">
-                                                                <h4 className="font-medium">Edge Color Calculation (Error
-                                                                    Mode)</h4>
-                                                                <p className="text-sm">
-                                                                    When in error-mode, only non-OK outcomes
-                                                                    contribute to the color:
-                                                                </p>
-                                                                <ul className="text-sm list-disc pl-4 space-y-1">
-                                                                    <li>Only ERROR, hints, and JIT are included in the
-                                                                        blend
-                                                                    </li>
-                                                                    <li>OK is ignored unless it's the only outcome — then
-                                                                        the edge is black
-                                                                    </li>
-                                                                    <li>Final color includes 90% opacity</li>
-                                                                </ul>
-                                                            </div>
-                                                        </PopoverContent>
-                                                    </Popover>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <h4 className="font-medium mb-2">Edge Colors</h4>
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-red-500 mr-2"></div>
-                                                        <span>ERROR</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-green-500 mr-2"></div>
-                                                        <span>OK</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-blue-500 mr-2"></div>
-                                                        <span>INITIAL_HINT / HINT_LEVEL_CHANGE</span>
-                                                    </div>
-                                                    <div className="flex items-center">
-                                                        <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
-                                                        <span>JIT / FREEBIE_JIT</span>
-                                                    </div>
-                                                    <Popover>
-                                                        <PopoverTrigger>
-                                                            <div
-                                                                className="text-sm text-blue-600 hover:text-blue-800 cursor-help">
-                                                                How are edge colors calculated?
-                                                            </div>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="w-80">
-                                                            <div className="space-y-2">
-                                                                <h4 className="font-medium">Edge Color Calculation</h4>
-                                                                <p className="text-sm">
-                                                                    When an edge has multiple outcomes, its color is
-                                                                    calculated
-                                                                    as a weighted average:
-                                                                </p>
-                                                                <ul className="text-sm list-disc pl-4 space-y-1">
-                                                                    <li>Each outcome's color is weighted by its frequency
-                                                                    </li>
-                                                                    <li>For example, if an edge has 70% OK (green) and 30%
-                                                                        ERROR
-                                                                        (red), the resulting color will be a blend of these
-                                                                        colors (7 green:3 red)
-                                                                    </li>
-                                                                    <li>The final color includes 90% opacity to show
-                                                                        overlapping
-                                                                        edges
-                                                                    </li>
-                                                                </ul>
-                                                            </div>
-                                                        </PopoverContent>
-                                                    </Popover>
-                                                </div>
-                                            </div>
-                                        )}
 
                                     </div>
                                 </div>
