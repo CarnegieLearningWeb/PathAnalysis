@@ -329,7 +329,7 @@ function App() {
                                 setFileInfo(null);
                             }}
                         >
-                            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                             Reset data
                         </Button>
                     )}
@@ -397,12 +397,14 @@ function App() {
                                         />
                                     </div>
 
-                                    <div className="space-y-1.5">
-                                        <span className="field-label block">Drawing</span>
+                                    {/* No caption: the trigger names itself, and a
+                                        caption over a button would read as a
+                                        label for a field that isn't there. */}
+                                    <div>
                                         <Popover>
                                             <PopoverTrigger asChild>
                                                 <Button variant="outline" size="sm">
-                                                    <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                                                    <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
                                                     Display options
                                                 </Button>
                                             </PopoverTrigger>
