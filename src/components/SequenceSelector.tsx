@@ -78,8 +78,15 @@ const SequenceSelector: React.FC<SequenceSelectorProps> = ({
                         value={seq.sequence!.join(',')}
                         className="items-start whitespace-normal py-1.5"
                     >
+                        {/* `count` is attempts, not students: getTopSequences
+                            increments once per (student, problem, session) path
+                            whose steps match, so one student with three matching
+                            sessions counts three times. The panel caption beside
+                            this reads distinct students, so a bare "47×" invites
+                            reading it as 47 people next to a caption saying 28.
+                            Name the unit. */}
                         <span className="font-medium tabular-nums">
-                            {seq.count.toLocaleString()}×
+                            {seq.count.toLocaleString()} paths
                         </span>
                         <span className="mx-1.5 text-muted-foreground">·</span>
                         <span className="text-muted-foreground">
