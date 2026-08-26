@@ -6,8 +6,7 @@ import {
     normalizeThicknesses,
     countEdges,
     countEdgesForSelectedSequence,
-    createStepSequences,
-    createOutcomeSequences,
+    createSequences,
     loadAndSortData,
     calculateMaxMinEdgeCount,
     calculateConnectivityCap,
@@ -260,10 +259,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // Self-loops should only be included when selfLoops is enabled AND not in unique student mode
         // In unique student mode (first attempts), self-loops are logically impossible
         const includeLoops = selfLoops && !uniqueStudentMode;
-        const stepSequences = createStepSequences(sortedData, includeLoops);
-        // Same flag as the step sequences: the two arrays are read positionally,
-        // so they must drop the same rows or outcomes shift onto wrong edges.
-        const outcomeSequences = createOutcomeSequences(sortedData, includeLoops);
+        // Both sequences come from one call: they are read positionally, so
+        // building them separately made "same selfLoops flag" a hand-kept
+        // invariant whose failure silently mis-attributed every later outcome.
+        const { stepSequences, outcomeSequences } = createSequences(sortedData, includeLoops);
         
         // Add equation answer analysis
         const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
@@ -353,8 +352,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         filters.forEach(filter => {
             const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
             const filteredIncludeLoops = selfLoops && !uniqueStudentMode;
-            const filteredStepSequences = createStepSequences(filteredData, filteredIncludeLoops);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData, filteredIncludeLoops);
+            const {
+                stepSequences: filteredStepSequences,
+                outcomeSequences: filteredOutcomeSequences
+            } = createSequences(filteredData, filteredIncludeLoops);
 
             const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
 

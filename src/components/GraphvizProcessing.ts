@@ -233,87 +233,68 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
 };
 
 /**
- * Creates step sequences from sorted data, optionally allowing self-loops.
- * Excludes steps where CF_Autofill is "True".
- *
- * Shape: studentId -> pathKey -> steps[], where pathKey is one attempt at one
- * problem (see pathKey()). The top level stays keyed by student so every
- * population count downstream — totalStudents, the "N students" captions,
- * per-edge unique-student counts — keeps counting DISTINCT STUDENTS; only path
- * identity is session-scoped.
- *
- * @param sortedData - The sorted CSV rows.
- * @param selfLoops - A boolean to include self-loops.
- * @returns studentId -> pathKey -> sequence of step names.
+ * One student's paths, as parallel step and outcome arrays.
+ * Shape for both: studentId -> pathKey -> string[].
  */
-export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] } } => {
-    return sortedData.reduce((acc, row) => {
-        // Note: Autofilled rows are already filtered out in loadAndSortData
-        const studentId: string = row['Anon Student Id'];
-        const key: string = pathKey(row['Problem Name'], row['Session Id']);
-
-        if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][key]) acc[studentId][key] = [];
-
-        const stepName = row['Step Name'];
-        if (selfLoops || acc[studentId][key].length === 0 || acc[studentId][key][acc[studentId][key].length - 1] !== stepName) {
-            acc[studentId][key].push(stepName);
-        }
-
-        return acc;
-    }, {} as { [key: string]: { [key: string]: string[] } });
-};
+export interface PathSequences {
+    stepSequences: { [student: string]: { [pathKey: string]: string[] } };
+    outcomeSequences: { [student: string]: { [pathKey: string]: string[] } };
+}
 
 /**
- * Creates outcome sequences from sorted data.
- * Excludes outcomes where CF_Autofill is "True".
+ * Builds the step and outcome sequences for every path in one pass.
  *
- * Takes the same `selfLoops` flag as createStepSequences and applies the same
- * skip rule, because the two arrays are read positionally: processStudentPaths
- * pairs `steps[i] -> steps[i + 1]` with `outcomes[i + 1]`. When self-loops are
- * collapsed out of the step sequence but every row still contributes an
- * outcome, the arrays drift apart at the first dropped row and every later
- * outcome is attributed to the wrong transition — which silently corrupts edge
- * colors, tooltip outcome percentages, and the node outcome bars. Collapsing a
- * run keeps the run's FIRST outcome, matching createStepSequences (which keeps
- * the first row of a run) and the "first attempt" reading of unique-student
- * mode.
+ * The two arrays are read POSITIONALLY everywhere downstream — processStudentPaths
+ * pairs `steps[i] -> steps[i + 1]` with `outcomes[i + 1]`, and
+ * computeNodeOutcomeTallies attributes `outcomes[k]` to `steps[k]`. So they must
+ * drop exactly the same rows. Building them separately made that a hand-kept
+ * invariant: two functions each took a `selfLoops` flag that callers had to pass
+ * identically, and any drift silently mis-attributed every outcome after the
+ * first dropped row — wrong edge colors, wrong tooltip percentages, wrong node
+ * outcome bars, with nothing to show the reader anything was off.
+ *
+ * Here there is one flag, one skip decision, and both arrays are appended inside
+ * the same branch, so an inconsistent pair cannot be constructed. Returning both
+ * also means a caller cannot forget one.
+ *
+ * Excludes autofilled rows (already filtered out by loadAndSortData).
+ *
+ * Self-loop collapsing keeps the FIRST row of a run of repeats — its step and its
+ * outcome — matching the "first attempt" reading of unique-student mode.
+ *
+ * The top level is keyed by student so every population count downstream
+ * (totalStudents, the "N students" captions, per-edge unique-student counts)
+ * keeps counting DISTINCT STUDENTS; only path identity is session-scoped, via
+ * pathKey().
  *
  * @param sortedData - The sorted CSV rows.
- * @param selfLoops - Must match the value passed to createStepSequences.
- * @returns studentId -> pathKey -> sequence of outcomes, keyed exactly like
- *   createStepSequences so the two line up index for index.
+ * @param selfLoops - Include consecutive repeats of the same step.
+ * @returns Both sequence maps, keyed identically.
  */
-export const createOutcomeSequences = (
-    sortedData: CSVRow[],
-    selfLoops: boolean
-): { [key: string]: { [key: string]: string[] } } => {
-    // Last step pushed per (student, path) — mirrors the array-tail check
-    // createStepSequences does, so the two stay index-for-index aligned.
-    const lastPushedStep = new Map<string, string>();
+export const createSequences = (sortedData: CSVRow[], selfLoops: boolean): PathSequences => {
+    const stepSequences: PathSequences['stepSequences'] = {};
+    const outcomeSequences: PathSequences['outcomeSequences'] = {};
 
-    return sortedData.reduce((acc, row) => {
-        // Note: Autofilled rows are already filtered out in loadAndSortData
+    for (const row of sortedData) {
         const studentId = row['Anon Student Id'];
-        // Same key function as createStepSequences: both objects must be keyed
-        // identically or a path's steps and outcomes end up in different buckets.
-        const path = pathKey(row['Problem Name'], row['Session Id']);
+        const key = pathKey(row['Problem Name'], row['Session Id']);
 
-        if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][path]) acc[studentId][path] = [];
+        if (!stepSequences[studentId]) stepSequences[studentId] = {};
+        if (!outcomeSequences[studentId]) outcomeSequences[studentId] = {};
+        if (!stepSequences[studentId][key]) stepSequences[studentId][key] = [];
+        if (!outcomeSequences[studentId][key]) outcomeSequences[studentId][key] = [];
 
+        const steps = stepSequences[studentId][key];
         const stepName = row['Step Name'];
-        // NUL separator: cannot occur in an id or a path key, so two distinct
-        // pairs can never collide into the same tracking key.
-        const key = `${studentId}\u0000${path}`;
+        const isRepeat = steps.length > 0 && steps[steps.length - 1] === stepName;
 
-        if (selfLoops || !lastPushedStep.has(key) || lastPushedStep.get(key) !== stepName) {
-            acc[studentId][path].push(row['Outcome']);
-            lastPushedStep.set(key, stepName);
+        if (selfLoops || !isRepeat) {
+            steps.push(stepName);
+            outcomeSequences[studentId][key].push(row['Outcome']);
         }
+    }
 
-        return acc;
-    }, {} as { [key: string]: { [key: string]: string[] } });
+    return { stepSequences, outcomeSequences };
 };
 
 // ============================================================================
