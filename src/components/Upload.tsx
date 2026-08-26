@@ -1,13 +1,24 @@
 import { useContext, useState } from 'react';
+import { FolderOpen, Upload as UploadIcon } from 'lucide-react';
 import { Context } from "@/Context.tsx";
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Card, CardContent, CardDescription, CardHeader } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import DataFileSelector from './DataFileSelector';
 
 interface UploadProps {
     onDataProcessed: (csvData: string, filename?: string) => void; // Callback function to handle processed CSV data
 }
+
+const REQUIRED_FIELDS = [
+    'Time',
+    'Step Name',
+    'Outcome',
+    'CF (Workspace Progress Status)',
+    'Problem Name',
+    'Anon Student Id',
+];
 
 // Functional component for file upload
 function Upload({ onDataProcessed }: UploadProps) {
@@ -55,52 +66,70 @@ function Upload({ onDataProcessed }: UploadProps) {
     };
 
     return (
-        <div className="container mx-auto max-w-4xl p-4">
-            <div className="space-y-6">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Load Data for Analysis</h2>
-                    <p className="text-gray-600">Choose how you'd like to load your CSV data</p>
-                </div>
-
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="upload" className="flex items-center gap-2">
-                            📤 Upload File
-                        </TabsTrigger>
-                        <TabsTrigger value="select" className="flex items-center gap-2">
-                            📂 Select from Data Folder
-                        </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="select" className="mt-6">
-                        <DataFileSelector onDataProcessed={onDataProcessed} />
-                    </TabsContent>
-
-                    <TabsContent value="upload" className="mt-6">
-                        <div className="border border-gray-200 rounded-lg p-6 bg-white">
-                            <div className="space-y-4">
-                                <Label htmlFor='upload' className="text-lg font-semibold">
-                                    Upload CSV File
-                                </Label>
-                                <p className="text-sm text-gray-600">
-                                    Select a CSV or TSV file from your computer to analyze student learning paths.
-                                </p>
-                                <Input 
-                                    className='h-15 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100'
-                                    id='upload' 
-                                    type="file" 
-                                    accept=".csv, .tsv" 
-                                    onChange={ handleFileUpload}
-                                />
-                                <div className="text-xs text-gray-500">
-                                    <p>Supported formats: CSV, TSV</p>
-                                    <p>Required fields: Time, Step Name, Outcome, CF (Workspace Progress Status), Problem Name, Anon Student Id</p>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-                </Tabs>
+        <div className="mx-auto max-w-3xl space-y-5 py-6">
+            <div className="space-y-1 text-center">
+                <h2 className="text-xl font-semibold tracking-tight">Load data for analysis</h2>
+                <p className="text-sm text-muted-foreground">
+                    Upload a file, or pick one from the shared data folder.
+                </p>
             </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="upload" className="gap-2">
+                        <UploadIcon className="h-3.5 w-3.5" aria-hidden />
+                        Upload file
+                    </TabsTrigger>
+                    <TabsTrigger value="select" className="gap-2">
+                        <FolderOpen className="h-3.5 w-3.5" aria-hidden />
+                        Data folder
+                    </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="select" className="mt-4">
+                    <DataFileSelector onDataProcessed={onDataProcessed} />
+                </TabsContent>
+
+                <TabsContent value="upload" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <Label
+                                htmlFor="upload"
+                                className="text-sm font-semibold leading-none tracking-tight"
+                            >
+                                Upload a CSV or TSV file
+                            </Label>
+                            <CardDescription>
+                                Choose a file from your computer to analyse student learning paths.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <Input
+                                id="upload"
+                                type="file"
+                                accept=".csv, .tsv"
+                                onChange={handleFileUpload}
+                                aria-describedby="upload-requirements"
+                                className="cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded file:bg-secondary file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-secondary-foreground hover:file:bg-accent"
+                            />
+                            <div id="upload-requirements" className="field-hint space-y-1">
+                                <p>Accepted formats: CSV, TSV.</p>
+                                <p>
+                                    Required columns:{' '}
+                                    {REQUIRED_FIELDS.map((field, index) => (
+                                        <span key={field}>
+                                            {index > 0 && ', '}
+                                            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                                                {field}
+                                            </code>
+                                        </span>
+                                    ))}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 };

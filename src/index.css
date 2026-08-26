@@ -34,7 +34,10 @@
     --destructive-foreground: 0 0% 100%;
 
     --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 87%;
+    /* Control borders are darker than panel borders: a field's edge is the only
+       thing marking it as interactive, so it needs to be perceivable, whereas a
+       card border is decorative separation. */
+    --input: 214 27% 78%;
     /* Focus rings share the accent hue so keyboard focus reads as focus
        rather than as an arbitrary dark outline. */
     --ring: 224 76% 48%;

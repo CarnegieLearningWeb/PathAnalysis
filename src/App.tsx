@@ -401,7 +401,7 @@ function App() {
                                         <span className="field-label block">Drawing</span>
                                         <Popover>
                                             <PopoverTrigger asChild>
-                                                <Button variant="outline" size="sm" className="h-9">
+                                                <Button variant="outline" size="sm">
                                                     <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" aria-hidden />
                                                     Display options
                                                 </Button>
