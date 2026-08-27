@@ -1,7 +1,7 @@
 {
   "name": "path-analysis",
   "private": true,
-  "version": "1.0.0",
+  "version": "2026.8.27",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -66,7 +66,7 @@
     "timsort": "^0.3.0",
     "update-browserslist-db": "^1.1.3",
     "upgradeps": "^2.0.8",
-    "vercel": "^39.4.2",
+    "vercel": "^59.7.0",
     "vite-bundle-visualizer": "^1.2.1"
   },
   "devDependencies": {
