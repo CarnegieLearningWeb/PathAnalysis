@@ -1,7 +1,7 @@
 {
   "name": "path-analysis",
   "private": true,
-  "version": "2026.8.27",
+  "version": "2026.8.28",
   "type": "module",
   "scripts": {
     "dev": "vite",
