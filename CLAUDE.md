@@ -1,38 +1,28 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repo.
+Path Analysis Tool — React + TypeScript + Vite app that visualizes student learning paths as directed graphs (`graphviz-react`). User-facing details: `README.md`.
 
-## What this is
+Only non-obvious things live here. Read the code for the rest.
 
-Path Analysis Tool — a React + TypeScript + Vite app that visualizes student learning paths through educational content as directed graphs (Graphviz via `graphviz-react`). See `README.md` for feature/user-facing details.
+## Gotchas
 
-## Package manager
-
-Use **bun**, not npm. `amplify.yml` (the production deploy config) runs `bun install && bun run build`. A stray `package-lock.json` exists from someone running plain `npm install` — prefer `bun.lock` and `bun install`/`bun run <script>` for consistency with deploy.
+- **Use bun, not npm.** Deploy runs `bun install && bun run build`. `package-lock.json` is a stray from someone running `npm install` — ignore it, `bun.lock` is authoritative. (`dev:full` still shells out to `npm run` internally; harmless, but don't copy the pattern.)
+- **`bun run lint` is broken** — no eslint config file exists at the flat-config path ESLint 8 wants. Pre-existing. Don't chase it unless asked.
+- **No test runner.** No vitest/jest. Verify with `bun run build` (tsc + vite build).
+- **Env var names disagree with `.env`.** Code reads `VITE_ACCESS_KEY_ID`/`VITE_SECRET_ACCESS_KEY`; the old `.env` template used `VITE_AWS_*`. Trust `src/lib/dataFetchingHooks.ts`, not the template. `.env` is gitignored — never commit it or paste its contents anywhere.
+- **Two deploy paths exist**: `amplify.yml` (AWS Amplify) and `.github/workflows/deployVercel.yml` (Vercel CLI). Changing build steps may need both.
 
 ## Commands
 
-- `bun run dev` — Vite dev server only.
-- `bun run dev:full` — Vite + local Express API server together (needed for the GitHub-backed data file feature).
-- `bun run api` — local API server alone (`start-api-server.js`).
-- `bun run build` — `tsc` typecheck then `vite build`.
-- `bun run lint` — eslint (currently broken: no eslint config file present at the flat-config path ESLint 8 expects; pre-existing, not caused by dependency updates).
+`bun run dev` (Vite only) · `bun run dev:full` (Vite + local Express API — needed for the GitHub-backed data file feature) · `bun run api` (API alone) · `bun run build`
 
-There is no test runner configured in this repo (no vitest/jest).
+## Where things are
 
-## Architecture
-
-- `src/components/` — UI. Key pieces: `GraphvizParent.tsx` (main graph orchestration), `GraphvizProcessing.ts` (data shaping for graph rendering), `GraphMenu.tsx` + `GraphMinVisitsSlider.tsx` (per-graph settings, one min-visits threshold per rendered graph), `FilterComponent.tsx` (multi-checkbox status filter), `SequenceSelector.tsx`/`SequenceFilterCheckbox.tsx` (Selected Sequence graph), `Upload.tsx`/`DropZone.tsx` (CSV/TSV upload). `src/components/ui/` is the shadcn/Radix primitive layer — prefer composing from there over adding new UI deps.
-- `src/lib/` — `dataFetchingHooks.ts` (React Query + AWS-backed data fetching), `dataProcessingUtils.ts`, `GradPromUtils.ts`, `fileWorker.ts` (web worker for CSV parsing off the main thread), `types.ts`, `routes.tsx`.
-- `api/` — Vercel serverless functions that proxy to a GitHub repo (default `CarnegieLearningWeb/PathAnalysis`) to list/fetch/upload data files. `server.ts` (root) + `start-api-server.js` run the same thing as a local Express server for dev.
-
-## Environment variables
-
-See README's Environment Variables section. Notably: code reads `VITE_ACCESS_KEY_ID`/`VITE_SECRET_ACCESS_KEY`, while the local `.env` template historically used `VITE_AWS_ACCESS_KEY_ID`/`VITE_AWS_SECRET_ACCESS_KEY` — check actual var names in `src/lib/dataFetchingHooks.ts` if data fetching auth isn't working locally, don't assume the `.env` file's naming is current.
-
-`.env` is gitignored — never commit it, and don't paste its contents into commits, PRs, or issues.
+- `src/components/GraphvizParent.tsx` — graph orchestration; `GraphvizProcessing.ts` — data → dot shaping. Start here for anything graph-related.
+- `src/lib/` — `dataFetchingHooks.ts` (React Query + AWS), `dataProcessingUtils.ts`, `GradPromUtils.ts`, `fileWorker.ts` (CSV parsing in a worker), `types.ts`, `routes.tsx`.
+- `api/` — Vercel serverless functions proxying to a GitHub repo (default `CarnegieLearningWeb/PathAnalysis`) for data files. `server.ts` + `start-api-server.js` run the same handlers as an Express server locally.
 
 ## Conventions
 
-- Follow existing patterns in `GraphvizParent.tsx`/`GraphvizProcessing.ts` for graph state — each rendered graph carries its own settings (min-visits threshold, color mode) rather than a single global setting.
-- Don't add new dependencies for something `radix-ui`/`components/ui` or an existing lib already covers.
+- Graph settings are **per-graph**, not global — each rendered graph owns its min-visits threshold and color mode. Follow that when adding settings.
+- `src/components/ui/` is the shadcn/Radix layer. Compose from it; don't add UI deps for something it or an installed lib already covers.
