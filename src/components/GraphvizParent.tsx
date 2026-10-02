@@ -217,6 +217,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     // handlers read it, at click time, so writing it must not re-render.
     const exportRegistry = useRef<{ [graphKey: string]: ExportGraphEntry }>({});
 
+    // Per-graph counting results, keyed by the same graph key renderGraph uses.
+    // The click tooltips read this so a click on a filtered panel reports that
+    // panel's population: they used to destructure mainGraphData unconditionally,
+    // so clicking an edge on "Graduated" returned dataset-wide numbers and could
+    // show a "Promoted: 40" row on a graph that by construction contains no
+    // promoted students. Hover tooltips never had this problem — they are baked
+    // into each graph's own DOT by GraphvizProcessing.
+    const tooltipDataRegistry = useRef<{ [graphKey: string]: any }>({});
+
     // Export panel controls
     const [exportOpen, setExportOpen] = useState<boolean>(false);
     const [exportGraphKeys, setExportGraphKeys] = useState<string[] | null>(null);
@@ -499,6 +508,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 highlightSelectedSequence: colorNodesBySequence,
             });
 
+            tooltipDataRegistry.current['all_students'] = mainGraphData;
             exportRegistry.current['all_students'] = {
                 title: 'All Students, All Paths',
                 baseFilename: exportStem('all_students', mainMinVisits),
@@ -522,6 +532,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             if (sequenceToUseForCounting.length < 2) {
                 setTopDotString(null);
                 delete exportRegistry.current['selected_sequence'];
+                delete tooltipDataRegistry.current['selected_sequence'];
                 return;
             }
 
@@ -575,6 +586,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     sequenceResults.edgeErrorVisitCounts,
                 );
 
+            tooltipDataRegistry.current['selected_sequence'] = {
+                ...sequenceResults,
+                // The sequence graph counts edges itself but has no sequences of
+                // its own; progress stats still need the population to look up.
+                stepSequences: mainGraphData.stepSequences,
+                sortedData: mainGraphData.sortedData,
+            };
             exportRegistry.current['selected_sequence'] = {
                 title: 'Selected Sequence',
                 baseFilename: exportStem('selected_sequence', seqMinVisits),
@@ -692,6 +710,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         filteredGraphData.edgeErrorVisitCounts,
                     );
 
+                // Normalized to mainGraphData's field names so the tooltip code
+                // reads one shape regardless of which panel was clicked.
+                tooltipDataRegistry.current[graphKey] = {
+                    ...filteredGraphData,
+                    stepSequences: filteredGraphData.filteredStepSequences,
+                    sortedData: filteredGraphData.filteredData,
+                };
                 exportRegistry.current[graphKey] = {
                     title: `Filtered Graph: ${titleCase(filter)}`,
                     baseFilename: exportStem(graphKey, filteredMinVisits),
@@ -1030,10 +1055,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
 
     // Generate node tooltip content
-    const generateNodeTooltip = (nodeName: string, graphType: string): string => {
-        if (!mainGraphData) return `Node: ${nodeName}`;
-        
-        const { stepSequences, outcomeSequences, nodeOutcomeCounts, nodeFirstAttemptOutcomes } = mainGraphData;
+    const generateNodeTooltip = (nodeName: string, graphKey: string): string => {
+        // Scoped to the clicked graph, like generateEdgeTooltip. Note this takes
+        // the graph KEY ('selected_sequence'), not the display label
+        // ('Selected Sequence') the call site used to pass.
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return `Node: ${nodeName}`;
+
+        const { stepSequences, outcomeSequences, nodeOutcomeCounts, nodeFirstAttemptOutcomes } = graphData;
 
         // Calculate statistics based on mode
         let totalVisitors = 0;
@@ -1041,7 +1070,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const visitCounts: { [studentId: string]: number } = {};
 
         // Check if this is the selected sequence graph and we need to filter
-        const isSelectedSequenceGraph = graphType === 'Selected Sequence';
+        const isSelectedSequenceGraph = graphKey === 'selected_sequence';
         const sequenceToFilter = isSelectedSequenceGraph ? selectedSequence : null;
 
         // On the Selected Sequence graph, every stat (visits, outcomes, progress)
@@ -1185,11 +1214,21 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
     
 
+    /**
+     * The counting results for the graph that was clicked. Falls back to the
+     * dataset-wide results only if a panel somehow never registered, which keeps
+     * a tooltip rendering rather than blanking - but the fallback is what the old
+     * behaviour did unconditionally, so prefer the registry.
+     */
+    const graphDataFor = (graphKey: string): any =>
+        tooltipDataRegistry.current[graphKey] ?? mainGraphData;
+
     // Helper function to calculate exact progress status statistics for an edge
-    const calculateEdgeProgressStats = (edgeName: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
-        if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
-        
-        const { stepSequences, sortedData } = mainGraphData;
+    const calculateEdgeProgressStats = (edgeName: string, graphKey: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
+
+        const { stepSequences, sortedData } = graphData;
         const [fromStep, toStep] = parseEdgeName(edgeName);
         const studentsOnEdge = new Set<string>();
         
@@ -1271,11 +1310,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
 
     // Generate edge tooltip content
-    const generateEdgeTooltip = (edgeName: string, _graphType: string): string => {
-        if (!mainGraphData) return `Edge: ${edgeName}`;
-        
-        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges, totalVisits } = mainGraphData;
-        const outcomes = edgeOutcomeCounts[edgeName] || {};
+    const generateEdgeTooltip = (edgeName: string, graphKey: string): string => {
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return `Edge: ${edgeName}`;
+
+        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges, totalVisits } = graphData;
+        // Annotated because graphData is intentionally loose (the registry holds
+        // results from two different counters); without this the outcome tallies
+        // infer as unknown and every arithmetic use of them fails to typecheck.
+        const outcomes: { [outcome: string]: number } = edgeOutcomeCounts[edgeName] || {};
         const [currentStep, _nextStep] = parseEdgeName(edgeName);
         
         // Use different counts based on mode
@@ -1298,7 +1341,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const notTakingPath = Math.max(0, totalAtStart - pathCount); // Ensure non-negative
         
         // Calculate progress status statistics
-        const progressStats = calculateEdgeProgressStats(edgeName);
+        const progressStats = calculateEdgeProgressStats(edgeName, graphKey);
         
         // All outcomes breakdown
         const allOutcomes = Object.entries(outcomes)
@@ -1322,7 +1365,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .join('\n      ');
         
         // Calculate visual thickness (normalized) based on mode
-        const countsForThickness = uniqueStudentMode ? edgeCounts : totalVisits;
+        const countsForThickness: { [edge: string]: number } = uniqueStudentMode ? edgeCounts : totalVisits;
         const maxCount = Math.max(...Object.values(countsForThickness));
         const thickness = maxCount > 0 ? ((pathCount / maxCount) * 10).toFixed(1) : '1.0';
         
@@ -1750,7 +1793,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                         filename === 'all_students' ? 'All Students' :
                                                         filename.startsWith('filtered_graph_') ? `Filtered Graph: ${titleCase(filename.replace('filtered_graph_', ''))}` : 'Filtered Graph';
                                         
-                                        const tooltipContent = generateNodeTooltip(nodeName, graphType);
+                                        const tooltipContent = generateNodeTooltip(nodeName, filename);
                                         
                                         const historyItem: HistoryItem = {
                                             id: `node-${Date.now()}-${Math.random()}`,
@@ -1851,7 +1894,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         
                                         // Generate detailed tooltip content asynchronously
                                         setTimeout(() => {
-                                            const tooltipContent = generateEdgeTooltip(edgeName, graphType);
+                                            const tooltipContent = generateEdgeTooltip(edgeName, filename);
                                             setHistoryItems(prev => 
                                                 prev.map(item => 
                                                     item.id === historyItem.id 
