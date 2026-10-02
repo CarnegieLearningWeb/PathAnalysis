@@ -491,6 +491,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     opts.nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
                     showEdgeLabels,
+                    mainGraphData.edgeErrorVisitCounts,
                 );
 
             const dotString = buildMainDot({
@@ -571,6 +572,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     opts.nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
                     showEdgeLabels,
+                    sequenceResults.edgeErrorVisitCounts,
                 );
 
             exportRegistry.current['selected_sequence'] = {
@@ -687,6 +689,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         opts.nodeOutcomeMode,
                         filteredGraphData.nodeOutcomeCounts,
                         showEdgeLabels,
+                        filteredGraphData.edgeErrorVisitCounts,
                     );
 
                 exportRegistry.current[graphKey] = {

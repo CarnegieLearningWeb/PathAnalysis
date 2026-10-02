@@ -59,6 +59,9 @@ type EdgeTrackingMaps = {
     // Unique students who hit an ERROR on each edge — drives the dashed red
     // error overlay rendered in Error Mode.
     edgeErrorUsers: Map<string, Set<string>>;
+    // Error TRAVERSALS, parallel to edgeErrorUsers' error STUDENTS. Error Mode has
+    // to compare like with like against whichever count the current mode shows.
+    edgeErrorVisits: Map<string, number>;
 };
 
 // ============================================================================
@@ -523,7 +526,8 @@ const initializeTrackingMaps = (): EdgeTrackingMaps => ({
     studentEdgeCounts: new Map<string, Set<string>>(),
     repeatVisits: new Map<string, Map<string, number>>(),
     firstAttemptOutcomes: new Map<string, Map<string, number>>(),
-    edgeErrorUsers: new Map<string, Set<string>>()
+    edgeErrorUsers: new Map<string, Set<string>>(),
+    edgeErrorVisits: new Map<string, number>()
 });
 
 /**
@@ -547,6 +551,7 @@ const initializeEdgeTracking = (
         maps.repeatVisits.set(edgeKey, new Map());
         maps.edgeOutcomeCounts.set(edgeKey, new Map());
         maps.edgeErrorUsers.set(edgeKey, new Set());
+        maps.edgeErrorVisits.set(edgeKey, 0);
     }
 
     // Both endpoints: totalNodeEdges is "students who VISITED this node", which
@@ -615,6 +620,7 @@ const updateEdgeMetrics = (
     // outcome counts above, so the overlay stays consistent with edge color.
     if (outcome === 'ERROR') {
         maps.edgeErrorUsers.get(edgeKey)!.add(studentId);
+        maps.edgeErrorVisits.set(edgeKey, (maps.edgeErrorVisits.get(edgeKey) || 0) + 1);
     }
 
     return newMaxEdgeCount;
@@ -714,6 +720,11 @@ const convertMapsToObjects = (
         });
     });
 
+    const edgeErrorVisitCountsObj: { [key: string]: number } = {};
+    maps.edgeErrorVisits.forEach((count, edge) => {
+        edgeErrorVisitCountsObj[edge] = count;
+    });
+
     const edgeErrorStudentCountsObj: { [key: string]: number } = {};
     maps.edgeErrorUsers.forEach((students, edge) => {
         edgeErrorStudentCountsObj[edge] = students.size;
@@ -730,6 +741,7 @@ const convertMapsToObjects = (
         topSequences,
         firstAttemptOutcomes: firstAttemptOutcomesObj,
         edgeErrorStudentCounts: edgeErrorStudentCountsObj,
+        edgeErrorVisitCounts: edgeErrorVisitCountsObj,
     };
 };
 
@@ -768,6 +780,7 @@ export const countEdges = (
     topSequences: SequenceCount[];
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
     edgeErrorStudentCounts: { [key: string]: number };
+    edgeErrorVisitCounts: { [key: string]: number };
     nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } };
     nodeFirstAttemptOutcomes: { [node: string]: { [outcome: string]: number } };
 } => {
@@ -896,6 +909,7 @@ export const countEdgesForSelectedSequence = (
     repeatVisits: { [key: string]: { [studentId: string]: number } };
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
     edgeErrorStudentCounts: { [key: string]: number };
+    edgeErrorVisitCounts: { [key: string]: number };
 } => {
     const trackingMaps = initializeTrackingMaps();
     let maxEdgeCount = 0;
@@ -2331,7 +2345,8 @@ export function generateDotString(
     sequenceErrorCounts: { [key: string]: number } | null = null,
     nodeOutcomeMode: boolean = false,
     nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
-    showEdgeLabels: boolean = true
+    showEdgeLabels: boolean = true,
+    edgeErrorVisitCounts: { [key: string]: number } = {}
 ): string {
     // Only the Selected Sequence graph actually needs a sequence — it IS the
     // sequence. The full graphs use it for optional path emphasis alone, so they
@@ -2346,6 +2361,12 @@ export function generateDotString(
         return 'digraph G {\n"Error" [label="No sequence selected."];\n}';
     }
 
+    // Error Mode has to compare like with like. edgeErrorStudentCounts is always
+    // unique students, but every count the renderers gate, size and label on is
+    // totalVisits in visits mode - so `err >= edgeCount`, `edgeCount - err` and
+    // the overlay's error rate were all students-over-visits hybrids. Choose the
+    // matching unit once, here, and the whole downstream path stays coherent.
+    const errorsToUse = uniqueStudentMode ? edgeErrorStudentCounts : edgeErrorVisitCounts;
     const visitsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
     const outcomesToUse = uniqueStudentMode ? firstAttemptOutcomes : edgeOutcomeCounts;
 
@@ -2389,7 +2410,7 @@ export function generateDotString(
             minVisits,
             errorMode,
             maxEdgeCount,
-            edgeErrorStudentCounts,
+            errorsToUse,
             uniqueStudentMode,
             colorNodesBySequence,
             sequenceFunnelCounts,
@@ -2413,7 +2434,7 @@ export function generateDotString(
             minVisits,
             errorMode,
             maxEdgeCount,
-            edgeErrorStudentCounts,
+            errorsToUse,
             uniqueStudentMode,
             colorNodesBySequence,
             nodeOutcomeMode,
