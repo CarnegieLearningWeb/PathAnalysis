@@ -124,11 +124,23 @@ Create a `.env` in the project root. None of it is needed to upload your own fil
 
 ## Deploying
 
-Pushing to `main` triggers `.github/workflows/deployVercel.yml`, which runs `vercel --prod`. `vercel.json` routes `/api/*` to the serverless functions in `api/`, so this path serves the GitHub-backed data-file feature.
+Pushing to `main` triggers `.github/workflows/deployVercel.yml`, which uses the official Vercel CLI: `vercel pull` to fetch the project's production environment, `vercel build --prod`, then `vercel deploy --prebuilt --prod`. `vercel.json` routes `/api/*` to the serverless functions in `api/`.
 
-An `amplify.yml` for AWS Amplify also exists (`bun install && bun run build`, serving `dist/`). Which branch it watches is configured in the Amplify console, not here. Note it has no `api/` handling, so the data-file feature would not work under it.
+Two sets of configuration have to be right, in two different places:
 
-**If you are setting this up fresh, confirm which of the two is actually live before relying on either**, and make sure the build environment has the `VITE_*` variables.
+**GitHub repository secrets** — the workflow reads these. `.vercel/` is gitignored, so CI has no project link without the org and project ids.
+
+| Secret | Why |
+|---|---|
+| `VERCEL_TOKEN` | authenticates the CLI |
+| `VERCEL_ORG_ID` | which Vercel team |
+| `VERCEL_PROJECT_ID` | which project |
+
+Check with `gh secret list --repo CarnegieLearningWeb/PathAnalysis` (needs admin), or Settings → Secrets and variables → Actions.
+
+**Vercel project environment variables** — `vercel pull` fetches these at build time, and `VITE_*` values are inlined into the bundle then, so a missing one fails silently in the browser rather than at build. Check with `vercel env ls production` after `vercel login`, or the Vercel dashboard → Settings → Environment Variables. You want `VITE_ACCESS_KEY_ID` and `VITE_SECRET_ACCESS_KEY`, plus `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO` if the data-file browser is in use.
+
+An `amplify.yml` for AWS Amplify also exists (`bun install && bun run build`, serving `dist/`). Which branch it watches lives in the Amplify console, not here, and it has no `api/` handling — so the data-file feature would not work under it. Confirm which of the two is actually live before relying on either.
 
 ---
 
