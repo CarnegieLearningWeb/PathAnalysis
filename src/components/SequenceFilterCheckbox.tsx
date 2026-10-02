@@ -1,29 +1,29 @@
 import React from 'react';
+import { CheckboxRow } from "@/components/ui/setting";
 
 interface SequenceFilterCheckboxProps {
     showOnlySequenceStudents: boolean;
     onChange: (value: boolean) => void;
 }
 
+/**
+ * Standalone version of the "only students on this path" toggle also offered
+ * inside GraphMenu. Shares CheckboxRow so both placements have the same label
+ * association, hit area and type scale.
+ */
 const SequenceFilterCheckbox: React.FC<SequenceFilterCheckboxProps> = ({
     showOnlySequenceStudents,
     onChange
 }) => {
     return (
-        <div className="w-full mt-2 mb-2">
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-3">
-                <label className="flex items-center cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={showOnlySequenceStudents}
-                        onChange={(e) => onChange(e.target.checked)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-xs font-medium text-gray-700">
-                        Include only students on this path in edge counts
-                    </span>
-                </label>
-            </div>
+        <div className="my-2 w-full rounded-md border bg-card p-3 shadow-sm">
+            <CheckboxRow
+                id="sequence-filter-only-path-students"
+                label="Only students on this path"
+                hint="Restrict edge counts to students who followed the selected sequence."
+                checked={showOnlySequenceStudents}
+                onCheckedChange={onChange}
+            />
         </div>
     );
 };

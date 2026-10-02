@@ -6,15 +6,15 @@ import {
     normalizeThicknesses,
     countEdges,
     countEdgesForSelectedSequence,
-    createStepSequences,
-    createOutcomeSequences,
+    createSequences,
     loadAndSortData,
     calculateMaxMinEdgeCount,
     calculateConnectivityCap,
     analyzeEquationAnswerTransitions,
     formatEquationAnswerStats,
     computeSequenceFunnelCounts,
-    computeSequenceErrorCounts
+    computeSequenceErrorCounts,
+    collapseConsecutive
 } from './GraphvizProcessing';
 import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
@@ -102,19 +102,29 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
 };
 
 /**
- * Distinct students whose path through some problem is exactly `sequence` — the
- * "took it end to end" count. Students, not paths, because it is always stated
- * against a student population (this graph's students, or the ones its drawn
- * edges represent). Returns null when there is no sequence to match.
+ * Distinct students who walked exactly `sequence` on at least one of their paths
+ * (one attempt at one problem in one session) — the "took it end to end" count.
+ * Students, not paths, because it is always stated against a student population
+ * (this graph's students, or the ones its drawn edges represent). One student is
+ * counted once however many attempts matched. Returns null when there is no
+ * sequence to match.
+ *
+ * Both sides are collapsed before comparing. Without that, turning self-loops on
+ * makes every student's array carry consecutive repeats while `sequence` stays
+ * in its collapsed form, so equality never holds and the caption reads "0
+ * students followed this sequence" next to a fully populated graph. Collapsing
+ * also makes the count stable across the toggle, which it should be: repeating a
+ * step in place does not change which path you took.
  */
 const countStudentsOnExactSequence = (
-    stepSequences: { [student: string]: { [problem: string]: string[] } },
+    stepSequences: { [student: string]: { [pathKey: string]: string[] } },
     sequence: string[] | null | undefined
 ): number | null => {
     if (!sequence || sequence.length === 0) return null;
+    const target = collapseConsecutive(sequence);
     let count = 0;
     Object.values(stepSequences).forEach((byProblem) => {
-        if (Object.values(byProblem).some((steps) => arraysEqual(steps, sequence))) count++;
+        if (Object.values(byProblem).some((steps) => arraysEqual(collapseConsecutive(steps), target))) count++;
     });
     return count;
 };
@@ -207,6 +217,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     // handlers read it, at click time, so writing it must not re-render.
     const exportRegistry = useRef<{ [graphKey: string]: ExportGraphEntry }>({});
 
+    // Per-graph counting results, keyed by the same graph key renderGraph uses.
+    // The click tooltips read this so a click on a filtered panel reports that
+    // panel's population: they used to destructure mainGraphData unconditionally,
+    // so clicking an edge on "Graduated" returned dataset-wide numbers and could
+    // show a "Promoted: 40" row on a graph that by construction contains no
+    // promoted students. Hover tooltips never had this problem — they are baked
+    // into each graph's own DOT by GraphvizProcessing.
+    const tooltipDataRegistry = useRef<{ [graphKey: string]: any }>({});
+
     // Export panel controls
     const [exportOpen, setExportOpen] = useState<boolean>(false);
     const [exportGraphKeys, setExportGraphKeys] = useState<string[] | null>(null);
@@ -243,8 +262,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         // Self-loops should only be included when selfLoops is enabled AND not in unique student mode
         // In unique student mode (first attempts), self-loops are logically impossible
         const includeLoops = selfLoops && !uniqueStudentMode;
-        const stepSequences = createStepSequences(sortedData, includeLoops);
-        const outcomeSequences = createOutcomeSequences(sortedData);
+        // Both sequences come from one call: they are read positionally, so
+        // building them separately made "same selfLoops flag" a hand-kept
+        // invariant whose failure silently mis-attributed every later outcome.
+        const { stepSequences, outcomeSequences } = createSequences(sortedData, includeLoops);
         
         // Add equation answer analysis
         const equationStats = analyzeEquationAnswerTransitions(stepSequences, outcomeSequences);
@@ -261,17 +282,19 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     }, [csvData, selfLoops, uniqueStudentMode]); // Depends on both selfLoops and uniqueStudentMode
 
     // Dataset-level summary metrics for the whole unfiltered population.
-    // Total Students counts distinct student IDs; Avg Path Length is the mean
-    // length over every per-student-per-problem step sequence that feeds the
-    // graph. Mirrors the Streamlit tool's create_summary_metrics, minus its
-    // "Unique Paths" metric (dropped as low-signal — see decision notes).
+    // Total Students counts distinct student IDs. Avg Path Length is the mean
+    // length over every path that feeds the graph — one path being one student's
+    // attempt at one problem in one session, so a student who attempts a problem
+    // three times contributes three paths rather than one 3x-long one. Mirrors
+    // the Streamlit tool's create_summary_metrics, minus its "Unique Paths"
+    // metric (dropped as low-signal — see decision notes).
     const summaryMetrics = useMemo(() => {
         if (!mainGraphData) return null;
         const { stepSequences } = mainGraphData;
         const totalStudents = Object.keys(stepSequences).length;
         const pathLengths: number[] = [];
-        Object.values(stepSequences).forEach((byProblem: { [problem: string]: string[] }) => {
-            Object.values(byProblem).forEach((seq) => pathLengths.push(seq.length));
+        Object.values(stepSequences).forEach((byPath: { [pathKey: string]: string[] }) => {
+            Object.values(byPath).forEach((seq) => pathLengths.push(seq.length));
         });
         const avgPathLength = pathLengths.length
             ? pathLengths.reduce((sum, n) => sum + n, 0) / pathLengths.length
@@ -279,9 +302,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         return { totalStudents, avgPathLength };
     }, [mainGraphData]);
 
-    // Which workspace(s) and problem(s) the uploaded dataset covers. Only the
-    // export uses this — to headline an image with the problem it belongs to,
-    // and to say plainly when a file spans more than one.
+    // Which workspace(s) and problem(s) the uploaded dataset covers. Used by the
+    // export — to headline an image with the problem it belongs to, and to say
+    // plainly when a file spans more than one — and by the All Students caption,
+    // which must not claim a multi-problem file is one problem.
     const datasetIdentity = useMemo(() => {
         const workspaceIds = new Set<string>();
         const problemNames = new Set<string>();
@@ -295,6 +319,24 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const [heading, subheading] = datasetDisplayTitle(problemName, ids, problems);
         return { workspaceIds: ids, problemNames: problems, heading, subheading };
     }, [mainGraphData, problemName]);
+
+    /**
+     * Caption under the All Students graph. `summaryMetrics.totalStudents` is
+     * every distinct student in the FILE, so calling it "students attempted this
+     * problem" was only true of a single-problem upload — and multi-problem
+     * uploads are explicitly supported (graphExport's datasetDisplayTitle renders
+     * "N problems"). The wording now follows what the file actually holds, and
+     * says nothing about problems when there is no Problem Name to count.
+     */
+    const allStudentsCaption = useMemo(() => {
+        const students = (summaryMetrics?.totalStudents ?? 0).toLocaleString();
+        const problemCount = datasetIdentity.problemNames.length;
+        if (problemCount === 1) return `${students} students attempted this problem`;
+        if (problemCount > 1) {
+            return `${students} students across ${problemCount.toLocaleString()} problems`;
+        }
+        return `${students} students in this dataset`;
+    }, [summaryMetrics, datasetIdentity]);
 
     // Distinct students who followed the selected sequence exactly — the
     // "N students followed this sequence" caption, and the same number the
@@ -312,8 +354,11 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
         filters.forEach(filter => {
             const filteredData = mainGraphData.sortedData.filter(row => row['CF (Workspace Progress Status)'] === filter);
-            const filteredStepSequences = createStepSequences(filteredData, selfLoops && !uniqueStudentMode);
-            const filteredOutcomeSequences = createOutcomeSequences(filteredData);
+            const filteredIncludeLoops = selfLoops && !uniqueStudentMode;
+            const {
+                stepSequences: filteredStepSequences,
+                outcomeSequences: filteredOutcomeSequences
+            } = createSequences(filteredData, filteredIncludeLoops);
 
             const results = countEdges(filteredStepSequences, filteredOutcomeSequences);
 
@@ -404,7 +449,10 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
             if (JSON.stringify(top5Sequences) !== JSON.stringify(topSequences) || top5Sequences === null) {
                 setTop5Sequences(topSequences);
-                if (topSequences && selectedSequence === undefined) {
+                // getTopSequences only returns paths of 5+ steps, so an empty
+                // list is a real outcome (short attempts) — not a "no data" one.
+                // Indexing [0] unguarded threw on such datasets.
+                if (topSequences.length > 0 && selectedSequence === undefined) {
                     setSelectedSequence(topSequences[0].sequence);
                 }
             }
@@ -452,6 +500,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     opts.nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
                     showEdgeLabels,
+                    mainGraphData.edgeErrorVisitCounts,
                 );
 
             const dotString = buildMainDot({
@@ -459,6 +508,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                 highlightSelectedSequence: colorNodesBySequence,
             });
 
+            tooltipDataRegistry.current['all_students'] = mainGraphData;
             exportRegistry.current['all_students'] = {
                 title: 'All Students, All Paths',
                 baseFilename: exportStem('all_students', mainMinVisits),
@@ -482,6 +532,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             if (sequenceToUseForCounting.length < 2) {
                 setTopDotString(null);
                 delete exportRegistry.current['selected_sequence'];
+                delete tooltipDataRegistry.current['selected_sequence'];
                 return;
             }
 
@@ -532,8 +583,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     opts.nodeOutcomeMode,
                     mainGraphData.nodeOutcomeCounts,
                     showEdgeLabels,
+                    sequenceResults.edgeErrorVisitCounts,
                 );
 
+            tooltipDataRegistry.current['selected_sequence'] = {
+                ...sequenceResults,
+                // The sequence graph counts edges itself but has no sequences of
+                // its own; progress stats still need the population to look up.
+                stepSequences: mainGraphData.stepSequences,
+                sortedData: mainGraphData.sortedData,
+            };
             exportRegistry.current['selected_sequence'] = {
                 title: 'Selected Sequence',
                 baseFilename: exportStem('selected_sequence', seqMinVisits),
@@ -648,8 +707,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         opts.nodeOutcomeMode,
                         filteredGraphData.nodeOutcomeCounts,
                         showEdgeLabels,
+                        filteredGraphData.edgeErrorVisitCounts,
                     );
 
+                // Normalized to mainGraphData's field names so the tooltip code
+                // reads one shape regardless of which panel was clicked.
+                tooltipDataRegistry.current[graphKey] = {
+                    ...filteredGraphData,
+                    stepSequences: filteredGraphData.filteredStepSequences,
+                    sortedData: filteredGraphData.filteredData,
+                };
                 exportRegistry.current[graphKey] = {
                     title: `Filtered Graph: ${titleCase(filter)}`,
                     baseFilename: exportStem(graphKey, filteredMinVisits),
@@ -930,11 +997,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const studentsAtNode = new Set<string>();
 
         // Find all students who visited this node
-        // stepSequences has structure: { [studentId]: { [problemName]: string[] } }
+        // stepSequences has structure: { [studentId]: { [pathKey]: string[] } },
+        // one entry per attempt (problem + session) — see pathKey() in GraphvizProcessing.
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
                 if (restrictToStudents && !restrictToStudents.has(studentId)) return;
-                // studentProblems is { [problemName]: string[] }
+                // studentProblems is { [pathKey]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
                     Object.values(studentProblems).forEach((problemSequence: string[]) => {
                         if (Array.isArray(problemSequence) && problemSequence.includes(nodeName)) {
@@ -987,10 +1055,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
 
     // Generate node tooltip content
-    const generateNodeTooltip = (nodeName: string, graphType: string): string => {
-        if (!mainGraphData) return `Node: ${nodeName}`;
-        
-        const { stepSequences, outcomeSequences, nodeOutcomeCounts, nodeFirstAttemptOutcomes } = mainGraphData;
+    const generateNodeTooltip = (nodeName: string, graphKey: string): string => {
+        // Scoped to the clicked graph, like generateEdgeTooltip. Note this takes
+        // the graph KEY ('selected_sequence'), not the display label
+        // ('Selected Sequence') the call site used to pass.
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return `Node: ${nodeName}`;
+
+        const { stepSequences, outcomeSequences, nodeOutcomeCounts, nodeFirstAttemptOutcomes } = graphData;
 
         // Calculate statistics based on mode
         let totalVisitors = 0;
@@ -998,25 +1070,29 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const visitCounts: { [studentId: string]: number } = {};
 
         // Check if this is the selected sequence graph and we need to filter
-        const isSelectedSequenceGraph = graphType === 'Selected Sequence';
+        const isSelectedSequenceGraph = graphKey === 'selected_sequence';
         const sequenceToFilter = isSelectedSequenceGraph ? selectedSequence : null;
 
         // On the Selected Sequence graph, every stat (visits, outcomes, progress)
         // is scoped to the students who followed the EXACT sequence, so the
         // populations line up. Elsewhere sequenceStudents is null (all students).
-        const sequenceStudents: Set<string> | null = (isSelectedSequenceGraph && sequenceToFilter)
+        // Collapsed on both sides for the same reason as countStudentsOnExactSequence:
+        // with self-loops on, a raw comparison matches nobody and silently zeroes
+        // every stat on this graph.
+        const collapsedFilter = sequenceToFilter ? collapseConsecutive(sequenceToFilter) : null;
+        const sequenceStudents: Set<string> | null = (isSelectedSequenceGraph && collapsedFilter)
             ? new Set<string>(
                 Object.entries(stepSequences)
                     .filter(([, problems]) =>
                         problems && typeof problems === 'object' &&
                         Object.values(problems).some((seq: string[]) =>
-                            Array.isArray(seq) && arraysEqual(seq, sequenceToFilter)))
+                            Array.isArray(seq) && arraysEqual(collapseConsecutive(seq), collapsedFilter)))
                     .map(([studentId]) => studentId))
             : null;
 
         if (stepSequences && Object.keys(stepSequences).length > 0) {
             Object.entries(stepSequences).forEach(([studentId, studentProblems]) => {
-                // studentProblems is { [problemName]: string[] }
+                // studentProblems is { [pathKey]: string[] }
                 if (studentProblems && typeof studentProblems === 'object') {
 
                     // Skip students who didn't follow the exact selected sequence.
@@ -1138,11 +1214,21 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
     
 
+    /**
+     * The counting results for the graph that was clicked. Falls back to the
+     * dataset-wide results only if a panel somehow never registered, which keeps
+     * a tooltip rendering rather than blanking - but the fallback is what the old
+     * behaviour did unconditionally, so prefer the registry.
+     */
+    const graphDataFor = (graphKey: string): any =>
+        tooltipDataRegistry.current[graphKey] ?? mainGraphData;
+
     // Helper function to calculate exact progress status statistics for an edge
-    const calculateEdgeProgressStats = (edgeName: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
-        if (!mainGraphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
-        
-        const { stepSequences, sortedData } = mainGraphData;
+    const calculateEdgeProgressStats = (edgeName: string, graphKey: string): { graduated: number; promoted: number; other: number; total: number; graduatedPercentage: string; promotedPercentage: string } => {
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return { graduated: 0, promoted: 0, other: 0, total: 0, graduatedPercentage: '0', promotedPercentage: '0' };
+
+        const { stepSequences, sortedData } = graphData;
         const [fromStep, toStep] = parseEdgeName(edgeName);
         const studentsOnEdge = new Set<string>();
         
@@ -1224,11 +1310,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
     };
 
     // Generate edge tooltip content
-    const generateEdgeTooltip = (edgeName: string, _graphType: string): string => {
-        if (!mainGraphData) return `Edge: ${edgeName}`;
-        
-        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges, totalVisits } = mainGraphData;
-        const outcomes = edgeOutcomeCounts[edgeName] || {};
+    const generateEdgeTooltip = (edgeName: string, graphKey: string): string => {
+        const graphData = graphDataFor(graphKey);
+        if (!graphData) return `Edge: ${edgeName}`;
+
+        const { edgeCounts, edgeOutcomeCounts, totalNodeEdges, ratioEdges, totalVisits } = graphData;
+        // Annotated because graphData is intentionally loose (the registry holds
+        // results from two different counters); without this the outcome tallies
+        // infer as unknown and every arithmetic use of them fails to typecheck.
+        const outcomes: { [outcome: string]: number } = edgeOutcomeCounts[edgeName] || {};
         const [currentStep, _nextStep] = parseEdgeName(edgeName);
         
         // Use different counts based on mode
@@ -1251,7 +1341,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
         const notTakingPath = Math.max(0, totalAtStart - pathCount); // Ensure non-negative
         
         // Calculate progress status statistics
-        const progressStats = calculateEdgeProgressStats(edgeName);
+        const progressStats = calculateEdgeProgressStats(edgeName, graphKey);
         
         // All outcomes breakdown
         const allOutcomes = Object.entries(outcomes)
@@ -1275,21 +1365,36 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .join('\n      ');
         
         // Calculate visual thickness (normalized) based on mode
-        const countsForThickness = uniqueStudentMode ? edgeCounts : totalVisits;
+        const countsForThickness: { [edge: string]: number } = uniqueStudentMode ? edgeCounts : totalVisits;
         const maxCount = Math.max(...Object.values(countsForThickness));
         const thickness = maxCount > 0 ? ((pathCount / maxCount) * 10).toFixed(1) : '1.0';
         
+        // Kept deliberately identical in wording to GraphvizProcessing's
+        // createEdgeTooltip: this is the CLICK tooltip and that one is the HOVER
+        // tooltip (baked into the DOT), and the same edge showing two different
+        // phrasings of the same quantity is its own bug. See that function for
+        // why these are shares rather than probabilities.
         const modeLabel = uniqueStudentMode ? 'Students' : 'Visits';
         const pathLabel = uniqueStudentMode ? 'Students taking this path' : 'Total visits on this path';
-        const startLabel = uniqueStudentMode ? `Students at ${currentStep}` : `Total visits to ${currentStep}`;
-        const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
-        
-        return `${modeLabel} Flow:\n`
+        // totalAtStart is a unique-student count in both modes, so never call it visits.
+        const startLabel = `Students at ${currentStep}`;
+
+        let flow = `${modeLabel} Flow:\n`
             + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
-            + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
-            + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
-            + `    • Transition Probability: ${ratioPercentage}%\n`
-            + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`
+            + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`;
+        // Subtraction only shares a unit in unique mode; and the remainder means
+        // "never used this edge", not "used a different one instead".
+        if (uniqueStudentMode) {
+            flow += `    • Students who never took this path: ${notTakingPath.toLocaleString()}\n`;
+        }
+        flow += `    • Used by ${ratioPercentage}% of students who reached ${currentStep}\n`;
+        if (uniqueStudentMode) {
+            flow += `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} students)\n`;
+        }
+        flow += `      Shares out of one step can total over 100%: a student who\n`
+            + `      reaches it more than once is counted on each route they took.\n`;
+
+        return flow + `\n`
             + `Student Progress Status:\n`
             + `    • Graduated: ${progressStats.graduated.toLocaleString()} (${progressStats.graduatedPercentage}%)\n`
             + `    • Promoted: ${progressStats.promoted.toLocaleString()} (${progressStats.promotedPercentage}%)\n`
@@ -1688,7 +1793,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                                         filename === 'all_students' ? 'All Students' :
                                                         filename.startsWith('filtered_graph_') ? `Filtered Graph: ${titleCase(filename.replace('filtered_graph_', ''))}` : 'Filtered Graph';
                                         
-                                        const tooltipContent = generateNodeTooltip(nodeName, graphType);
+                                        const tooltipContent = generateNodeTooltip(nodeName, filename);
                                         
                                         const historyItem: HistoryItem = {
                                             id: `node-${Date.now()}-${Math.random()}`,
@@ -1789,7 +1894,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                         
                                         // Generate detailed tooltip content asynchronously
                                         setTimeout(() => {
-                                            const tooltipContent = generateEdgeTooltip(edgeName, graphType);
+                                            const tooltipContent = generateEdgeTooltip(edgeName, filename);
                                             setHistoryItems(prev => 
                                                 prev.map(item => 
                                                     item.id === historyItem.id 
@@ -1935,7 +2040,15 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             </div>
                         </div>
                     )}
-                    <div className="graphs flex justify-center w-full h-[650px] overflow-x-auto">
+                    {/* Centering via auto margins on the end children, NOT
+                        justify-center. On a scroll container, justify-center splits
+                        overflow to both sides and the leading half lands in negative
+                        scroll space: unreachable and visually clipped. With four
+                        graphs (350 + 475*3 = 1775px) that silently ate the left edge
+                        of the first panel. Auto margins collapse to 0 once free space
+                        runs out, so the row centers when it fits and scrolls from its
+                        true start when it does not. */}
+                    <div className="graphs flex w-full h-[650px] overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                         {showSelectedSequence && topDotString && (
                             <div
                                 className={`graph-item flex flex-col items-center w-[350px] border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
@@ -1966,7 +2079,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                 <h2 className="text-lg font-semibold text-center mb-1">All Students, All Paths</h2>
                                 <p className="text-sm text-gray-500 text-center mb-2">
-                                    👥 {(summaryMetrics?.totalStudents ?? 0).toLocaleString()} students attempted this problem
+                                    👥 {allStudentsCaption}
                                 </p>
                                 <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
                                     <GraphMenu
@@ -1994,6 +2107,12 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             const statusPhrase = filter === 'GRADUATED' ? 'graduated'
                                 : filter === 'PROMOTED' ? 'were promoted'
                                 : `matched ${titleCase(filter)}`;
+                            // "this problem" only if the file is one problem —
+                            // the status is a workspace-level property, and a
+                            // multi-problem upload has no single "this problem".
+                            const subsetCaption = datasetIdentity.problemNames.length === 1
+                                ? `${subsetCount.toLocaleString()} students who completed this problem ${statusPhrase}`
+                                : `${subsetCount.toLocaleString()} students who ${statusPhrase}`;
 
                             return (
                                 <div
@@ -2001,7 +2120,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                     className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
                                     <h2 className="text-lg font-semibold text-center mb-1">Filtered Graph: {titleCase(filter)}</h2>
                                     <p className="text-sm text-gray-500 text-center mb-2">
-                                        👥 {subsetCount.toLocaleString()} students who completed this problem {statusPhrase}
+                                        👥 {subsetCaption}
                                     </p>
                                     <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
                                         <GraphMenu

@@ -6,6 +6,9 @@ import {SequenceCount} from "@/Context";
 // ============================================================================
 
 export interface CSVRow {
+    // One learning session (one sitting at the software). Splits a student's
+    // repeated attempts at the same problem into separate paths — see pathKey.
+    // Optional, and often carries the literal placeholder 'no_session_tracking'.
     'Session Id'?: string;
     'Time': string;
     'Step Name': string;
@@ -17,6 +20,10 @@ export interface CSVRow {
     // Kept for the export masthead/README, which name the workspace and problem
     // an exported graph belongs to. Not used by any graph computation.
     'Level (Workspace Id)'?: string;
+    // Only read to identify a Done-button click, which is logged with no Step
+    // Name (see resolveStepName). Optional: not every export carries them.
+    'Selection'?: string;
+    'Action'?: string;
 }
 
 interface EdgeCounts {
@@ -27,11 +34,13 @@ interface EdgeCounts {
 }
 
 /**
- * Helper type for pre-calculated student-problem combinations to improve performance
+ * Helper type for pre-calculated student-path combinations to improve performance.
+ * `pathKey` is the second-level sequence key (problem, session-qualified where
+ * the data has sessions — see pathKey()).
  */
 type StudentProblemCombination = {
     studentId: string;
-    problemName: string;
+    pathKey: string;
     steps: string[];
     outcomes: string[];
 };
@@ -50,6 +59,9 @@ type EdgeTrackingMaps = {
     // Unique students who hit an ERROR on each edge — drives the dashed red
     // error overlay rendered in Error Mode.
     edgeErrorUsers: Map<string, Set<string>>;
+    // Error TRAVERSALS, parallel to edgeErrorUsers' error STUDENTS. Error Mode has
+    // to compare like with like against whichever count the current mode shows.
+    edgeErrorVisits: Map<string, number>;
 };
 
 // ============================================================================
@@ -57,7 +69,91 @@ type EdgeTrackingMaps = {
 // ============================================================================
 
 /**
- * Parses CSV data, replaces missing step names with 'DoneButton', and sorts by session ID and time.
+ * Separator inside a composed sequence key. NUL cannot occur in a problem name
+ * or a session id, so two distinct (problem, session) pairs can never collide
+ * into the same key.
+ */
+const PATH_KEY_SEP = '\u0000';
+
+/**
+ * Session id values that mean "this dataset does not track sessions". The
+ * literal 'no_session_tracking' is what the Mathia exports carry (see
+ * src/lib/types.ts); the rest are the usual ways a blank lands in a CSV.
+ */
+const NON_SESSION_VALUES = new Set([
+    '', 'no_session_tracking', 'null', 'undefined', 'nan', 'na', 'n/a', '-'
+]);
+
+/**
+ * Second-level sequence key: one *path* through the content.
+ *
+ * A path is one student's run at one problem in one session. Grouping by
+ * (student, problem) alone concatenates every attempt a student ever made at a
+ * problem — across days — into a single path, which invents a transition at each
+ * attempt boundary (last step of attempt N -> first step of attempt N+1), lets
+ * one student sit on several outgoing edges of the same node, and makes "avg
+ * path length" a per-student-per-problem figure rather than a per-attempt one.
+ *
+ * Session is only added when the row actually has one: datasets that ship the
+ * 'no_session_tracking' placeholder (or a blank) fall back to the old
+ * problem-only key, which is the best available answer for them — never
+ * collapsing every row into one bucket, never splitting each row into its own.
+ * The check is per row, so a file with sessions on only some rows degrades
+ * row-by-row instead of all-or-nothing.
+ */
+export const pathKey = (problemName: string, sessionId: string | undefined | null): string => {
+    const session = (sessionId ?? '').trim();
+    if (!session || NON_SESSION_VALUES.has(session.toLowerCase())) return problemName;
+    return `${problemName}${PATH_KEY_SEP}${session}`;
+};
+
+/**
+ * Node name for the Done-button click, which the tutor logs with no Step Name.
+ * Kept as the historical spelling so datasets that already have explicit
+ * 'DoneButton' rows land on the same node rather than splitting in two.
+ */
+const DONE_BUTTON_STEP = 'DoneButton';
+
+/**
+ * Node name for a row whose step genuinely cannot be identified. Labelled rather
+ * than silently folded into DoneButton, and deliberately not dropped: dropping
+ * the row would splice its neighbours together and invent a transition that
+ * never happened.
+ */
+const UNIDENTIFIED_STEP = '(no step name)';
+
+/**
+ * The node a row belongs to.
+ *
+ * `row['Step Name'] || 'DoneButton'` used to turn EVERY blank step name into a
+ * DoneButton node, merging unrelated rows into one busy hub and overstating a
+ * real UI element that some of those rows had nothing to do with. A blank Step
+ * Name means DoneButton only when the row says so — Selection "Done Button" or
+ * Action "Done", which is how the tutor logs that click. Every other blank is
+ * reported as unidentified.
+ */
+const resolveStepName = (row: CSVRow): string => {
+    const stepName = (row['Step Name'] || '').trim();
+    if (stepName) return stepName;
+
+    const selection = (row['Selection'] || '').replace(/\s+/g, '').toLowerCase();
+    const action = (row['Action'] || '').trim().toLowerCase();
+    if (selection === 'donebutton' || action === 'done') return DONE_BUTTON_STEP;
+
+    return UNIDENTIFIED_STEP;
+};
+
+/**
+ * Parses CSV data, resolves the node each row belongs to (see resolveStepName),
+ * and sorts by student, problem and time.
+ *
+ * Ordering only has to be correct *inside* each (student, problem, session)
+ * bucket, since that bucket is one path and consecutive rows in it become its
+ * transitions. It is NOT guaranteed: a row whose `Time` cannot be parsed keeps
+ * its file position (see parseTimestamp), so a path containing such rows may be
+ * mis-sequenced and its transitions invented. That case is counted and warned
+ * about rather than hidden — it is a data-quality property of the export, not
+ * something this function can establish.
  * @param csvData - The raw CSV data as a string.
  * @returns The transformed and sorted CSV rows.
  */
@@ -92,85 +188,167 @@ export const loadAndSortData = (csvData: string): CSVRow[] => {
     console.log(`loadAndSortData: Filtered out ${parsedData.length - filteredData.length} autofilled rows (${parsedData.length} -> ${filteredData.length})`);
     console.log(`loadAndSortData: Percentage filtered: ${((parsedData.length - filteredData.length) / parsedData.length * 100).toFixed(1)}%`);
 
-    const transformedData = filteredData.map(row => ({
-        'Session Id': row['Session Id'],
-        'Time': row['Time'],
-        'Step Name': row['Step Name'] || 'DoneButton',
-        // Normalize the "correct" outcome key to CORRECT so it matches the
-        // Okabe-Ito outcome palette used for edge/node coloring. The raw CSV
-        // uses 'OK'; every downstream consumer keys on 'CORRECT'.
-        'Outcome': row['Outcome'] === 'OK' ? 'CORRECT' : row['Outcome'],
-        'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
-        'Problem Name': row['Problem Name'],
-        'Anon Student Id': row['Anon Student Id'],
-        'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)'],
-        'Level (Workspace Id)': row['Level (Workspace Id)']
-    }));
+    // Rows whose step could not be identified at all — surfaced as a count so a
+    // malformed or mis-mapped export is visible instead of quietly growing a
+    // synthetic node.
+    let unidentifiedSteps = 0;
+    const transformedData = filteredData.map(row => {
+        const stepName = resolveStepName(row);
+        if (stepName === UNIDENTIFIED_STEP) unidentifiedSteps++;
+        return {
+            'Session Id': row['Session Id'],
+            'Time': row['Time'],
+            'Step Name': stepName,
+            // Normalize the "correct" outcome key to CORRECT so it matches the
+            // Okabe-Ito outcome palette used for edge/node coloring. The raw CSV
+            // uses 'OK'; every downstream consumer keys on 'CORRECT'.
+            'Outcome': row['Outcome'] === 'OK' ? 'CORRECT' : row['Outcome'],
+            'CF (Workspace Progress Status)': row['CF (Workspace Progress Status)'],
+            'Problem Name': row['Problem Name'],
+            'Anon Student Id': row['Anon Student Id'],
+            'CF (Is Autofilled)': (row as any)['CF (Is Autofilled)'],
+            'Level (Workspace Id)': row['Level (Workspace Id)'],
+            'Selection': row['Selection'],
+            'Action': row['Action']
+        };
+    });
 
-    // Cache Date objects to avoid repeated parsing during sort
-    const dateCache = new Map<string, number>();
-    const getTimestamp = (timeStr: string): number => {
-        if (!dateCache.has(timeStr)) {
-            dateCache.set(timeStr, new Date(timeStr).getTime());
+    if (unidentifiedSteps > 0) {
+        console.warn(
+            `loadAndSortData: ${unidentifiedSteps} of ${filteredData.length} rows have no Step Name and no `
+            + `Done-button marker; they are grouped under "${UNIDENTIFIED_STEP}" rather than merged into `
+            + `"${DONE_BUTTON_STEP}".`
+        );
+    }
+
+    // `Time` arrives in several shapes across exports: epoch milliseconds as a
+    // string ("1668670217694"), epoch seconds, an actual number (src/lib/types.ts
+    // types it that way for one of the Mathia shapes), or a parseable date
+    // string. `new Date(s).getTime()` is NaN for every epoch-number form — on the
+    // sample export that was ALL 21,813 distinct values — and a NaN comparator
+    // result gives Array.prototype.sort no ordering at all, so rows silently kept
+    // their CSV order. That happened to be right for that file and is right for
+    // no file by construction: order within a path decides every transition, so a
+    // mis-sorted group invents all of them.
+    const EPOCH_SECONDS_CEILING = 1e11; // ~1973-03 in ms; anything smaller is seconds
+    const timeCache = new Map<string, number>();
+    const parseTimestamp = (raw: unknown): number => {
+        if (typeof raw === 'number') return Number.isFinite(raw) ? raw : NaN;
+        if (typeof raw !== 'string') return NaN;
+        const key = raw.trim();
+        if (key === '') return NaN;
+        if (!timeCache.has(key)) {
+            let parsed: number;
+            if (/^-?\d+$/.test(key)) {
+                const n = Number(key);
+                // Distinguish seconds from milliseconds by magnitude rather than
+                // by digit count, which breaks either side of the year 2286.
+                parsed = !Number.isFinite(n) ? NaN
+                    : Math.abs(n) < EPOCH_SECONDS_CEILING ? n * 1000
+                    : n;
+            } else {
+                parsed = new Date(key).getTime();
+            }
+            timeCache.set(key, parsed);
         }
-        return dateCache.get(timeStr)!;
+        return timeCache.get(key)!;
     };
 
-    return transformedData.sort((a, b) => {
+    const sorted = transformedData.sort((a, b) => {
         if (a['Anon Student Id'] === b['Anon Student Id']) {
             if (a['Problem Name'] === b['Problem Name']) {
-                return getTimestamp(a['Time']) - getTimestamp(b['Time']);
+                const ta = parseTimestamp(a['Time']);
+                const tb = parseTimestamp(b['Time']);
+                // Array.prototype.sort is stable, so returning 0 for an
+                // unparseable pair preserves their original file order — the same
+                // fallback as before, but now deliberate and reported rather than
+                // an accident of NaN arithmetic.
+                if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+                return ta - tb;
             }
-            return a['Problem Name'].localeCompare(b['Problem Name']);
+            return (a['Problem Name'] ?? '').localeCompare(b['Problem Name'] ?? '');
         }
-        return a['Anon Student Id'].localeCompare(b['Anon Student Id']);
+        return (a['Anon Student Id'] ?? '').localeCompare(b['Anon Student Id'] ?? '');
     });
+
+    const unparseableTimes = transformedData.reduce(
+        (n, row) => (Number.isNaN(parseTimestamp(row['Time'])) ? n + 1 : n),
+        0
+    );
+    if (unparseableTimes > 0) {
+        console.warn(
+            `loadAndSortData: ${unparseableTimes} of ${transformedData.length} rows have an unparseable `
+            + `Time; those rows keep their original file order, so any path containing them may be `
+            + `mis-sequenced and its transitions invented.`
+        );
+    }
+
+    return sorted;
 };
 
 /**
- * Creates step sequences from sorted data, optionally allowing self-loops.
- * Excludes steps where CF_Autofill is "True".
- * @param sortedData - The sorted CSV rows.
- * @param selfLoops - A boolean to include self-loops.
- * @returns A dictionary mapping session IDs to sequences of step names.
+ * One student's paths, as parallel step and outcome arrays.
+ * Shape for both: studentId -> pathKey -> string[].
  */
-export const createStepSequences = (sortedData: CSVRow[], selfLoops: boolean): { [key: string]: { [key: string]: string[] } } => {
-    return sortedData.reduce((acc, row) => {
-        // Note: Autofilled rows are already filtered out in loadAndSortData
-        const studentId: string = row['Anon Student Id'];
-        const problemName: string = row['Problem Name'];
-
-        if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][problemName]) acc[studentId][problemName] = [];
-
-        const stepName = row['Step Name'];
-        if (selfLoops || acc[studentId][problemName].length === 0 || acc[studentId][problemName][acc[studentId][problemName].length - 1] !== stepName) {
-            acc[studentId][problemName].push(stepName);
-        }
-
-        return acc;
-    }, {} as { [key: string]: { [key: string]: string[] } });
-};
+export interface PathSequences {
+    stepSequences: { [student: string]: { [pathKey: string]: string[] } };
+    outcomeSequences: { [student: string]: { [pathKey: string]: string[] } };
+}
 
 /**
- * Creates outcome sequences from sorted data.
- * Excludes outcomes where CF_Autofill is "True".
+ * Builds the step and outcome sequences for every path in one pass.
+ *
+ * The two arrays are read POSITIONALLY everywhere downstream — processStudentPaths
+ * pairs `steps[i] -> steps[i + 1]` with `outcomes[i + 1]`, and
+ * computeNodeOutcomeTallies attributes `outcomes[k]` to `steps[k]`. So they must
+ * drop exactly the same rows. Building them separately made that a hand-kept
+ * invariant: two functions each took a `selfLoops` flag that callers had to pass
+ * identically, and any drift silently mis-attributed every outcome after the
+ * first dropped row — wrong edge colors, wrong tooltip percentages, wrong node
+ * outcome bars, with nothing to show the reader anything was off.
+ *
+ * Here there is one flag, one skip decision, and both arrays are appended inside
+ * the same branch, so an inconsistent pair cannot be constructed. Returning both
+ * also means a caller cannot forget one.
+ *
+ * Excludes autofilled rows (already filtered out by loadAndSortData).
+ *
+ * Self-loop collapsing keeps the FIRST row of a run of repeats — its step and its
+ * outcome — matching the "first attempt" reading of unique-student mode.
+ *
+ * The top level is keyed by student so every population count downstream
+ * (totalStudents, the "N students" captions, per-edge unique-student counts)
+ * keeps counting DISTINCT STUDENTS; only path identity is session-scoped, via
+ * pathKey().
+ *
  * @param sortedData - The sorted CSV rows.
- * @returns A dictionary mapping session IDs to sequences of outcomes.
+ * @param selfLoops - Include consecutive repeats of the same step.
+ * @returns Both sequence maps, keyed identically.
  */
-export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: { [key: string]: string[] } } => {
-    return sortedData.reduce((acc, row) => {
-        // Note: Autofilled rows are already filtered out in loadAndSortData
+export const createSequences = (sortedData: CSVRow[], selfLoops: boolean): PathSequences => {
+    const stepSequences: PathSequences['stepSequences'] = {};
+    const outcomeSequences: PathSequences['outcomeSequences'] = {};
+
+    for (const row of sortedData) {
         const studentId = row['Anon Student Id'];
-        const problemName = row['Problem Name'];
+        const key = pathKey(row['Problem Name'], row['Session Id']);
 
-        if (!acc[studentId]) acc[studentId] = {};
-        if (!acc[studentId][problemName]) acc[studentId][problemName] = [];
+        if (!stepSequences[studentId]) stepSequences[studentId] = {};
+        if (!outcomeSequences[studentId]) outcomeSequences[studentId] = {};
+        if (!stepSequences[studentId][key]) stepSequences[studentId][key] = [];
+        if (!outcomeSequences[studentId][key]) outcomeSequences[studentId][key] = [];
 
-        acc[studentId][problemName].push(row['Outcome']);
+        const steps = stepSequences[studentId][key];
+        const stepName = row['Step Name'];
+        const isRepeat = steps.length > 0 && steps[steps.length - 1] === stepName;
 
-        return acc;
-    }, {} as { [key: string]: { [key: string]: string[] } });
+        if (selfLoops || !isRepeat) {
+            steps.push(stepName);
+            outcomeSequences[studentId][key].push(row['Outcome']);
+        }
+    }
+
+    return { stepSequences, outcomeSequences };
 };
 
 // ============================================================================
@@ -178,8 +356,11 @@ export const createOutcomeSequences = (sortedData: CSVRow[]): { [key: string]: {
 // ============================================================================
 
 /**
- * Finds the top N most frequent step sequences.
- * @param stepSequences - The step sequences for all sessions.
+ * Finds the top N most frequent step sequences. One vote per path (one
+ * student's attempt at one problem in one session), so a student who repeats the
+ * same route on three separate attempts contributes three votes to it — the
+ * frequency of a route through the content, not of a student.
+ * @param stepSequences - The step sequences, studentId -> pathKey -> steps[].
  * @param topN - The number of top sequences to return (default is 5).
  * @returns An array of the top sequences and their counts.
  */
@@ -300,11 +481,11 @@ export function formatEquationAnswerStats(stats: {
 // ============================================================================
 
 /**
- * Pre-calculates all valid student-problem combinations to avoid nested object lookups.
- * Only includes problems with at least 2 steps (required for edge creation).
+ * Pre-calculates all valid student-path combinations to avoid nested object lookups.
+ * Only includes paths with at least 2 steps (required for edge creation).
  *
- * @param stepSequences - Student step sequences by studentId -> problemName -> steps[]
- * @param outcomeSequences - Student outcome sequences by studentId -> problemName -> outcomes[]
+ * @param stepSequences - Student step sequences by studentId -> pathKey -> steps[]
+ * @param outcomeSequences - Student outcome sequences by studentId -> pathKey -> outcomes[]
  * @returns Array of pre-calculated combinations for efficient processing
  */
 const prepareStudentProblemCombinations = (
@@ -316,13 +497,13 @@ const prepareStudentProblemCombinations = (
     for (const [studentId, innerStepSequences] of Object.entries(stepSequences)) {
         const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-        for (const [problemName, steps] of Object.entries(innerStepSequences)) {
+        for (const [key, steps] of Object.entries(innerStepSequences)) {
             if (steps.length >= 2) {
                 combinations.push({
                     studentId,
-                    problemName,
+                    pathKey: key,
                     steps,
-                    outcomes: innerOutcomeSequences[problemName] || []
+                    outcomes: innerOutcomeSequences[key] || []
                 });
             }
         }
@@ -345,7 +526,8 @@ const initializeTrackingMaps = (): EdgeTrackingMaps => ({
     studentEdgeCounts: new Map<string, Set<string>>(),
     repeatVisits: new Map<string, Map<string, number>>(),
     firstAttemptOutcomes: new Map<string, Map<string, number>>(),
-    edgeErrorUsers: new Map<string, Set<string>>()
+    edgeErrorUsers: new Map<string, Set<string>>(),
+    edgeErrorVisits: new Map<string, number>()
 });
 
 /**
@@ -354,11 +536,13 @@ const initializeTrackingMaps = (): EdgeTrackingMaps => ({
  *
  * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
  * @param currentStep - The source node of the edge
+ * @param nextStep - The target node of the edge
  * @param maps - The tracking data structures
  */
 const initializeEdgeTracking = (
     edgeKey: string,
     currentStep: string,
+    nextStep: string,
     maps: EdgeTrackingMaps
 ): void => {
     if (!maps.studentEdgeCounts.has(edgeKey)) {
@@ -367,10 +551,16 @@ const initializeEdgeTracking = (
         maps.repeatVisits.set(edgeKey, new Map());
         maps.edgeOutcomeCounts.set(edgeKey, new Map());
         maps.edgeErrorUsers.set(edgeKey, new Set());
+        maps.edgeErrorVisits.set(edgeKey, 0);
     }
 
+    // Both endpoints: totalNodeEdges is "students who VISITED this node", which
+    // has to include the node a path arrives at, not only the one it leaves.
     if (!maps.totalNodeEdges.has(currentStep)) {
         maps.totalNodeEdges.set(currentStep, new Set());
+    }
+    if (!maps.totalNodeEdges.has(nextStep)) {
+        maps.totalNodeEdges.set(nextStep, new Set());
     }
 };
 
@@ -380,6 +570,7 @@ const initializeEdgeTracking = (
  *
  * @param edgeKey - The edge identifier (format: "sourceNode->targetNode")
  * @param currentStep - The source node of the edge
+ * @param nextStep - The target node of the edge
  * @param studentId - The student making the traversal
  * @param outcome - The outcome of this step attempt
  * @param maps - The tracking data structures
@@ -388,14 +579,20 @@ const initializeEdgeTracking = (
 const updateEdgeMetrics = (
     edgeKey: string,
     currentStep: string,
-    _nextStep: string,
+    nextStep: string,
     studentId: string,
     outcome: string,
     maps: EdgeTrackingMaps,
     currentMaxEdgeCount: number
 ): number => {
     maps.studentEdgeCounts.get(edgeKey)!.add(studentId);
+    // Credit the student to BOTH endpoints. Recording only the source counted a
+    // student at every node they left and at none they merely arrived at, so
+    // "Students at X" was 0 for a terminal node (nothing leaves it) and the
+    // ratioEdges denominator for a node whose visitors mostly stopped there was
+    // far too small — inflating every transition probability out of it.
     maps.totalNodeEdges.get(currentStep)!.add(studentId);
+    maps.totalNodeEdges.get(nextStep)!.add(studentId);
 
     maps.totalVisits.set(edgeKey, maps.totalVisits.get(edgeKey)! + 1);
 
@@ -423,6 +620,7 @@ const updateEdgeMetrics = (
     // outcome counts above, so the overlay stays consistent with edge color.
     if (outcome === 'ERROR') {
         maps.edgeErrorUsers.get(edgeKey)!.add(studentId);
+        maps.edgeErrorVisits.set(edgeKey, (maps.edgeErrorVisits.get(edgeKey) || 0) + 1);
     }
 
     return newMaxEdgeCount;
@@ -449,7 +647,7 @@ const processStudentPaths = (
             const outcome = outcomes[i + 1];
             const edgeKey = `${currentStep}->${nextStep}`;
 
-            initializeEdgeTracking(edgeKey, currentStep, maps);
+            initializeEdgeTracking(edgeKey, currentStep, nextStep, maps);
 
             maxEdgeCount = updateEdgeMetrics(
                 edgeKey,
@@ -522,6 +720,11 @@ const convertMapsToObjects = (
         });
     });
 
+    const edgeErrorVisitCountsObj: { [key: string]: number } = {};
+    maps.edgeErrorVisits.forEach((count, edge) => {
+        edgeErrorVisitCountsObj[edge] = count;
+    });
+
     const edgeErrorStudentCountsObj: { [key: string]: number } = {};
     maps.edgeErrorUsers.forEach((students, edge) => {
         edgeErrorStudentCountsObj[edge] = students.size;
@@ -538,6 +741,7 @@ const convertMapsToObjects = (
         topSequences,
         firstAttemptOutcomes: firstAttemptOutcomesObj,
         edgeErrorStudentCounts: edgeErrorStudentCountsObj,
+        edgeErrorVisitCounts: edgeErrorVisitCountsObj,
     };
 };
 
@@ -558,8 +762,8 @@ const convertMapsToObjects = (
  * - Map/Set data structures for O(1) operations
  * - Lazy initialization of tracking structures
  *
- * @param stepSequences - Student learning paths: studentId -> problemName -> step[]
- * @param outcomeSequences - Student outcomes: studentId -> problemName -> outcome[]
+ * @param stepSequences - Student learning paths: studentId -> pathKey -> step[]
+ * @param outcomeSequences - Student outcomes: studentId -> pathKey -> outcome[]
  * @returns Comprehensive edge and node analytics including counts, ratios, and sequences
  */
 export const countEdges = (
@@ -576,6 +780,7 @@ export const countEdges = (
     topSequences: SequenceCount[];
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
     edgeErrorStudentCounts: { [key: string]: number };
+    edgeErrorVisitCounts: { [key: string]: number };
     nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } };
     nodeFirstAttemptOutcomes: { [node: string]: { [outcome: string]: number } };
 } => {
@@ -583,10 +788,41 @@ export const countEdges = (
     const trackingMaps = initializeTrackingMaps();
     const topSequences = getTopSequences(stepSequences, 5);
     const maxEdgeCount = processStudentPaths(combinations, trackingMaps);
+    creditNodeVisitors(stepSequences, trackingMaps);
     const result = convertMapsToObjects(trackingMaps, maxEdgeCount, topSequences);
     const { all, firstAttempt } = computeNodeOutcomeTallies(stepSequences, outcomeSequences);
 
     return { ...result, nodeOutcomeCounts: all, nodeFirstAttemptOutcomes: firstAttempt };
+};
+
+/**
+ * Credits every student to every node they visited, from the step sequences
+ * directly rather than from traversed edges.
+ *
+ * Edge traversal alone misses a path of a single step: processStudentPaths only
+ * sees paths of 2+ steps (they are the only ones that can form an edge), so a
+ * student whose whole attempt was one step was counted nowhere. That was rare
+ * while a path meant "everything a student ever did at a problem"; now that a
+ * path is one attempt, one-step attempts are ordinary, and they were quietly
+ * shrinking the "Students at X" total — and the ratioEdges denominator — for
+ * exactly the entry nodes where such attempts land.
+ *
+ * This is the direct statement of what totalNodeEdges means: unique students who
+ * visited the node. Nodes that appear in no drawn edge may end up in the map;
+ * nothing renders them, since drawing iterates edges.
+ */
+const creditNodeVisitors = (
+    stepSequences: { [key: string]: { [key: string]: string[] } },
+    maps: EdgeTrackingMaps
+): void => {
+    for (const [studentId, paths] of Object.entries(stepSequences)) {
+        for (const steps of Object.values(paths)) {
+            for (const node of steps) {
+                if (!maps.totalNodeEdges.has(node)) maps.totalNodeEdges.set(node, new Set());
+                maps.totalNodeEdges.get(node)!.add(studentId);
+            }
+        }
+    }
 };
 
 /**
@@ -612,11 +848,11 @@ function computeNodeOutcomeTallies(
 
     for (const studentId of Object.keys(stepSequences)) {
         const problems = stepSequences[studentId];
-        const outcomesByProblem = outcomeSequences[studentId] || {};
+        const outcomesByPath = outcomeSequences[studentId] || {};
         const seenNodes = new Set<string>(); // first-visit tracking, per student
-        for (const problemName of Object.keys(problems)) {
-            const steps = problems[problemName];
-            const outcomes = outcomesByProblem[problemName] || [];
+        for (const key of Object.keys(problems)) {
+            const steps = problems[key];
+            const outcomes = outcomesByPath[key] || [];
             for (let i = 0; i < steps.length && i < outcomes.length; i++) {
                 const node = steps[i];
                 const outcome = outcomes[i];
@@ -673,9 +909,18 @@ export const countEdgesForSelectedSequence = (
     repeatVisits: { [key: string]: { [studentId: string]: number } };
     firstAttemptOutcomes: { [key: string]: { [outcome: string]: number } };
     edgeErrorStudentCounts: { [key: string]: number };
+    edgeErrorVisitCounts: { [key: string]: number };
 } => {
     const trackingMaps = initializeTrackingMaps();
     let maxEdgeCount = 0;
+
+    // Canonicalize the sequence the same way the paths it is matched against are
+    // canonicalized. A collapsed path can never contain a run that itself holds a
+    // consecutive repeat, so matching a raw sequence against collapsed paths would
+    // fail outright. Collapsing both makes the sequence's identity independent of
+    // which self-loop state it was picked in - which is the point: repeating a
+    // step in place does not change which path a student took.
+    selectedSequence = collapseConsecutive(selectedSequence);
 
     if (onlyStudentsOnSequence) {
         // MODE 1: Progressive filtering - only students who followed the sequence
@@ -690,8 +935,16 @@ export const countEdgesForSelectedSequence = (
         Object.entries(stepSequences).forEach(([studentId, problems]) => {
             const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-            Object.entries(problems).forEach(([problemName, steps]) => {
-                const outcomes = innerOutcomeSequences[problemName] || [];
+            Object.entries(problems).forEach(([key, rawSteps]) => {
+                // Collapse the path (and its outcomes, together) before matching:
+                // the selected sequence was chosen in one self-loop state and may
+                // be matched against paths built in the other, and a raw compare
+                // then silently fails to find a contained run. Outcomes are read
+                // positionally below, so they must collapse in lockstep.
+                const { steps, outcomes } = collapseStepsAndOutcomes(
+                    rawSteps,
+                    innerOutcomeSequences[key] || []
+                );
 
                 // Check if this student completed the full sequence
                 const fullSequenceMatch = containsSequence(steps, selectedSequence);
@@ -726,7 +979,7 @@ export const countEdgesForSelectedSequence = (
                             if (steps[i] === currentStep && steps[i + 1] === nextStep) {
                                 const outcome = outcomes[i + 1];
 
-                                initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+                                initializeEdgeTracking(edgeKey, currentStep, nextStep, trackingMaps);
 
                                 maxEdgeCount = updateEdgeMetrics(
                                     edgeKey,
@@ -759,8 +1012,8 @@ export const countEdgesForSelectedSequence = (
         Object.entries(stepSequences).forEach(([studentId, problems]) => {
             const innerOutcomeSequences = outcomeSequences[studentId] || {};
 
-            Object.entries(problems).forEach(([problemName, steps]) => {
-                const outcomes = innerOutcomeSequences[problemName] || [];
+            Object.entries(problems).forEach(([key, steps]) => {
+                const outcomes = innerOutcomeSequences[key] || [];
 
                 // For each edge in the selected sequence
                 for (let seqIndex = 0; seqIndex < selectedSequence.length - 1; seqIndex++) {
@@ -773,7 +1026,7 @@ export const countEdgesForSelectedSequence = (
                         if (steps[i] === currentStep && steps[i + 1] === nextStep) {
                             const outcome = outcomes[i + 1];
 
-                            initializeEdgeTracking(edgeKey, currentStep, trackingMaps);
+                            initializeEdgeTracking(edgeKey, currentStep, nextStep, trackingMaps);
 
                             maxEdgeCount = updateEdgeMetrics(
                                 edgeKey,
@@ -796,6 +1049,44 @@ export const countEdgesForSelectedSequence = (
 
     return result;
 };
+
+/**
+ * Drop immediately-repeated steps: [A, A, B, A] -> [A, B, A].
+ *
+ * Step sequences keep or collapse consecutive repeats depending on the self-loop
+ * toggle, so any comparison between two step arrays must normalize first or it
+ * compares representations rather than paths. Declared as a hoisted `function`
+ * so the sequence functions above can call it.
+ */
+export function collapseConsecutive(steps: string[]): string[] {
+    return steps.filter((step, i) => i === 0 || step !== steps[i - 1]);
+}
+
+/**
+ * The same collapse, applied to a step array and its outcome array together so
+ * they stay index-aligned.
+ *
+ * Both sequence functions that consume outcomes read them positionally against
+ * steps (`outcomes[i + 1]` is the outcome at the edge's target). Collapsing only
+ * the steps would shift every later outcome onto the wrong transition — exactly
+ * the defect createSequences was restructured to make impossible at build time.
+ * This is the comparison-time equivalent, needed because a sequence selected in
+ * one toggle state gets matched against paths built in the other.
+ */
+export function collapseStepsAndOutcomes(
+    steps: string[],
+    outcomes: string[]
+): { steps: string[]; outcomes: string[] } {
+    const collapsedSteps: string[] = [];
+    const collapsedOutcomes: string[] = [];
+    steps.forEach((step, i) => {
+        if (i === 0 || step !== steps[i - 1]) {
+            collapsedSteps.push(step);
+            collapsedOutcomes.push(outcomes[i]);
+        }
+    });
+    return { steps: collapsedSteps, outcomes: collapsedOutcomes };
+}
 
 /**
  * Helper function to check if a sequence contains a subsequence
@@ -860,13 +1151,17 @@ export function computeSequenceFunnelCounts(
     selectedSequence: string[]
 ): { [key: string]: number } {
     if (!selectedSequence || selectedSequence.length < 2) return {};
+    // See countEdgesForSelectedSequence: both sides must collapse or the match
+    // silently depends on the self-loop toggle.
+    selectedSequence = collapseConsecutive(selectedSequence);
     const seqLen = selectedSequence.length;
     const counts = new Array(seqLen - 1).fill(0);
 
     for (const problems of Object.values(stepSequences)) {
         let studentDeepest = 0;
-        for (const steps of Object.values(problems)) {
-            if (!steps || steps.length < 2) continue;
+        for (const rawSteps of Object.values(problems)) {
+            if (!rawSteps || rawSteps.length < 2) continue;
+            const steps = collapseConsecutive(rawSteps);
             const { deepest } = deepestSequencePrefix(steps, selectedSequence);
             if (deepest > studentDeepest) studentDeepest = deepest;
         }
@@ -895,6 +1190,9 @@ export function computeSequenceErrorCounts(
     selectedSequence: string[]
 ): { [key: string]: number } {
     if (!selectedSequence || selectedSequence.length < 2) return {};
+    // See countEdgesForSelectedSequence: both sides must collapse or the match
+    // silently depends on the self-loop toggle.
+    selectedSequence = collapseConsecutive(selectedSequence);
     const seqLen = selectedSequence.length;
     const counts = new Array(seqLen - 1).fill(0);
 
@@ -905,13 +1203,17 @@ export function computeSequenceErrorCounts(
         let bestDeepest = 0;
         let bestStart = 0;
         let bestOutcomes: string[] = [];
-        for (const [problemName, steps] of Object.entries(problems)) {
-            if (!steps || steps.length < 2) continue;
+        for (const [key, rawSteps] of Object.entries(problems)) {
+            if (!rawSteps || rawSteps.length < 2) continue;
+            // Collapse steps and outcomes together: `bestStart + i` indexes
+            // bestOutcomes against step positions, so a steps-only collapse
+            // would shift every outcome onto the wrong transition.
+            const { steps, outcomes } = collapseStepsAndOutcomes(rawSteps, outProblems[key] || []);
             const { deepest, start } = deepestSequencePrefix(steps, selectedSequence);
             if (deepest > bestDeepest) {
                 bestDeepest = deepest;
                 bestStart = start;
-                bestOutcomes = outProblems[problemName] || [];
+                bestOutcomes = outcomes;
             }
         }
         for (let i = 0; i < Math.min(bestDeepest, seqLen) - 1; i++) {
@@ -1580,20 +1882,51 @@ const createEdgeTooltip = (
 ): string => {
     const modeLabel = uniqueStudentMode ? 'Students' : 'Visits';
     const pathLabel = uniqueStudentMode ? 'Students taking this path' : 'Total visits on this path';
-    const startLabel = uniqueStudentMode ? `Students at ${currentStep}` : `Total visits to ${currentStep}`;
-    const notTakingLabel = uniqueStudentMode ? 'Students NOT taking this path' : 'Visits to other paths from this node';
+    // `totalCount` is a unique-student set size (totalNodeEdges) in both modes,
+    // so it is always a student count — labelling it "visits" was simply wrong.
+    const startLabel = `Students at ${currentStep}`;
 
     const pathCount = uniqueStudentMode ? edgeCount : visits;
     const totalAtStart = totalCount;
-    const notTakingPath = Math.max(0, totalAtStart - pathCount);
     const ratioPercentage = ((ratioEdges[edgeKey] || 0) * 100).toFixed(1);
 
     let tooltip = `${modeLabel} Flow:\n`
         + `    • ${pathLabel}: ${pathCount.toLocaleString()}\n`
-        + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`
-        + `    • ${notTakingLabel}: ${notTakingPath.toLocaleString()}\n`
-        + `    • Transition Probability: ${ratioPercentage}%\n`
-        + `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} ${modeLabel.toLowerCase()})\n\n`;
+        + `    • ${startLabel}: ${totalAtStart.toLocaleString()}\n`;
+
+    // Only in unique-student mode do these two share a unit and so admit
+    // subtraction. Edge students are a subset of the node's students, so the
+    // remainder is "left this node but never by this edge" — NOT "took one
+    // other edge instead". A student can sit on several outgoing edges of the
+    // same node (a separate problem, or a revisit), which is also why the
+    // outgoing counts from one node can sum past the node's own total and the
+    // transition probabilities can sum past 100%.
+    if (uniqueStudentMode) {
+        const neverTookPath = Math.max(0, totalAtStart - pathCount);
+        tooltip += `    • Students who never took this path: ${neverTookPath.toLocaleString()}\n`;
+    }
+
+    // NOT a transition probability, which is what this used to be called. A
+    // probability implies the outgoing shares of one step partition its
+    // students; they do not. The numerator is students who used this edge in ANY
+    // path, the denominator students who visited this step in ANY path, so a
+    // student who reaches this step in several paths — a different problem, a
+    // different session, or a revisit within one path — is counted on every
+    // successor they ever used and once in the denominator. Measured on the
+    // sample export, one step's outgoing shares total ~430%. Each share is still
+    // individually true, so state it as a share of the step's students rather
+    // than as a probability, and say plainly that they need not sum to 100%.
+    tooltip += `    • Used by ${ratioPercentage}% of students who reached ${currentStep}\n`;
+    // ratioEdges is always students/students. In visits mode no unique-student
+    // numerator survives this far (both `edgeCount` and `visits` arrive as
+    // totalVisits), so spelling out the fraction would pair a visit count with
+    // a student denominator. Show it only where it is truthful.
+    if (uniqueStudentMode) {
+        tooltip += `      (${pathCount.toLocaleString()} of ${totalAtStart.toLocaleString()} students)\n`;
+    }
+    tooltip += `      Shares out of one step can total over 100%: a student who\n`
+        + `      reaches it more than once is counted on each route they took.\n`;
+    tooltip += '\n';
 
     if (progressStats) {
         const graduatedPercentage = progressStats.total > 0 ? ((progressStats.graduated / progressStats.total) * 100).toFixed(1) : '0';
@@ -1793,6 +2126,10 @@ const generateTopSequenceVisualization = (
  * @param minVisits - Minimum visits required to show an edge
  * @param errorMode - Whether to use error-focused coloring
  * @param uniqueStudentMode - Whether in unique student mode
+ * @param showEdgeLabels - If true, label each node's busiest outgoing edge with
+ *   its count. Unlike the Selected Sequence graph (which labels every edge on
+ *   its single linear path), the full graphs label one edge per node to stay
+ *   readable at network density.
  * @returns DOT string for nodes and edges in full graph mode
  */
 const generateFullGraphVisualization = (
@@ -1813,7 +2150,8 @@ const generateFullGraphVisualization = (
     uniqueStudentMode: boolean = false,
     colorNodesBySequence: boolean = true,
     nodeOutcomeMode: boolean = false,
-    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {}
+    nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
+    showEdgeLabels: boolean = true
 ): string => {
     let dotContent = '';
     const totalSteps = selectedSequence.length;
@@ -1831,6 +2169,13 @@ const generateFullGraphVisualization = (
     }
 
     const allNodesInEdges = new Set<string>();
+    // The busiest outgoing edge per source node — the only edges that carry a
+    // count label on the full graphs. Labelling every edge here is unreadable
+    // (unlike the Selected Sequence graph, which is a single linear path), so
+    // one label per node answers "what did most students do next from here"
+    // while keeping the labels spread out instead of clustered in hot regions.
+    const busiestOutgoing: { [source: string]: { key: string; target: string; count: number } } = {};
+
     for (const edgeKey of Object.keys(normalizedThicknesses)) {
         const thickness = normalizedThicknesses[edgeKey];
         if (thickness >= threshold) {
@@ -1843,10 +2188,28 @@ const generateFullGraphVisualization = (
                 if (currentStep && nextStep) {
                     allNodesInEdges.add(currentStep);
                     allNodesInEdges.add(nextStep);
+
+                    // Ranked over edges that pass both gates, so raising
+                    // min-visits promotes the next-heaviest survivor rather than
+                    // leaving the node unlabelled. Ties break on target name to
+                    // keep the choice stable across renders (Object.keys order
+                    // is insertion order, which shifts with the data).
+                    const best = busiestOutgoing[currentStep];
+                    if (!best
+                        || visitsForFiltering > best.count
+                        || (visitsForFiltering === best.count && nextStep < best.target)) {
+                        busiestOutgoing[currentStep] = {
+                            key: edgeKey,
+                            target: nextStep,
+                            count: visitsForFiltering
+                        };
+                    }
                 }
             }
         }
     }
+
+    const labelledEdges = new Set(Object.values(busiestOutgoing).map(best => best.key));
 
     for (const nodeName of allNodesInEdges) {
         const sequenceRank = selectedSequence.indexOf(nodeName);
@@ -1911,7 +2274,14 @@ const generateFullGraphVisualization = (
                 );
 
                 const styleAttr = dashedError ? ', style=dashed' : '';
-                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${styleAttr}];\n`;
+                // Only the heaviest edge leaving this node is labelled; the
+                // dashed error overlays stay bare so a partial-error edge does
+                // not end up with two competing numbers on it.
+                // Leading spaces nudge the count off the edge line.
+                const labelAttr = (showEdgeLabels && labelledEdges.has(edgeKey))
+                    ? `, label="   ${visitsForFiltering.toLocaleString()}"`
+                    : '';
+                dotContent += `    "${currentStep}" -> "${nextStep}" [penwidth=${thickness.toFixed(1)}, color="${edgeColor}", tooltip="${tooltip}"${labelAttr}${styleAttr}];\n`;
 
                 if (err > 0 && !fullError && !isSelfLoop) {
                     dotContent += formatErrorOverlay(currentStep, nextStep, err, edgeCount, maxEdgeCount);
@@ -1975,15 +2345,28 @@ export function generateDotString(
     sequenceErrorCounts: { [key: string]: number } | null = null,
     nodeOutcomeMode: boolean = false,
     nodeOutcomeCounts: { [node: string]: { [outcome: string]: number } } = {},
-    showEdgeLabels: boolean = true
+    showEdgeLabels: boolean = true,
+    edgeErrorVisitCounts: { [key: string]: number } = {}
 ): string {
-    // An empty (but defined) sequence means "None" is selected: the full graphs
-    // still render (every node neutral gray, no path emphasis), but the Selected
-    // Sequence graph has nothing to show. undefined means no data at all.
-    if (!selectedSequence || (justTopSequence && selectedSequence.length === 0)) {
-        return 'digraph G {\n"Error" [label="No valid sequences found to display."];\n}';
+    // Only the Selected Sequence graph actually needs a sequence — it IS the
+    // sequence. The full graphs use it for optional path emphasis alone, so they
+    // must still draw the whole network without one. Both "no sequence" states
+    // are therefore equivalent here: [] means the user picked "None", and
+    // undefined means nothing was auto-selected — reachable whenever no path
+    // clears getTopSequences' 5-step floor, which per-session paths hit far more
+    // often than per-problem ones did. Treating undefined as "no data at all"
+    // blacked out every graph for datasets that had plenty to show.
+    const sequence = selectedSequence ?? [];
+    if (justTopSequence && sequence.length === 0) {
+        return 'digraph G {\n"Error" [label="No sequence selected."];\n}';
     }
 
+    // Error Mode has to compare like with like. edgeErrorStudentCounts is always
+    // unique students, but every count the renderers gate, size and label on is
+    // totalVisits in visits mode - so `err >= edgeCount`, `edgeCount - err` and
+    // the overlay's error rate were all students-over-visits hybrids. Choose the
+    // matching unit once, here, and the whole downstream path stays coherent.
+    const errorsToUse = uniqueStudentMode ? edgeErrorStudentCounts : edgeErrorVisitCounts;
     const visitsToUse = uniqueStudentMode ? edgeCounts : totalVisits;
     const outcomesToUse = uniqueStudentMode ? firstAttemptOutcomes : edgeOutcomeCounts;
 
@@ -2015,7 +2398,7 @@ export function generateDotString(
 
     if (justTopSequence) {
         dotString += generateTopSequenceVisualization(
-            selectedSequence,
+            sequence,
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
@@ -2027,7 +2410,7 @@ export function generateDotString(
             minVisits,
             errorMode,
             maxEdgeCount,
-            edgeErrorStudentCounts,
+            errorsToUse,
             uniqueStudentMode,
             colorNodesBySequence,
             sequenceFunnelCounts,
@@ -2038,7 +2421,7 @@ export function generateDotString(
         );
     } else {
         dotString += generateFullGraphVisualization(
-            selectedSequence,
+            sequence,
             normalizedThicknesses,
             outcomesToUse,
             firstAttemptOutcomes,
@@ -2051,11 +2434,12 @@ export function generateDotString(
             minVisits,
             errorMode,
             maxEdgeCount,
-            edgeErrorStudentCounts,
+            errorsToUse,
             uniqueStudentMode,
             colorNodesBySequence,
             nodeOutcomeMode,
-            nodeOutcomeCounts
+            nodeOutcomeCounts,
+            showEdgeLabels
         );
     }
 
