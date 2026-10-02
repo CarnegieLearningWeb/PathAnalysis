@@ -998,12 +998,28 @@ export const countEdgesForSelectedSequence = (
             });
         });
 
-        // Override totalNodeEdges with progressive sequence counts
+        // Override totalNodeEdges with progressive sequence counts.
+        //
+        // totalNodeEdges is keyed by node NAME, but a sequence may visit the same
+        // node at two positions ([A, B, A, C]). Assigning per position let the
+        // later, smaller funnel count overwrite the earlier one, leaving a
+        // denominator smaller than the edge numerators above it: ratioEdges then
+        // exceeded 1 and the tooltip reported transition shares over 100% (a
+        // [A,B,A,C] sequence with three students measured 150%).
+        //
+        // Union the positions instead, so the node's total is "students who
+        // reached this step at any point along the sequence". That keeps every
+        // outgoing edge's students a subset of it, which is what bounds the ratio.
         trackingMaps.totalNodeEdges.clear();
         for (let i = 0; i < selectedSequence.length; i++) {
             const nodeName = selectedSequence[i];
             const studentsAtPosition = studentsAtSequencePosition.get(i)!;
-            trackingMaps.totalNodeEdges.set(nodeName, studentsAtPosition);
+            const existing = trackingMaps.totalNodeEdges.get(nodeName);
+            if (existing) {
+                studentsAtPosition.forEach((studentId) => existing.add(studentId));
+            } else {
+                trackingMaps.totalNodeEdges.set(nodeName, new Set(studentsAtPosition));
+            }
         }
     } else {
         // MODE 2: All students - anyone who made each transition, regardless of path
