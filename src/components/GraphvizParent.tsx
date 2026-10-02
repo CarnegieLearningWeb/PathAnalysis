@@ -1365,6 +1365,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             .join('\n      ');
         
         // Calculate visual thickness (normalized) based on mode
+        const effectiveThreshold = exportRegistry.current[graphKey]?.minVisits ?? minVisits;
         const countsForThickness: { [edge: string]: number } = uniqueStudentMode ? edgeCounts : totalVisits;
         const maxCount = Math.max(...Object.values(countsForThickness));
         const thickness = maxCount > 0 ? ((pathCount / maxCount) * 10).toFixed(1) : '1.0';
@@ -1408,7 +1409,14 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
             + `Visual Properties:\n`
             + `    • Edge Thickness: ${thickness} (normalized)\n`
             + `    • Path Frequency: ${pathCount.toLocaleString()} ${modeLabel.toLowerCase()}\n`
-            + `    • Min ${modeLabel} Threshold: ${minVisits.toLocaleString()}`;
+            // The threshold this graph was ACTUALLY drawn at, from the same
+            // registry the export reads. This used to print the `minVisits` prop,
+            // which traces back to App's minVisitsPercentage - a value no UI
+            // control ever sets, derived instead from the connectivity maximum.
+            // It therefore reported a threshold the graph was never filtered at,
+            // and a user reasoning about which edges were hidden was reading a
+            // number unrelated to the filtering.
+            + `    • Min ${modeLabel} Threshold: ${effectiveThreshold.toLocaleString()}`;
     };
 
     // Store references to attached event listeners for cleanup. `elements`/
