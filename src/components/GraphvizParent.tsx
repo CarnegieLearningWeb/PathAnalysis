@@ -20,7 +20,7 @@ import ErrorBoundary from "@/components/errorBoundary.tsx";
 import '../GraphvizContainer.css';
 import { Context } from "@/Context.tsx";
 import { Button } from './ui/button';
-import { Download } from 'lucide-react';
+import { Download, Save, Users } from 'lucide-react';
 import GraphMenu from './GraphMenu';
 import {
     addExportTitle,
@@ -1997,32 +1997,39 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
 
     return (
         <div className="graphviz-container w-full flex flex-col">
-            {/* Tab Navigation */}
-            <div className="flex border-b border-gray-300 mb-4">
-                <button
-                    onClick={() => setActiveTab('graphs')}
-                    className={`px-4 py-2 font-medium ${
-                        activeTab === 'graphs'
-                            ? 'border-b-2 border-blue-500 text-blue-600'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    Graphs
-                </button>
-                <button
-                    onClick={() => setActiveTab('history')}
-                    className={`px-4 py-2 font-medium ${
-                        activeTab === 'history'
-                            ? 'border-b-2 border-blue-500 text-blue-600'
-                            : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                >
-                    History {historyItems.length > 0 && (
-                        <span className="ml-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                            {historyItems.length}
-                        </span>
-                    )}
-                </button>
+            {/* Tab navigation. Hand-rolled buttons rather than ui/tabs.tsx because
+                the panels below are not wrapped in a Tabs context; the ARIA roles
+                are therefore declared here so the pair is announced and operable
+                as tabs rather than as two unrelated buttons. */}
+            <div role="tablist" aria-label="View" className="mb-4 flex border-b">
+                {([
+                    ['graphs', 'Graphs', null],
+                    ['history', 'History', historyItems.length],
+                ] as const).map(([key, label, count]) => {
+                    const selected = activeTab === key;
+                    return (
+                        <button
+                            key={key}
+                            role="tab"
+                            id={`tab-${key}`}
+                            aria-selected={selected}
+                            aria-controls={`panel-${key}`}
+                            onClick={() => setActiveTab(key)}
+                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                                selected
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            {label}
+                            {count ? (
+                                <span className="rounded-full bg-muted px-1.5 text-xs leading-5 tabular-nums text-muted-foreground">
+                                    {count}
+                                </span>
+                            ) : null}
+                        </button>
+                    );
+                })}
             </div>
 
             <ErrorBoundary>
@@ -2035,16 +2042,16 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     {summaryMetrics && (
                         <div className="flex justify-center gap-10 mb-4">
                             <div className="flex flex-col items-center">
-                                <span className="text-2xl font-semibold text-gray-800">
+                                <span className="text-2xl font-semibold tabular-nums text-foreground">
                                     {summaryMetrics.totalStudents.toLocaleString()}
                                 </span>
-                                <span className="text-xs uppercase tracking-wide text-gray-500">Total Students</span>
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Total Students</span>
                             </div>
                             <div className="flex flex-col items-center">
-                                <span className="text-2xl font-semibold text-gray-800">
+                                <span className="text-2xl font-semibold tabular-nums text-foreground">
                                     {summaryMetrics.avgPathLength.toFixed(1)} steps
                                 </span>
-                                <span className="text-xs uppercase tracking-wide text-gray-500">Avg Path Length</span>
+                                <span className="text-xs uppercase tracking-wide text-muted-foreground">Avg Path Length</span>
                             </div>
                         </div>
                     )}
@@ -2059,12 +2066,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                     <div className="graphs flex w-full h-[650px] overflow-x-auto [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
                         {showSelectedSequence && topDotString && (
                             <div
-                                className={`graph-item flex flex-col items-center w-[350px] border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-1">Selected Sequence</h2>
-                                <p className="text-sm text-gray-500 text-center mb-2">
-                                    👥 {selectedSequenceCount.toLocaleString()} students followed this sequence
+                                className={`graph-item flex flex-col items-center w-[350px] rounded-lg border bg-card p-3 shadow-sm flex-shrink-0`}>
+                                <h2 className="text-sm font-semibold text-center mb-1">Selected Sequence</h2>
+                                <p className="text-xs text-muted-foreground text-center mb-2 tabular-nums">
+                                    <Users className="mr-1 inline h-3 w-3 align-[-0.1em]" aria-hidden />
+                                    {selectedSequenceCount.toLocaleString()} students followed this sequence
                                 </p>
-                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
+                                <div className="w-full h-[575px] rounded-md border bg-background p-4 flex items-center justify-center relative">
                                     <GraphMenu
                                         maxValue={mainGraphData?.maxEdgeCount || 100}
                                         value={minVisitsPerGraph['selected_sequence'] ?? 0}
@@ -2084,12 +2092,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                         )}
                         {showAllStudents && dotString && (
                             <div
-                                className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                <h2 className="text-lg font-semibold text-center mb-1">All Students, All Paths</h2>
-                                <p className="text-sm text-gray-500 text-center mb-2">
-                                    👥 {allStudentsCaption}
+                                className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} rounded-lg border bg-card p-3 shadow-sm flex-shrink-0`}>
+                                <h2 className="text-sm font-semibold text-center mb-1">All Students, All Paths</h2>
+                                <p className="text-xs text-muted-foreground text-center mb-2 tabular-nums">
+                                    <Users className="mr-1 inline h-3 w-3 align-[-0.1em]" aria-hidden />
+                                    {allStudentsCaption}
                                 </p>
-                                <div className="w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center relative">
+                                <div className="w-full h-[575px] rounded-md border bg-background p-4 flex items-center justify-center relative">
                                     <GraphMenu
                                         maxValue={connectivityCaps['all_students'] ?? (mainGraphData?.maxEdgeCount || 100)}
                                         value={effectiveMinVisits('all_students', mainGraphData?.maxEdgeCount || 100)}
@@ -2125,12 +2134,13 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                             return (
                                 <div
                                     key={filter}
-                                    className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} border-2 border-gray-700 rounded-lg p-4 bg-gray-100 flex-shrink-0`}>
-                                    <h2 className="text-lg font-semibold text-center mb-1">Filtered Graph: {titleCase(filter)}</h2>
-                                    <p className="text-sm text-gray-500 text-center mb-2">
-                                        👥 {subsetCaption}
+                                    className={`graph-item flex flex-col items-center ${numberOfGraphs >= 3 ? 'w-[475px]' : 'w-[575px]'} rounded-lg border bg-card p-3 shadow-sm flex-shrink-0`}>
+                                    <h2 className="text-sm font-semibold text-center mb-1">Filtered Graph: {titleCase(filter)}</h2>
+                                    <p className="text-xs text-muted-foreground text-center mb-2 tabular-nums">
+                                        <Users className="mr-1 inline h-3 w-3 align-[-0.1em]" aria-hidden />
+                                        {subsetCaption}
                                     </p>
-                                    <div className="relative w-full h-[575px] border-2 border-gray-700 rounded-lg p-4 bg-white flex items-center justify-center">
+                                    <div className="relative w-full h-[575px] rounded-md border bg-background p-4 flex items-center justify-center">
                                         <GraphMenu
                                             maxValue={connectivityCaps[graphKey] ?? (filteredGraphData?.maxEdgeCount || 100)}
                                             value={effectiveMinVisits(graphKey, filteredGraphData?.maxEdgeCount || 100)}
@@ -2155,7 +2165,7 @@ const GraphvizParent: React.FC<GraphvizParentProps> = ({
                                 onClick={() => setExportOpen(!exportOpen)}
                                 className="w-full flex items-center justify-between px-4 py-2 text-left font-medium text-gray-700 hover:bg-gray-50"
                             >
-                                <span>💾 Export Graphs</span>
+                                <span className="inline-flex items-center gap-1.5"><Save className="h-4 w-4" aria-hidden />Export Graphs</span>
                                 <span className="text-gray-400 text-sm">{exportOpen ? '▲' : '▼'}</span>
                             </button>
                             {exportOpen && (
@@ -2383,13 +2393,18 @@ interface ExportButtonProps {
 
 function ExportButton({ onClick, label = "Export as PNG", disabled = false }: ExportButtonProps) {
     return (
+        // `h-2` (8px) used to be in this className and beat the Button's own
+        // `h-10` through twMerge, so the control rendered 8px tall with its label
+        // spilling out. The size variant does this properly; the ad-hoc blue
+        // hovers are dropped so the button picks up the shared token palette.
         <Button
-            variant={'outline'}
+            variant="outline"
+            size="xs"
             onClick={onClick}
             disabled={disabled}
-            className="flex h-2 items-center gap-1 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 shadow-sm text-xs"
+            className="gap-1"
         >
-            <Download className="h-3 w-3" />
+            <Download className="h-3 w-3" aria-hidden />
             {label}
         </Button>
     );
