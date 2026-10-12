@@ -1,7 +1,8 @@
 import {useCallback, useState} from 'react';
 import {Accept, useDropzone} from 'react-dropzone';
 import {ParseResult} from '@/lib/types';
-import {parseData} from '@/lib/utils';
+import {cn, parseData} from '@/lib/utils';
+import {UploadCloud} from 'lucide-react';
 import {Label} from "@/components/ui/label"
 import {RadioGroup, RadioGroupItem} from "@/components/ui/radio-group"
 type TODO = any;
@@ -105,45 +106,52 @@ export default function DropZone({afterDrop, onLoadingChange, onError}: DropZone
         // }
     ]
     return (
-        <>
-            <div className="pb-3 flex flex-col items-center">
-                <div className="font-bold p-1">
-                    File Type
-                </div>
-                <RadioGroup defaultValue={delimiters[0]} onValueChange={(e: string) => {
-                    setFileType(e)
-
-                }}>
-                    {fileTypeOptions.map((option, index) => (
-                        <div className="flex items-center space-x-2" key={index}>
-                            <RadioGroupItem value={option.value} key={option.value}/>
-                            <Label htmlFor={option.value}>{option.label}</Label>
+        <div className="space-y-4">
+            <div
+                role="group"
+                aria-labelledby="dropzone-file-type"
+                className="flex flex-wrap items-center gap-x-5 gap-y-2"
+            >
+                <span id="dropzone-file-type" className="field-label">File type</span>
+                <RadioGroup
+                    className="flex flex-wrap items-center gap-x-5 gap-y-2"
+                    defaultValue={delimiters[0]}
+                    onValueChange={(e: string) => {
+                        setFileType(e)
+                    }}
+                >
+                    {fileTypeOptions.map((option) => (
+                        // The id/htmlFor pair was missing before, so the labels
+                        // were decorative and only the 16px dot was clickable.
+                        <div className="flex items-center gap-2" key={option.value}>
+                            <RadioGroupItem id={`file-type-${option.value}`} value={option.value}/>
+                            <Label htmlFor={`file-type-${option.value}`} className="cursor-pointer">
+                                {option.label}
+                            </Label>
                         </div>
                     ))}
                 </RadioGroup>
             </div>
+
             <div
-                className={`bg-slate-200 cursor-pointer h-40 p-2 rounded-md border-2 border-black text-center ${(isDragActive || isFocused) ? 'bg-orange-100' : ''}`}
+                className={cn(
+                    "flex h-40 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center transition-colors",
+                    isDragActive || isFocused
+                        ? "border-primary bg-primary/5"
+                        : "border-input bg-muted/40 hover:bg-muted/70"
+                )}
                 {...getRootProps()}
             >
                 <input {...getInputProps()} />
-                {
-                    !isDragActive ?
-                        <div className={`flex items-center h-full w-[fitcontent] justify-center p-2`}>
-                            <p className={""}>Drag 'n' drop some files here, or click to select files</p>
-                        </div>
-                        :
-                        <div
-                            className={`flex items-center h-full w-[fitcontent] justify-center bg-slate-100 rounded-lg p-2`}>
-                            <p className={""}>Drag 'n' drop some files here, or click to select files</p>
-                        </div>
-                }
-                {isDragReject && <p className="text-red-500">Invalid file type</p>}
-
-            
+                <UploadCloud className="h-6 w-6 text-muted-foreground" aria-hidden />
+                <p className="text-sm font-medium">
+                    {isDragActive ? "Drop the file to load it" : "Drag a file here, or click to browse"}
+                </p>
+                <p className="field-hint">CSV, TSV or JSON</p>
+                {isDragReject && (
+                    <p className="text-xs font-medium text-destructive">Invalid file type</p>
+                )}
             </div>
-
-
-        </>
+        </div>
     );
 }

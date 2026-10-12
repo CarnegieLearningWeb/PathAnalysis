@@ -477,11 +477,16 @@ This export shows outcomes on the **${nodeMode ? 'nodes' : 'edges'}** — see
 
 1. **Source.** An uploaded MATHia transaction CSV. Each row is one step attempt
    with its outcome, attempt number, and timestamp. Rows the tutor autofilled
-   (\`CF (Is Autofilled)\` true) are dropped before anything else, and a missing
-   step name is read as \`DoneButton\`. The raw \`OK\` outcome is normalized to
-   \`CORRECT\`.
-2. **Sequencing.** For each student and problem, events are ordered by timestamp
-   into a sequence of steps. With *unique students / first attempts* on, each
+   (\`CF (Is Autofilled)\` true) are dropped before anything else. A blank step
+   name is read as \`DoneButton\` only where the row marks that click
+   (\`Selection\` of "Done Button", or \`Action\` of "Done"); any other blank
+   becomes \`(no step name)\` rather than being merged into the Done-button node.
+   The raw \`OK\` outcome is normalized to \`CORRECT\`.
+2. **Sequencing.** Events are grouped into paths by student, problem **and
+   session**, then ordered by timestamp within each path, so a student's repeat
+   attempts at a problem stay separate instead of joining into one long route.
+   Where a file carries no usable session id, that row falls back to grouping by
+   student and problem alone. With *unique students / first attempts* on, each
    step is counted once per student (and self-loops are forced off). With
    *self-loops* off, consecutive repeats of the same step are collapsed to one.
 3. ${statsStep}

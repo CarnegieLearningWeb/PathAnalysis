@@ -1,6 +1,6 @@
 import React from 'react';
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
+import { CheckboxRow } from "@/components/ui/setting"
+import { Separator } from "@/components/ui/separator"
 
 interface FilterComponentProps {
     onFilterChange: (filters: string[]) => void;
@@ -11,6 +11,18 @@ interface FilterComponentProps {
     onShowAllStudentsChange: (show: boolean) => void;
 }
 
+/** Status subsets that get their own graph panel when checked. */
+const STATUS_FILTERS = [
+    { value: 'GRADUATED', id: 'graph-graduated', label: 'Graduated' },
+    { value: 'PROMOTED', id: 'graph-promoted', label: 'Promoted' },
+] as const;
+
+/**
+ * Which graph panels to render. Laid out as one horizontal row of checkboxes so
+ * it can sit in the toolbar: the two always-available graphs on the left, the
+ * status-filtered subsets after a divider, because those two sets answer
+ * different questions (which view vs. which population).
+ */
 const FilterComponent: React.FC<FilterComponentProps> = ({
     onFilterChange,
     currentFilters,
@@ -32,41 +44,47 @@ const FilterComponent: React.FC<FilterComponentProps> = ({
     };
 
     return (
-        <div className="space-y-3">
-            <Label className="text-sm font-medium">Graphs to Display:</Label>
-            <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="show-selected-sequence"
-                        checked={showSelectedSequence}
-                        onCheckedChange={(checked: boolean | 'indeterminate') => onShowSelectedSequenceChange(checked as boolean)}
+        // role=group + aria-labelledby rather than fieldset/legend: a <legend>
+        // is a specially-rendered box that does not participate reliably in a
+        // flex row across browsers.
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5">
+            <div
+                role="group"
+                aria-labelledby="graphs-caption"
+                className="flex flex-wrap items-center gap-x-5 gap-y-2.5"
+            >
+                <span id="graphs-caption" className="field-label">Graphs</span>
+                <CheckboxRow
+                    id="show-selected-sequence"
+                    label="Selected sequence"
+                    checked={showSelectedSequence}
+                    onCheckedChange={onShowSelectedSequenceChange}
+                />
+                <CheckboxRow
+                    id="show-all-students"
+                    label="All students, all paths"
+                    checked={showAllStudents}
+                    onCheckedChange={onShowAllStudentsChange}
+                />
+            </div>
+
+            <Separator orientation="vertical" className="hidden h-5 sm:block" />
+
+            <div
+                role="group"
+                aria-labelledby="status-graphs-caption"
+                className="flex flex-wrap items-center gap-x-5 gap-y-2.5"
+            >
+                <span id="status-graphs-caption" className="field-label">By status</span>
+                {STATUS_FILTERS.map(({ value, id, label }) => (
+                    <CheckboxRow
+                        key={value}
+                        id={id}
+                        label={label}
+                        checked={currentFilters.includes(value)}
+                        onCheckedChange={(checked) => handleCheckboxChange(value, checked)}
                     />
-                    <Label htmlFor="show-selected-sequence" className="cursor-pointer">Selected Sequence</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="show-all-students"
-                        checked={showAllStudents}
-                        onCheckedChange={(checked: boolean | 'indeterminate') => onShowAllStudentsChange(checked as boolean)}
-                    />
-                    <Label htmlFor="show-all-students" className="cursor-pointer">All Students, All Paths</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="graduated"
-                        checked={currentFilters.includes('GRADUATED')}
-                        onCheckedChange={(checked: boolean | 'indeterminate') => handleCheckboxChange('GRADUATED', checked as boolean)}
-                    />
-                    <Label htmlFor="graduated" className="cursor-pointer">Graduated (filtered)</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Checkbox
-                        id="promoted"
-                        checked={currentFilters.includes('PROMOTED')}
-                        onCheckedChange={(checked: boolean | 'indeterminate') => handleCheckboxChange('PROMOTED', checked as boolean)}
-                    />
-                    <Label htmlFor="promoted" className="cursor-pointer">Promoted (filtered)</Label>
-                </div>
+                ))}
             </div>
         </div>
     );
